@@ -1,0 +1,14 @@
+{
+  "required": true,
+  "package": "com.jvn.kingdomsheritage.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "SelectionPacketGuard"
+  ],
+  "client": [
+    "AccessoriesCraftingPreview"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

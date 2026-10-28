@@ -1,0 +1,120 @@
+package com.jvn.kingdomsheritage.client;
+
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import com.jvn.kingdomsheritage.KingdomsHeritage;
+import com.jvn.kingdomsheritage.network.HeritageNetwork;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.TitleScreen;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
+import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.client.event.ClientTickEvent;
+import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
+import net.neoforged.neoforge.client.event.MovementInputUpdateEvent;
+
+@EventBusSubscriber(modid = KingdomsHeritage.MOD_ID, value = Dist.CLIENT)
+public final class ClientSelection {
+    private static JsonObject catalog;
+    private static SpawnSelectScreen selection;
+    private static KitSelection kits;
+
+    private ClientSelection() {}
+
+    @SubscribeEvent
+    public static void setup(FMLClientSetupEvent event) {
+        HeritageNetwork.clientReceiver = ClientSelection::receive;
+        NeoForge.EVENT_BUS.addListener(ClientSelection::tick);
+        NeoForge.EVENT_BUS.addListener(ClientSelection::movement);
+        NeoForge.EVENT_BUS.addListener(ClientSelection::logout);
+        KitSelection.register();
+        NeoForge.EVENT_BUS.addListener(ClientSelection::hideHud);
+        NeoForge.EVENT_BUS.addListener(ClientSelection::hideHand);
+    }
+
+    private static void receive(String json) {
+        JsonObject next = JsonParser.parseString(json).getAsJsonObject();
+        Minecraft minecraft = Minecraft.getInstance();
+        if (kits != null) {
+            kits.restore();
+            if (minecraft.player != null) minecraft.player.closeContainer();
+        }
+        kits = null;
+        if (!next.has("spawns")) {
+            catalog = null;
+            selection = null;
+            if (minecraft.player != null) minecraft.player.closeContainer();
+            minecraft.setScreen(null);
+            return;
+        }
+        catalog = next;
+        selection = new SpawnSelectScreen(catalog);
+        if (minecraft.level != null && minecraft.player != null) minecraft.setScreen(selection);
+    }
+
+    private static void hideHud(net.neoforged.neoforge.client.event.RenderGuiEvent.Pre event) {
+        if (catalog != null) event.setCanceled(true);
+    }
+
+    private static void hideHand(net.neoforged.neoforge.client.event.RenderHandEvent event) {
+        if (catalog != null) event.setCanceled(true);
+    }
+
+    static void openKits(String spawn) {
+        kits = new KitSelection(catalog, spawn);
+        kits.openInventory();
+    }
+
+    static KitSelection kits() { return kits; }
+
+    public static boolean choosingKit() { return kits != null; }
+
+    static void back() {
+        if (kits != null) kits.restore();
+        kits = null;
+        Minecraft minecraft = Minecraft.getInstance();
+        minecraft.player.closeContainer();
+        minecraft.setScreen(selection);
+    }
+
+    private static void tick(ClientTickEvent.Post event) {
+        Minecraft minecraft = Minecraft.getInstance();
+        if (catalog == null || minecraft.level == null || minecraft.player == null) return;
+        if (kits != null) {
+            kits.tick();
+            if (!KitSelection.isInventory(minecraft.screen) && !KitSelection.isLayoutPicker(minecraft.screen)) kits.openInventory();
+        } else if (!(minecraft.screen instanceof SpawnSelectScreen)) {
+            minecraft.setScreen(selection);
+        }
+    }
+
+    private static void movement(MovementInputUpdateEvent event) {
+        if (catalog == null) return;
+        var input = event.getInput();
+        input.forwardImpulse = 0;
+        input.leftImpulse = 0;
+        input.jumping = false;
+        input.shiftKeyDown = false;
+        input.up = input.down = input.left = input.right = false;
+    }
+
+    private static void logout(ClientPlayerNetworkEvent.LoggingOut event) {
+        if (kits != null) kits.restore();
+        kits = null;
+        catalog = null;
+        selection = null;
+    }
+
+    static void disconnect() {
+        Minecraft minecraft = Minecraft.getInstance();
+        if (kits != null) kits.restore();
+        kits = null;
+        catalog = null;
+        selection = null;
+        if (minecraft.level != null) minecraft.level.disconnect();
+        minecraft.disconnect();
+        minecraft.setScreen(new TitleScreen());
+    }
+}

@@ -12,6 +12,10 @@ public final class KingdomsHeritage {
     public static final Logger LOGGER = LogUtils.getLogger();
 
     public KingdomsHeritage(IEventBus modEventBus, ModContainer container) {
-        LOGGER.info("Kingdoms: Heritage loaded");
+        container.registerConfig(net.neoforged.fml.config.ModConfig.Type.SERVER, HeritageConfig.SPEC);
+        modEventBus.addListener(com.jvn.kingdomsheritage.network.HeritageNetwork::register);
+        net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(com.jvn.kingdomsheritage.data.HeritageCatalog::register);
+        net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(com.jvn.kingdomsheritage.server.KitService::commands);
+        net.neoforged.neoforge.common.NeoForge.EVENT_BUS.register(com.jvn.kingdomsheritage.server.SelectionManager.class);
     }
 }
