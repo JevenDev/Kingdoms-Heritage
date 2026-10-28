@@ -2,20 +2,25 @@ package com.jvn.kingdomsheritage.server;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
-import com.jvn.kingdomsheritage.KingdomsHeritage;
 import com.jvn.kingdomsheritage.HeritageConfig;
-import net.minecraft.stats.Stats;
+import com.jvn.kingdomsheritage.KingdomsHeritage;
 import com.jvn.kingdomsheritage.compat.EquipmentCompat;
 import com.jvn.kingdomsheritage.data.HeritageCatalog;
+import com.jvn.kingdomsheritage.data.HeritageException;
 import com.jvn.kingdomsheritage.network.HeritageNetwork;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.stats.Stats;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.phys.Vec3;
@@ -27,9 +32,12 @@ import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
 import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 import net.neoforged.neoforge.event.tick.PlayerTickEvent;
+import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import net.neoforged.neoforge.network.PacketDistributor;
 
 public final class SelectionManager {
+    private record Preparation(ServerPlayer player, HeritageNetwork.Choose request, SpawnResolver.Search search) {}
+    private static final Map<UUID, Preparation> PREPARATIONS = new LinkedHashMap<>();
     private static final String KEY = KingdomsHeritage.MOD_ID;
     private static final Map<UUID, Long> LAST_REQUEST = new HashMap<>();
     private static final Map<UUID, Long> SENT_REVISION = new HashMap<>();
@@ -99,33 +107,75 @@ public final class SelectionManager {
         if (!(event.getEntity() instanceof ServerPlayer player) || !pending(player)) return;
         hold(player);
         if (player.tickCount >= 20 && (SENT_REVISION.getOrDefault(player.getUUID(), -1L) != HeritageCatalog.revision())) {
-            sendChoices(player, "");
+            PREPARATIONS.remove(player.getUUID());
+            sendChoices(player, SENT_REVISION.containsKey(player.getUUID())
+                    ? Component.translatable("error.kingdomsheritage.reloaded") : Component.empty());
         }
     }
 
     public static void choose(ServerPlayer player, HeritageNetwork.Choose request) {
-        if (!pending(player)) return;
+        if (!pending(player) || PREPARATIONS.containsKey(player.getUUID())) return;
         long now = player.server.overworld().getGameTime();
-        if (now - LAST_REQUEST.getOrDefault(player.getUUID(), -100L) < 20) return;
+        if (now - LAST_REQUEST.getOrDefault(player.getUUID(), -100L) < 20) {
+            sendProgress(player, "retry");
+            return;
+        }
         LAST_REQUEST.put(player.getUUID(), now);
         if (request.revision() != HeritageCatalog.revision()) {
-            sendChoices(player, "The datapack changed. Please review your choices again");
+            sendChoices(player, Component.translatable("error.kingdomsheritage.reloaded"));
             return;
         }
         var spawnId = ResourceLocation.tryParse(request.spawn());
         var kitId = ResourceLocation.tryParse(request.kit());
         var spawn = spawnId == null ? null : HeritageCatalog.spawns().get(spawnId);
         var kit = kitId == null ? null : HeritageCatalog.kits().get(kitId);
-        if (spawn == null || kit == null) {
-            sendChoices(player, "Choose an available location and kit");
+        if (spawn == null || kit == null || !spawn.allows(kit)) {
+            sendChoices(player, Component.translatable("error.kingdomsheritage.choice"));
             return;
         }
         try {
             var stacks = kit.decode(player.registryAccess());
-            EquipmentCompat.validate(player, stacks);
-            var destination = SpawnResolver.resolve(player, spawn, BlockPos.of(state(player).getLong("spawn")));
-            KitService.apply(player, kit, stacks, state(player).getBoolean("reset")
-                    ? HeritageConfig.InventoryPolicy.PRESERVE : HeritageConfig.INVENTORY_POLICY.get());
+            if (inventoryPolicy(player) != HeritageConfig.InventoryPolicy.PRESERVE) EquipmentCompat.validate(player, stacks);
+            var search = new SpawnResolver.Search(player, spawn, BlockPos.of(state(player).getLong("spawn")));
+            PREPARATIONS.put(player.getUUID(), new Preparation(player, request, search));
+            sendProgress(player, "queued");
+        } catch (IllegalArgumentException error) {
+            sendChoices(player, HeritageException.component(error));
+        }
+    }
+
+    @SubscribeEvent
+    public static void prepare(ServerTickEvent.Post event) {
+        if (PREPARATIONS.isEmpty()) return;
+        var preparation = PREPARATIONS.values().iterator().next();
+        processPreparation(preparation.player());
+    }
+
+    static void processPreparation(ServerPlayer player) {
+        var preparation = PREPARATIONS.remove(player.getUUID());
+        if (preparation == null || !pending(player)) return;
+        if (preparation.request().revision() != HeritageCatalog.revision()) {
+            sendChoices(player, Component.translatable("error.kingdomsheritage.reloaded"));
+            return;
+        }
+        try {
+            sendProgress(player, preparation.search().stage());
+            if (!preparation.search().step()) {
+                PREPARATIONS.put(player.getUUID(), preparation);
+                return;
+            }
+            var destination = preparation.search().destination();
+            if (!SpawnResolver.safe(destination.level(), destination.position())) {
+                throw new HeritageException("changed", "The destination changed during preparation. Please try again");
+            }
+            var spawn = HeritageCatalog.spawns().get(ResourceLocation.parse(preparation.request().spawn()));
+            var kit = HeritageCatalog.kits().get(ResourceLocation.parse(preparation.request().kit()));
+            var stacks = kit.decode(player.registryAccess());
+            if (inventoryPolicy(player) != HeritageConfig.InventoryPolicy.PRESERVE) EquipmentCompat.validate(player, stacks);
+            sendProgress(player, "applying");
+            KingdomsHeritage.LOGGER.debug("Prepared Heritage location {} in {} ms of server work",
+                    spawn.id(), preparation.search().workMillis());
+            KitService.apply(player, kit, stacks, inventoryPolicy(player));
             CompoundTag state = state(player);
             player.teleportTo(destination.level(), destination.position().getX() + 0.5,
                     destination.position().getY(), destination.position().getZ() + 0.5, java.util.Set.of(), state.getFloat("yaw"), 0);
@@ -149,8 +199,18 @@ public final class SelectionManager {
             PacketDistributor.sendToPlayer(player, new HeritageNetwork.Catalog("{}"));
             player.inventoryMenu.sendAllDataToRemote();
         } catch (IllegalArgumentException error) {
-            sendChoices(player, error.getMessage());
+            sendChoices(player, HeritageException.component(error));
         }
+    }
+
+    private static HeritageConfig.InventoryPolicy inventoryPolicy(ServerPlayer player) {
+        return state(player).getBoolean("reset") ? HeritageConfig.InventoryPolicy.PRESERVE : HeritageConfig.INVENTORY_POLICY.get();
+    }
+
+    private static void sendProgress(ServerPlayer player, String stage) {
+        JsonObject json = new JsonObject();
+        json.addProperty("progress", stage);
+        PacketDistributor.sendToPlayer(player, new HeritageNetwork.Catalog(json.toString()));
     }
 
     public static CompoundTag inspect(ServerPlayer player) {
@@ -158,7 +218,7 @@ public final class SelectionManager {
     }
 
     public static void reset(ServerPlayer player) {
-        if (pending(player)) throw new IllegalArgumentException("Recover the pending selection before resetting it");
+        if (pending(player)) throw new HeritageException("pending", "Recover the pending selection before resetting it");
         state(player).putBoolean("complete", false);
         state(player).putBoolean("reset", true);
         LAST_REQUEST.remove(player.getUUID());
@@ -167,16 +227,17 @@ public final class SelectionManager {
     }
 
     public static void recover(ServerPlayer player) {
-        if (!pending(player)) throw new IllegalArgumentException("This player has no pending selection");
+        if (!pending(player)) throw new HeritageException("not_pending", "This player has no pending selection");
         CompoundTag state = state(player);
         var id = ResourceLocation.tryParse(state.getString("original_dimension"));
         var level = id == null ? player.server.overworld() : player.server.getLevel(
-                net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.DIMENSION, id));
-        if (level == null) throw new IllegalArgumentException("The original dimension is unavailable");
+                ResourceKey.create(Registries.DIMENSION, id));
+        if (level == null) throw new HeritageException("original_dimension", "The original dimension is unavailable");
         BlockPos original = BlockPos.of(state.getLong("spawn"));
         BlockPos position = SpawnResolver.safe(level, original) ? original : SpawnResolver.nearby(level, original, 32, null)
-                .orElseThrow(() -> new IllegalArgumentException("No safe ground near the original position"));
+                .orElseThrow(() -> new HeritageException("original_ground", "No safe ground near the original position"));
         player.teleportTo(level, position.getX() + 0.5, position.getY(), position.getZ() + 0.5, state.getFloat("yaw"), 0);
+        PREPARATIONS.remove(player.getUUID());
         state.putBoolean("pending", false);
         state.putBoolean("complete", true);
         state.remove("reset");
@@ -191,11 +252,12 @@ public final class SelectionManager {
         player.inventoryMenu.sendAllDataToRemote();
     }
 
-    private static void sendChoices(ServerPlayer player, String error) {
+    private static void sendChoices(ServerPlayer player, Component error) {
         JsonObject json = new JsonObject();
         json.addProperty("revision", HeritageCatalog.revision());
-        json.addProperty("error", error);
-        json.addProperty("inventory_policy", state(player).getBoolean("reset") ? "PRESERVE" : HeritageConfig.INVENTORY_POLICY.get().name());
+        json.addProperty("error", error.getString());
+        json.addProperty("error_component", Component.Serializer.toJson(error, player.registryAccess()));
+        json.addProperty("inventory_policy", inventoryPolicy(player).name());
         JsonArray spawns = new JsonArray();
         for (var spawn : HeritageCatalog.spawns().values()) {
             JsonObject choice = new JsonObject();
@@ -203,6 +265,11 @@ public final class SelectionManager {
             choice.addProperty("title", spawn.title());
             choice.addProperty("description", spawn.description());
             choice.addProperty("image", spawn.image().toString());
+            choice.addProperty("title_key", spawn.titleKey());
+            choice.addProperty("description_key", spawn.descriptionKey());
+            JsonArray allowed = new JsonArray();
+            HeritageCatalog.kits().values().stream().filter(spawn::allows).forEach(kit -> allowed.add(kit.id().toString()));
+            choice.add("kits", allowed);
             spawns.add(choice);
         }
         json.add("spawns", spawns);
@@ -212,6 +279,8 @@ public final class SelectionManager {
             choice.addProperty("id", kit.id().toString());
             choice.addProperty("title", kit.title());
             choice.addProperty("description", kit.description());
+            choice.addProperty("title_key", kit.titleKey());
+            choice.addProperty("description_key", kit.descriptionKey());
             choice.addProperty("selected_slot", kit.selectedSlot());
             JsonArray items = new JsonArray();
             for (var entry : kit.entries()) {
@@ -225,17 +294,20 @@ public final class SelectionManager {
             }
             choice.add("items", items);
             try {
-                EquipmentCompat.validate(player, kit.decode(player.registryAccess()));
+                var decoded = kit.decode(player.registryAccess());
+                if (inventoryPolicy(player) != HeritageConfig.InventoryPolicy.PRESERVE) EquipmentCompat.validate(player, decoded);
                 choice.addProperty("problem", "");
             } catch (IllegalArgumentException failure) {
                 choice.addProperty("problem", failure.getMessage());
+                choice.addProperty("problem_component", Component.Serializer.toJson(
+                        HeritageException.component(failure), player.registryAccess()));
             }
             kits.add(choice);
         }
         json.add("kits", kits);
         String payload = json.toString();
         if (payload.getBytes(StandardCharsets.UTF_8).length > 900000) {
-            player.connection.disconnect(net.minecraft.network.chat.Component.literal("Heritage definitions exceed the 900 KB catalog limit. Contact the pack creator"));
+            player.connection.disconnect(Component.translatable("error.kingdomsheritage.catalog_limit"));
             return;
         }
         PacketDistributor.sendToPlayer(player, new HeritageNetwork.Catalog(payload));
@@ -280,6 +352,7 @@ public final class SelectionManager {
 
     @SubscribeEvent
     public static void logout(PlayerEvent.PlayerLoggedOutEvent event) {
+        PREPARATIONS.remove(event.getEntity().getUUID());
         LAST_REQUEST.remove(event.getEntity().getUUID());
         SENT_REVISION.remove(event.getEntity().getUUID());
     }
@@ -287,6 +360,7 @@ public final class SelectionManager {
     @SubscribeEvent
     public static void respawn(PlayerEvent.PlayerRespawnEvent event) {
         if (event.getEntity() instanceof ServerPlayer player && pending(player)) {
+            PREPARATIONS.remove(player.getUUID());
             hold(player);
             SENT_REVISION.remove(player.getUUID());
         }
@@ -294,6 +368,8 @@ public final class SelectionManager {
 
     @SubscribeEvent
     public static void stop(ServerStoppedEvent event) {
+        PREPARATIONS.clear();
+        SpawnResolver.clearCache();
         LAST_REQUEST.clear();
         SENT_REVISION.clear();
     }

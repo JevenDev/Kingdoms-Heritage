@@ -1,8 +1,8 @@
 package com.jvn.kingdomsheritage.server;
 
 import com.google.gson.JsonElement;
-import com.jvn.kingdomsheritage.HeritageConfig;
 import com.jvn.kingdomsheritage.KingdomsHeritage;
+import com.jvn.kingdomsheritage.data.HeritageException;
 import com.jvn.kingdomsheritage.data.SpawnDefinition;
 import com.mojang.serialization.JsonOps;
 import java.util.HashSet;
@@ -25,15 +25,15 @@ import net.minecraft.world.level.levelgen.structure.PoolElementStructurePiece;
 import net.minecraft.world.level.levelgen.structure.Structure;
 import net.minecraft.world.level.levelgen.structure.StructurePiece;
 import net.minecraft.world.level.levelgen.structure.StructureStart;
-import net.minecraft.world.level.levelgen.structure.pools.StructurePoolElement;
 import net.minecraft.world.level.levelgen.structure.placement.RandomSpreadStructurePlacement;
+import net.minecraft.world.level.levelgen.structure.pools.StructurePoolElement;
 
 final class StructureSpawnResolver {
     private StructureSpawnResolver() {}
 
     static BlockPos resolve(ServerLevel level, SpawnDefinition definition, BlockPos origin) {
         if (!level.getServer().getWorldData().worldGenOptions().generateStructures()) {
-            throw new IllegalArgumentException("Structure generation is disabled in this world");
+            throw new HeritageException("structures_disabled", "Structure generation is disabled in this world");
         }
         var registry = level.registryAccess().registryOrThrow(Registries.STRUCTURE);
         HolderSet<Structure> structures = registry.getTag(TagKey.create(Registries.STRUCTURE, definition.target()))
@@ -42,8 +42,8 @@ final class StructureSpawnResolver {
             structures = registry.getHolder(ResourceKey.create(Registries.STRUCTURE, definition.target()))
                     .map(HolderSet::direct).orElse(null);
         }
-        if (structures == null) throw new IllegalArgumentException("Unknown or empty structure target: " + definition.target());
-        int radius = HeritageConfig.SEARCH_RADIUS.get();
+        if (structures == null) throw new HeritageException("structure", "Unknown or empty structure target: %s", definition.target().toString());
+        int radius = SpawnResolver.searchRadius(definition);
         int spacing = structures.stream()
                 .flatMap(holder -> level.getChunkSource().getGeneratorState().getPlacementsForStructure(holder).stream())
                 .filter(RandomSpreadStructurePlacement.class::isInstance).map(RandomSpreadStructurePlacement.class::cast)
@@ -52,10 +52,10 @@ final class StructureSpawnResolver {
         var found = level.getChunkSource().getGenerator().findNearestMapStructure(level, structures, origin, rings, false);
         if (found != null && found.getFirst().distToCenterSqr(origin.getX() + 0.5, found.getFirst().getY() + 0.5,
                 origin.getZ() + 0.5) > (double) radius * radius) found = null;
-        if (found == null) throw new IllegalArgumentException("No matching location found within the configured search radius");
+        if (found == null) throw new HeritageException("not_found", "No matching location found within the configured search radius");
         var start = startAt(level, found.getFirst(), found.getSecond());
         return inside(level, start.getPieces(), definition.piece())
-                .orElseThrow(() -> new IllegalArgumentException("No safe standing room found inside this structure within the search limit"));
+                .orElseThrow(() -> new HeritageException("structure_room", "No safe standing room found inside this structure within the search limit"));
     }
 
     static StructureStart startAt(ServerLevel level, BlockPos locator, Holder<Structure> structure) {
@@ -66,7 +66,7 @@ final class StructureSpawnResolver {
             var start = level.getChunk(chunkPos.x, chunkPos.z).getStartForStructure(structure.value());
             if (start != null && start.isValid()) return start;
         }
-        throw new IllegalArgumentException("The located structure has no available pieces");
+        throw new HeritageException("structure_pieces", "The located structure has no available pieces");
     }
 
     static Optional<BlockPos> inside(ServerLevel level, List<StructurePiece> pieces, ResourceLocation preferred) {

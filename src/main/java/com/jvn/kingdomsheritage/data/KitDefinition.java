@@ -13,9 +13,13 @@ import net.minecraft.util.GsonHelper;
 import net.minecraft.world.item.ItemStack;
 
 public record KitDefinition(ResourceLocation id, String title, String description, int order,
-                            int selectedSlot, List<Entry> entries) {
+                            int selectedSlot, List<Entry> entries, List<String> tags, String titleKey, String descriptionKey) {
     public record Entry(String inventory, String slot, int index, boolean cosmetic, JsonObject item) {}
     public record StackEntry(String inventory, String slot, int index, boolean cosmetic, ItemStack stack) {}
+
+    public KitDefinition(ResourceLocation id, String title, String description, int order, int selectedSlot, List<Entry> entries) {
+        this(id, title, description, order, selectedSlot, entries, List.of(), "", "");
+    }
 
     public static KitDefinition parse(ResourceLocation id, JsonObject json) {
         String title = DefinitionJson.text(json, "title", 120, false);
@@ -46,7 +50,9 @@ public record KitDefinition(ResourceLocation id, String title, String descriptio
             }
             entries.add(new Entry(inventory, slot, index, cosmetic, GsonHelper.getAsJsonObject(entry, "item").deepCopy()));
         }
-        return new KitDefinition(id, title, description, GsonHelper.getAsInt(json, "order", 0), selectedSlot, List.copyOf(entries));
+        return new KitDefinition(id, title, description, GsonHelper.getAsInt(json, "order", 0), selectedSlot, List.copyOf(entries),
+                DefinitionJson.ids(json, "tags", false), DefinitionJson.text(json, "title_key", 256, true),
+                DefinitionJson.text(json, "description_key", 256, true));
     }
 
     public List<StackEntry> decode(HolderLookup.Provider registries) {
@@ -54,7 +60,7 @@ public record KitDefinition(ResourceLocation id, String title, String descriptio
         return entries.stream().map(entry -> {
             ItemStack stack = ItemStack.CODEC.parse(ops, entry.item()).getOrThrow(IllegalArgumentException::new);
             if (stack.isEmpty() || stack.getCount() > stack.getMaxStackSize()) {
-                throw new IllegalArgumentException("Invalid item count in kit " + id);
+                throw new com.jvn.kingdomsheritage.data.HeritageException("item_count", "Invalid item count in kit %s", id.toString());
             }
             return new StackEntry(entry.inventory(), entry.slot(), entry.index(), entry.cosmetic(), stack);
         }).toList();

@@ -1,0 +1,33 @@
+{
+  "title": "Settler",
+  "description": "1 wooden hoe, 12 wheat seeds, 4 bread.",
+  "title_key": "heritage.kingdomsheritage.backgrounds.settler.title",
+  "description_key": "heritage.kingdomsheritage.backgrounds.settler.kit",
+  "order": 4,
+  "tags": [
+    "kingdomsheritage:backgrounds"
+  ],
+  "items": [
+    {
+      "index": 0,
+      "item": {
+        "id": "minecraft:wooden_hoe",
+        "count": 1
+      }
+    },
+    {
+      "index": 1,
+      "item": {
+        "id": "minecraft:wheat_seeds",
+        "count": 12
+      }
+    },
+    {
+      "index": 2,
+      "item": {
+        "id": "minecraft:bread",
+        "count": 4
+      }
+    }
+  ]
+}

@@ -1,8 +1,12 @@
 package com.jvn.kingdomsheritage.client;
 
 import com.google.gson.JsonObject;
+import com.jvn.kingdomsheritage.HeritageConfig;
 import com.jvn.kingdomsheritage.compat.EquipmentCompat;
+import com.jvn.kingdomsheritage.data.DefinitionJson;
+import com.jvn.kingdomsheritage.data.HeritageException;
 import com.jvn.kingdomsheritage.data.KitDefinition;
+import com.jvn.kingdomsheritage.data.KitLoadout;
 import com.jvn.kingdomsheritage.network.HeritageNetwork;
 import java.util.ArrayList;
 import java.util.List;
@@ -36,8 +40,7 @@ public final class KitSelection {
     private List<KitDefinition.StackEntry> stacks = List.of();
     private int index;
     private boolean submitted;
-    private long submittedAt;
-    private String problem = "";
+    private Component problem = Component.empty();
     private Button previous;
     private Button next;
     private Button confirm;
@@ -48,7 +51,7 @@ public final class KitSelection {
     KitSelection(JsonObject catalog, String spawn) {
         this.catalog = catalog;
         this.spawn = spawn;
-        choices = catalog.getAsJsonArray("kits").asList().stream().map(value -> value.getAsJsonObject()).toList();
+        choices = ClientSelection.allowedKits(catalog, spawn);
         player = Minecraft.getInstance().player;
         for (int slot = 0; slot < player.getInventory().getContainerSize(); slot++) original.add(player.getInventory().getItem(slot).copy());
         originalSelected = player.getInventory().selected;
@@ -56,6 +59,24 @@ public final class KitSelection {
         equipment = EquipmentCompat.slots(player);
         originalEquipment = equipment.stream().map(slot -> slot.get().get().copy()).toList();
         select(0);
+    }
+
+    void retry() {
+        submitted = false;
+        updateButtons();
+    }
+
+    Component error() { return DefinitionJson.message(catalog, "error", player.registryAccess()); }
+    String spawnId() { return spawn; }
+    String kitId() { return choices.get(index).get("id").getAsString(); }
+
+    void restoreSelection(String id) {
+        for (int candidate = 0; candidate < choices.size(); candidate++) {
+            if (choices.get(candidate).get("id").getAsString().equals(id)) {
+                select(candidate);
+                return;
+            }
+        }
     }
 
     static void register() {
@@ -85,35 +106,34 @@ public final class KitSelection {
 
     private void select(int index) {
         this.index = index;
-        problem = choices.get(index).get("problem").getAsString();
+        problem = DefinitionJson.message(choices.get(index), "problem", player.registryAccess());
         try {
             var kit = KitDefinition.parse(ResourceLocation.parse(choices.get(index).get("id").getAsString()), choices.get(index));
             stacks = kit.decode(player.registryAccess());
         } catch (IllegalArgumentException error) {
             stacks = List.of();
-            problem = error.getMessage();
+            problem = HeritageException.component(error);
         }
         preview();
         updateButtons();
     }
 
     void tick() {
-        if (submitted && net.minecraft.Util.getMillis() - submittedAt > 10000) submitted = false;
         preview();
         updateButtons();
     }
 
     private void preview() {
         restore();
-        if (!problem.isEmpty()) return;
+        if (!problem.getString().isEmpty()) return;
         var choice = choices.get(index);
-        var policy = catalog.has("inventory_policy") ? com.jvn.kingdomsheritage.HeritageConfig.InventoryPolicy.valueOf(
-                catalog.get("inventory_policy").getAsString()) : com.jvn.kingdomsheritage.HeritageConfig.InventoryPolicy.REPLACE;
+        var policy = catalog.has("inventory_policy") ? HeritageConfig.InventoryPolicy.valueOf(
+                catalog.get("inventory_policy").getAsString()) : HeritageConfig.InventoryPolicy.REPLACE;
         try {
             var kit = KitDefinition.parse(ResourceLocation.parse(choice.get("id").getAsString()), choice);
-            com.jvn.kingdomsheritage.data.KitLoadout.apply(player, kit, stacks, policy);
+            KitLoadout.apply(player, kit, stacks, policy);
         } catch (IllegalArgumentException error) {
-            problem = error.getMessage();
+            problem = HeritageException.component(error);
         }
     }
 
@@ -140,11 +160,11 @@ public final class KitSelection {
         previous.active = index > 0 && !submitted;
         next.active = index + 1 < choices.size() && !submitted;
         back.active = !submitted;
-        confirm.active = !submitted && problem.isEmpty();
-        confirm.setMessage(Component.translatable(submitted ? "screen.kingdomsheritage.wait" : "screen.kingdomsheritage.begin"));
-        confirm.setTooltip(Tooltip.create(problem.isEmpty() ? Component.translatable("screen.kingdomsheritage.policy."
+        confirm.active = !submitted && problem.getString().isEmpty();
+        confirm.setMessage(submitted ? ClientSelection.progress() : Component.translatable("screen.kingdomsheritage.begin"));
+        confirm.setTooltip(Tooltip.create(problem.getString().isEmpty() ? Component.translatable("screen.kingdomsheritage.policy."
                 + (catalog.has("inventory_policy") ? catalog.get("inventory_policy").getAsString().toLowerCase(java.util.Locale.ROOT) : "replace"))
-                : Component.literal(problem)));
+                : problem));
     }
 
     private static void init(ScreenEvent.Init.Post event) {
@@ -165,7 +185,6 @@ public final class KitSelection {
                 .bounds(8, screen.height - 27, 70, 20).build();
         selection.confirm = Button.builder(Component.translatable("screen.kingdomsheritage.begin"), button -> {
             selection.submitted = true;
-            selection.submittedAt = net.minecraft.Util.getMillis();
             selection.updateButtons();
             PacketDistributor.sendToServer(new HeritageNetwork.Choose(selection.spawn,
                     selection.choices.get(selection.index).get("id").getAsString(), selection.catalog.get("revision").getAsLong()));
@@ -219,14 +238,19 @@ public final class KitSelection {
         graphics.pose().translate(0, 0, 500);
         if (titleY >= 16) graphics.drawCenteredString(font, Component.translatable("screen.kingdomsheritage.kit"), center, titleY - 12, 0xffffff);
         JsonObject choice = selection.choices.get(selection.index);
-        var title = Component.literal(choice.get("title").getAsString()
-                + " (" + (selection.index + 1) + "/" + selection.choices.size() + ")");
+        var title = DefinitionJson.component(choice, "title").copy()
+                .append(" (" + (selection.index + 1) + "/" + selection.choices.size() + ")");
         graphics.drawCenteredString(font, font.plainSubstrByWidth(title.getString(), Math.min(screen.width - 24, selection.bounds.getWidth() + 60)), center, titleY, 0xffffff);
-        String description = selection.problem.isEmpty() ? choice.get("description").getAsString() : selection.problem;
+        boolean hasError = !selection.problem.getString().isEmpty() || !selection.error().getString().isEmpty();
+        Component detail = !selection.problem.getString().isEmpty() ? selection.problem
+                : !selection.error().getString().isEmpty()
+                ? selection.error()
+                : DefinitionJson.component(choice, "description");
+        String description = detail.getString();
         var lines = font.split(Component.literal(description), screen.width - 16);
         boolean showDescription = selection.descriptionY + font.lineHeight < screen.height;
         if (showDescription && !lines.isEmpty()) graphics.drawCenteredString(font, lines.getFirst(), center,
-                selection.descriptionY, selection.problem.isEmpty() ? 0xffcccccc : 0xffffaaaa);
+                selection.descriptionY, hasError ? 0xffffaaaa : 0xffcccccc);
         boolean overTitle = event.getMouseY() >= titleY && event.getMouseY() < titleY + font.lineHeight;
         boolean overDescription = showDescription && event.getMouseY() >= selection.descriptionY
                 && event.getMouseY() < selection.descriptionY + font.lineHeight;
@@ -261,7 +285,7 @@ public final class KitSelection {
         if (ClientSelection.kits() == null || !isInventory(event.getScreen())) return;
         int key = event.getKeyCode();
         if (key == GLFW.GLFW_KEY_ESCAPE || Minecraft.getInstance().options.keyInventory.matches(key, event.getScanCode())) {
-            ClientSelection.back();
+            if (!ClientSelection.kits().submitted) ClientSelection.back();
             event.setCanceled(true);
         } else if (key != GLFW.GLFW_KEY_TAB && key != GLFW.GLFW_KEY_ENTER && key != GLFW.GLFW_KEY_SPACE
                 && key != GLFW.GLFW_KEY_LEFT && key != GLFW.GLFW_KEY_RIGHT && key != GLFW.GLFW_KEY_UP && key != GLFW.GLFW_KEY_DOWN) {

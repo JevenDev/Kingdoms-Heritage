@@ -1,0 +1,13 @@
+{
+  "title": "Settler",
+  "description": "Begin inside a nearby village with seeds, bread, and a wooden hoe. Find shelter among its homes and start a small farm.",
+  "title_key": "heritage.kingdomsheritage.backgrounds.settler.title",
+  "description_key": "heritage.kingdomsheritage.backgrounds.settler.description",
+  "type": "structure",
+  "order": 4,
+  "kits": [
+    "kingdomsheritage:settler",
+    "kingdomsheritage:default"
+  ],
+  "target": "minecraft:village"
+}

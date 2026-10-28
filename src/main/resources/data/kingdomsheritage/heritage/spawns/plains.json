@@ -3,5 +3,7 @@
   "description": "Make your home in the open plains.",
   "type": "biome",
   "order": 3,
-  "target": "minecraft:plains"
+  "target": "minecraft:plains",
+  "title_key": "heritage.kingdomsheritage.spawns.plains.title",
+  "description_key": "heritage.kingdomsheritage.spawns.plains.description"
 }

@@ -1,0 +1,13 @@
+{
+  "title": "Frontiersman",
+  "description": "Begin on open plains with a wooden axe, oak logs, and bread. Gather materials and build your first shelter.",
+  "title_key": "heritage.kingdomsheritage.backgrounds.frontiersman.title",
+  "description_key": "heritage.kingdomsheritage.backgrounds.frontiersman.description",
+  "type": "biome",
+  "order": 6,
+  "kits": [
+    "kingdomsheritage:frontiersman",
+    "kingdomsheritage:default"
+  ],
+  "target": "minecraft:plains"
+}

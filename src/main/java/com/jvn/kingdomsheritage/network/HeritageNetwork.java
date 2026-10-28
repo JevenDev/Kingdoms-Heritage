@@ -35,7 +35,7 @@ public final class HeritageNetwork {
     }
 
     public static void register(RegisterPayloadHandlersEvent event) {
-        var registrar = event.registrar("1");
+        var registrar = event.registrar("2");
         registrar.playToClient(Catalog.TYPE, Catalog.CODEC, (packet, context) -> clientReceiver.accept(packet.json));
         registrar.playToServer(Choose.TYPE, Choose.CODEC, (packet, context) ->
                 SelectionManager.choose((ServerPlayer) context.player(), packet));

@@ -3,5 +3,7 @@
   "description": "Start in the closest village.",
   "type": "structure",
   "order": 2,
-  "target": "minecraft:village"
+  "target": "minecraft:village",
+  "title_key": "heritage.kingdomsheritage.spawns.village.title",
+  "description_key": "heritage.kingdomsheritage.spawns.village.description"
 }

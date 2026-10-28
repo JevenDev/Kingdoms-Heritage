@@ -54,6 +54,14 @@ public final class HeritageCatalog {
         if (kits.isEmpty() || kits.size() > 128) {
             throw new IllegalArgumentException("Heritage requires between 1 and 128 enabled kits");
         }
+        for (var spawn : spawns.values()) {
+            for (String selector : spawn.kits()) {
+                boolean found = selector.startsWith("#") ? kits.values().stream().anyMatch(kit -> kit.tags().contains(selector.substring(1)))
+                        : kits.containsKey(ResourceLocation.parse(selector));
+                if (!found) throw new IllegalArgumentException("Unknown or empty kit selector " + selector + " in " + spawn.id());
+            }
+            if (kits.values().stream().noneMatch(spawn::allows)) throw new IllegalArgumentException("No allowed kits for " + spawn.id());
+        }
         Map<ResourceLocation, SpawnDefinition> sortedSpawns = new LinkedHashMap<>();
         spawns.values().stream().sorted(Comparator.comparingInt(SpawnDefinition::order).thenComparing(SpawnDefinition::id))
                 .forEach(value -> sortedSpawns.put(value.id(), value));

@@ -41,7 +41,7 @@ public final class KitService {
 
     private static int export(ServerPlayer player, String name) {
         if (!name.matches("[a-z0-9][a-z0-9_-]{0,63}")) {
-            player.sendSystemMessage(Component.literal("Use a kit name containing lowercase letters, numbers, underscores or hyphens"));
+            player.sendSystemMessage(Component.translatable("commands.kingdomsheritage.export_name"));
             return 0;
         }
         JsonObject json = new JsonObject();
@@ -61,14 +61,14 @@ public final class KitService {
             Files.createDirectories(path.getParent());
             Files.writeString(path, new GsonBuilder().setPrettyPrinting().create().toJson(json) + "\n",
                     StandardCharsets.UTF_8, StandardOpenOption.CREATE_NEW);
-            player.sendSystemMessage(Component.literal("Exported " + path + ". Copy it to data/<namespace>/heritage/kits/" + name + ".json in your datapack"));
+            player.sendSystemMessage(Component.translatable("commands.kingdomsheritage.exported", path.toString(), name));
             return 1;
         } catch (java.nio.file.FileAlreadyExistsException error) {
-            player.sendSystemMessage(Component.literal("An export named " + name + " already exists. Choose another name"));
+            player.sendSystemMessage(Component.translatable("commands.kingdomsheritage.export_exists", name));
             return 0;
         } catch (IOException error) {
             com.jvn.kingdomsheritage.KingdomsHeritage.LOGGER.warn("Could not export kit {}", path, error);
-            player.sendSystemMessage(Component.literal("Kit export failed: " + error.getMessage() + ". Existing exports are never overwritten"));
+            player.sendSystemMessage(Component.translatable("commands.kingdomsheritage.export_failed", error.getMessage()));
             return 0;
         }
     }

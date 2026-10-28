@@ -1,5 +1,6 @@
 package com.jvn.kingdomsheritage.compat;
 
+import com.jvn.kingdomsheritage.data.HeritageException;
 import com.jvn.kingdomsheritage.data.KitDefinition.StackEntry;
 import java.util.ArrayList;
 import java.util.List;
@@ -32,7 +33,7 @@ public final class EquipmentCompat {
         for (var entry : entries) {
             if (entry.inventory().equals("player")) continue;
             if (slots.stream().noneMatch(slot -> slot.matches(entry))) {
-                throw new IllegalArgumentException("Unavailable equipment slot: " + entry.inventory() + "/" + entry.slot() + "/" + entry.index());
+                throw new HeritageException("equipment", "Unavailable equipment slot: %s", entry.inventory() + "/" + entry.slot() + "/" + entry.index());
             }
         }
     }

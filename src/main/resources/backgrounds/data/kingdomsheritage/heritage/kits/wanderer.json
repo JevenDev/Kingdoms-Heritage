@@ -1,0 +1,33 @@
+{
+  "title": "Wanderer",
+  "description": "1 wooden sword, 6 bread, 8 torch.",
+  "title_key": "heritage.kingdomsheritage.backgrounds.wanderer.title",
+  "description_key": "heritage.kingdomsheritage.backgrounds.wanderer.kit",
+  "order": 5,
+  "tags": [
+    "kingdomsheritage:backgrounds"
+  ],
+  "items": [
+    {
+      "index": 0,
+      "item": {
+        "id": "minecraft:wooden_sword",
+        "count": 1
+      }
+    },
+    {
+      "index": 1,
+      "item": {
+        "id": "minecraft:bread",
+        "count": 6
+      }
+    },
+    {
+      "index": 2,
+      "item": {
+        "id": "minecraft:torch",
+        "count": 8
+      }
+    }
+  ]
+}

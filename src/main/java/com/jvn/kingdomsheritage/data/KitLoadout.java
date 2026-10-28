@@ -3,12 +3,14 @@ package com.jvn.kingdomsheritage.data;
 import com.jvn.kingdomsheritage.HeritageConfig.InventoryPolicy;
 import com.jvn.kingdomsheritage.compat.EquipmentCompat;
 import java.util.List;
+import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 
 public final class KitLoadout {
     private KitLoadout() {}
 
-    public static void apply(net.minecraft.world.entity.player.Player player, KitDefinition kit, List<KitDefinition.StackEntry> entries, InventoryPolicy policy) {
+    public static void apply(Player player, KitDefinition kit, List<KitDefinition.StackEntry> entries, InventoryPolicy policy) {
         if (policy == InventoryPolicy.PRESERVE) return;
         var slots = EquipmentCompat.slots(player);
         var inventory = player.getInventory();
@@ -48,7 +50,7 @@ public final class KitLoadout {
         }
     }
 
-    private static void merge(net.minecraft.world.entity.player.Inventory inventory, ItemStack stack) {
+    private static void merge(Inventory inventory, ItemStack stack) {
         for (var existing : inventory.items) {
             if (!existing.isEmpty() && ItemStack.isSameItemSameComponents(existing, stack)) {
                 int count = Math.min(stack.getCount(), existing.getMaxStackSize() - existing.getCount());
@@ -65,7 +67,7 @@ public final class KitLoadout {
                 return;
             }
         }
-        throw new IllegalArgumentException("There is not enough inventory space for this kit. Choose a smaller kit or ask an administrator to recover your selection");
+        throw new com.jvn.kingdomsheritage.data.HeritageException("full_inventory", "There is not enough inventory space for this kit. Choose a smaller kit or ask an administrator to recover your selection");
     }
 
 }

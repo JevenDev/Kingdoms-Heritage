@@ -1,6 +1,7 @@
 package com.jvn.kingdomsheritage.client;
 
 import com.google.gson.JsonObject;
+import com.jvn.kingdomsheritage.data.DefinitionJson;
 import com.jvn.kingdomsheritage.network.HeritageNetwork;
 import com.mojang.blaze3d.systems.RenderSystem;
 import java.util.ArrayList;
@@ -27,7 +28,7 @@ public final class SpawnSelectScreen extends Screen {
     private static final ResourceLocation FALLBACK = texture("campaign_select_screen_card_fallback");
     private final JsonObject catalog;
     private final List<JsonObject> choices;
-    private final JsonObject automaticKit;
+    private JsonObject automaticKit;
     private JsonObject selected;
     private JsonObject expanded;
     private final List<Card> cards = new ArrayList<>();
@@ -40,17 +41,24 @@ public final class SpawnSelectScreen extends Screen {
     private Button next;
     private double descriptionScroll;
     private boolean submitted;
-    private long submittedAt;
     private long renderedAt;
 
     public SpawnSelectScreen(JsonObject catalog) {
         super(Component.translatable("screen.kingdomsheritage.location"));
         this.catalog = catalog;
-        var kits = catalog.getAsJsonArray("kits");
-        JsonObject onlyKit = kits.size() == 1 ? kits.get(0).getAsJsonObject() : null;
-        automaticKit = onlyKit != null && onlyKit.getAsJsonArray("items").isEmpty()
-                && onlyKit.get("problem").getAsString().isEmpty() ? onlyKit : null;
         choices = catalog.getAsJsonArray("spawns").asList().stream().map(value -> value.getAsJsonObject()).toList();
+    }
+
+    void retry() {
+        submitted = false;
+        updateNext();
+    }
+
+    String selectedId() { return selected == null ? null : selected.get("id").getAsString(); }
+
+    void restoreSelection(String id) {
+        selected = choices.stream().filter(choice -> choice.get("id").getAsString().equals(id)).findFirst().orElse(null);
+        if (selected != null) page = choices.indexOf(selected) / PAGE_SIZE;
     }
 
     private static ResourceLocation texture(String name) {
@@ -142,7 +150,7 @@ public final class SpawnSelectScreen extends Screen {
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (description.mouseClicked(mouseX, mouseY, button)) return true;
         Card card = cardAt(mouseX, mouseY);
-        if (card != null && button == 0) {
+        if (card != null && card.active && button == 0) {
             card.playDownSound(minecraft.getSoundManager());
             card.onPress();
             setFocused(card);
@@ -173,24 +181,26 @@ public final class SpawnSelectScreen extends Screen {
             return;
         }
         submitted = true;
-        submittedAt = net.minecraft.Util.getMillis();
         updateNext();
         PacketDistributor.sendToServer(new HeritageNetwork.Choose(selected.get("id").getAsString(),
                 automaticKit.get("id").getAsString(), catalog.get("revision").getAsLong()));
     }
 
     private void updateNext() {
-        next.active = selected != null && !submitted;
-        next.setMessage(Component.translatable(submitted ? "screen.kingdomsheritage.wait"
-                : automaticKit == null ? "screen.kingdomsheritage.next" : "screen.kingdomsheritage.begin"));
+        var kits = ClientSelection.allowedKits(catalog, selectedId());
+        JsonObject only = kits.size() == 1 ? kits.getFirst() : null;
+        automaticKit = only != null && only.getAsJsonArray("items").isEmpty()
+                && only.get("problem").getAsString().isEmpty() ? only : null;
+        for (Card card : cards) card.active = !submitted;
+        description.active = !submitted;
+        next.active = selected != null && !kits.isEmpty() && !submitted;
+        next.setMessage(submitted ? ClientSelection.progress() : Component.translatable(
+                automaticKit == null ? "screen.kingdomsheritage.next" : "screen.kingdomsheritage.begin"));
     }
 
     @Override
     public void tick() {
-        if (submitted && net.minecraft.Util.getMillis() - submittedAt > 10000) {
-            submitted = false;
-            updateNext();
-        }
+        if (submitted) updateNext();
     }
 
     @Override
@@ -232,7 +242,7 @@ public final class SpawnSelectScreen extends Screen {
         graphics.drawCenteredString(font, title, width / 2, 12, 0xffffff);
         String error = catalog.get("error").getAsString();
         if (!error.isEmpty()) {
-            var lines = font.split(Component.literal(error), width - 20);
+            var lines = font.split(DefinitionJson.message(catalog, "error", minecraft.player.registryAccess()), width - 20);
             for (int index = 0; index < Math.min(2, lines.size()); index++) {
                 graphics.drawCenteredString(font, lines.get(index), width / 2, height - 51 + index * 9, 0xffaaaa);
             }
@@ -263,7 +273,7 @@ public final class SpawnSelectScreen extends Screen {
 
         private Card(int x, JsonObject choice) {
             super(x, top, Math.round((expanded == null ? CARD_WIDTH : EXPANDED_WIDTH) * scale),
-                    Math.round(CARD_HEIGHT * scale), Component.literal(choice.get("title").getAsString()),
+                    Math.round(CARD_HEIGHT * scale), DefinitionJson.component(choice, "title"),
                     button -> { selected = choice; preview = choice; updateNext(); updateDescription(); }, DEFAULT_NARRATION);
             this.choice = choice;
             ResourceLocation requested = ResourceLocation.parse(choice.get("image").getAsString());
@@ -294,16 +304,17 @@ public final class SpawnSelectScreen extends Screen {
             blit(graphics, expanded == null ? CARD : EXPANDED, 0, 0, expanded == null ? CARD_WIDTH : EXPANDED_WIDTH, CARD_HEIGHT);
             if (choice == selected) graphics.renderOutline(2, 2, 124, 188, 0xfff2cd83);
             else if (isHoveredOrFocused()) graphics.renderOutline(2, 2, 124, 188, 0xffeeeeee);
-            var lines = font.split(getMessage(), 57);
+            float titleScale = Math.max(1.5F, Math.min(2, 114F / Math.max(1, font.width(getMessage()))));
+            var lines = font.split(getMessage(), (int) (114 / titleScale));
             lines = lines.subList(0, Math.min(3, lines.size()));
-            int titleHeight = (lines.size() - 1) * font.lineHeight * 2 + 16;
+            int titleHeight = Math.round(((lines.size() - 1) * font.lineHeight + 8) * titleScale);
             graphics.pose().pushPose();
             graphics.pose().translate(7, CARD_HEIGHT - 18 - titleHeight, 0);
-            graphics.pose().scale(2, 2, 1);
+            graphics.pose().scale(titleScale, titleScale, 1);
             for (int index = 0; index < lines.size(); index++) graphics.drawString(font, lines.get(index), 0, index * font.lineHeight, 0xffffff, true);
             graphics.pose().popPose();
             if (expanded != null) {
-                var description = font.split(Component.literal(choice.get("description").getAsString()), 230);
+                var description = font.split(DefinitionJson.component(choice, "description"), 230);
                 descriptionScroll = Math.min(descriptionScroll, Math.max(0, description.size() * font.lineHeight - 170));
                 graphics.enableScissor(getX() + Math.round(132 * scale), getY() + Math.round(9 * scale),
                         getX() + Math.round(366 * scale), getY() + Math.round(183 * scale));

@@ -1,0 +1,33 @@
+{
+  "title": "Frontiersman",
+  "description": "1 wooden axe, 8 oak log, 4 bread.",
+  "title_key": "heritage.kingdomsheritage.backgrounds.frontiersman.title",
+  "description_key": "heritage.kingdomsheritage.backgrounds.frontiersman.kit",
+  "order": 6,
+  "tags": [
+    "kingdomsheritage:backgrounds"
+  ],
+  "items": [
+    {
+      "index": 0,
+      "item": {
+        "id": "minecraft:wooden_axe",
+        "count": 1
+      }
+    },
+    {
+      "index": 1,
+      "item": {
+        "id": "minecraft:oak_log",
+        "count": 8
+      }
+    },
+    {
+      "index": 2,
+      "item": {
+        "id": "minecraft:bread",
+        "count": 4
+      }
+    }
+  ]
+}

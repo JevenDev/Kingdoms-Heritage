@@ -1,13 +1,22 @@
 package com.jvn.kingdomsheritage.data;
 
 import com.google.gson.JsonObject;
+import java.util.List;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.GsonHelper;
 
 public record SpawnDefinition(ResourceLocation id, String title, String description, ResourceLocation image,
                               int order, Kind kind, ResourceLocation dimension, ResourceLocation target,
-                              int x, int y, int z, boolean targetTag, ResourceLocation piece) {
+                              int x, int y, int z, boolean targetTag, ResourceLocation piece,
+                              List<String> kits, int searchRadius, int randomRadius, String titleKey, String descriptionKey) {
     public enum Kind { DEFAULT, RANDOM, BIOME, STRUCTURE, FIXED }
+
+    public SpawnDefinition(ResourceLocation id, String title, String description, ResourceLocation image,
+                           int order, Kind kind, ResourceLocation dimension, ResourceLocation target,
+                           int x, int y, int z, boolean targetTag, ResourceLocation piece) {
+        this(id, title, description, image, order, kind, dimension, target, x, y, z, targetTag, piece,
+                List.of(), 0, 0, "", "");
+    }
 
     public static SpawnDefinition parse(ResourceLocation id, JsonObject json) {
         String title = DefinitionJson.text(json, "title", 120, false);
@@ -16,7 +25,6 @@ public record SpawnDefinition(ResourceLocation id, String title, String descript
         ResourceLocation dimension = ResourceLocation.parse(GsonHelper.getAsString(json, "dimension", "minecraft:overworld"));
         String targetName = kind == Kind.BIOME || kind == Kind.STRUCTURE ? GsonHelper.getAsString(json, "target") : null;
         boolean targetTag = targetName != null && targetName.startsWith("#");
-        if (targetTag && kind != Kind.STRUCTURE) throw new IllegalArgumentException("Biome targets require a biome ID");
         ResourceLocation target = targetName == null ? null : ResourceLocation.parse(targetTag ? targetName.substring(1) : targetName);
         ResourceLocation piece = json.has("piece") ? ResourceLocation.parse(GsonHelper.getAsString(json, "piece")) : null;
         if (piece != null && kind != Kind.STRUCTURE) throw new IllegalArgumentException("Only structure locations support a preferred piece");
@@ -32,6 +40,20 @@ public record SpawnDefinition(ResourceLocation id, String title, String descript
             throw new IllegalArgumentException("Fixed locations require x, y and z");
         }
         return new SpawnDefinition(id, title, description, image, GsonHelper.getAsInt(json, "order", 0),
-                kind, dimension, target, x, y, z, targetTag, piece);
+                kind, dimension, target, x, y, z, targetTag, piece, DefinitionJson.ids(json, "kits", true),
+                radius(json, "search_radius"), radius(json, "random_radius"),
+                DefinitionJson.text(json, "title_key", 256, true), DefinitionJson.text(json, "description_key", 256, true));
+    }
+
+    private static int radius(JsonObject json, String key) {
+        if (!json.has(key)) return 0;
+        int value = GsonHelper.getAsInt(json, key);
+        if (value < 16 || value > 30000) throw new IllegalArgumentException(key + " must be between 16 and 30000 blocks");
+        return value;
+    }
+
+    public boolean allows(KitDefinition kit) {
+        return kits.isEmpty() || kits.contains(kit.id().toString())
+                || kit.tags().stream().anyMatch(tag -> kits.contains("#" + tag));
     }
 }
