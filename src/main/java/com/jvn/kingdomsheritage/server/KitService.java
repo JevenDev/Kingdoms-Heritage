@@ -4,6 +4,7 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.jvn.kingdomsheritage.compat.EquipmentCompat;
+import com.jvn.kingdomsheritage.HeritageConfig.InventoryPolicy;
 import com.jvn.kingdomsheritage.data.KitDefinition;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.serialization.JsonOps;
@@ -24,39 +25,16 @@ public final class KitService {
     private KitService() {}
 
     public static void apply(ServerPlayer player, KitDefinition kit, List<KitDefinition.StackEntry> entries) {
-        var slots = EquipmentCompat.slots(player);
-        var inventory = player.getInventory();
-        var previous = inventory.items.stream().map(ItemStack::copy).toList();
-        var previousArmor = inventory.armor.stream().map(ItemStack::copy).toList();
-        ItemStack offhand = inventory.offhand.getFirst().copy();
-        var equipment = slots.stream().map(slot -> slot.get().get().copy()).toList();
-        int selected = inventory.selected;
-        try {
-            inventory.clearContent();
-            slots.forEach(slot -> slot.set().accept(ItemStack.EMPTY));
-            for (var entry : entries) {
-                if (entry.inventory().equals("player")) inventory.setItem(entry.index(), entry.stack().copy());
-                else slots.stream().filter(slot -> slot.matches(entry)).findFirst().orElseThrow()
-                        .set().accept(entry.stack().copy());
-            }
-            inventory.selected = kit.selectedSlot();
-            inventory.setChanged();
-            player.inventoryMenu.broadcastChanges();
-        } catch (RuntimeException error) {
-            for (int index = 0; index < previous.size(); index++) inventory.items.set(index, previous.get(index));
-            for (int index = 0; index < previousArmor.size(); index++) inventory.armor.set(index, previousArmor.get(index));
-            inventory.offhand.set(0, offhand);
-            inventory.selected = selected;
-            for (int index = 0; index < slots.size(); index++) slots.get(index).set().accept(equipment.get(index));
-            inventory.setChanged();
-            player.inventoryMenu.broadcastChanges();
-            throw error;
-        }
+        apply(player, kit, entries, InventoryPolicy.REPLACE);
+    }
+
+    public static void apply(ServerPlayer player, KitDefinition kit, List<KitDefinition.StackEntry> entries, InventoryPolicy policy) {
+        com.jvn.kingdomsheritage.data.KitLoadout.apply(player, kit, entries, policy);
     }
 
     public static void commands(RegisterCommandsEvent event) {
-        event.getDispatcher().register(Commands.literal("heritage").requires(source -> source.hasPermission(2))
-                .then(Commands.literal("exportkit").then(Commands.argument("name", StringArgumentType.word())
+        event.getDispatcher().register(Commands.literal("heritage")
+                .then(Commands.literal("exportkit").requires(source -> source.hasPermission(2)).then(Commands.argument("name", StringArgumentType.word())
                         .executes(context -> export(context.getSource().getPlayerOrException(),
                                 StringArgumentType.getString(context, "name"))))));
     }

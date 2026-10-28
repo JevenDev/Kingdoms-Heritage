@@ -3,6 +3,8 @@ package com.jvn.kingdomsheritage.server;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.jvn.kingdomsheritage.KingdomsHeritage;
+import com.jvn.kingdomsheritage.HeritageConfig;
+import net.minecraft.stats.Stats;
 import com.jvn.kingdomsheritage.compat.EquipmentCompat;
 import com.jvn.kingdomsheritage.data.HeritageCatalog;
 import com.jvn.kingdomsheritage.network.HeritageNetwork;
@@ -51,12 +53,18 @@ public final class SelectionManager {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
         CompoundTag state = state(player);
         if (state.getBoolean("complete")) return;
+        if (!state.getBoolean("pending") && !state.getBoolean("reset") && HeritageConfig.EXEMPT_EXISTING_PLAYERS.get()
+                && player.getStats().getValue(Stats.CUSTOM.get(Stats.PLAY_TIME)) > 0) {
+            state.putBoolean("complete", true);
+            return;
+        }
         if (!state.getBoolean("pending")) {
             state.putBoolean("pending", true);
             state.putInt("mode", player.gameMode.getGameModeForPlayer().getId());
             player.getAbilities().addSaveData(state);
             state.putBoolean("no_gravity", player.isNoGravity());
             state.putLong("spawn", player.blockPosition().asLong());
+            state.putString("original_dimension", player.level().dimension().location().toString());
             state.putFloat("yaw", player.getYRot());
         }
         hold(player);
@@ -116,7 +124,8 @@ public final class SelectionManager {
             var stacks = kit.decode(player.registryAccess());
             EquipmentCompat.validate(player, stacks);
             var destination = SpawnResolver.resolve(player, spawn, BlockPos.of(state(player).getLong("spawn")));
-            KitService.apply(player, kit, stacks);
+            KitService.apply(player, kit, stacks, state(player).getBoolean("reset")
+                    ? HeritageConfig.InventoryPolicy.PRESERVE : HeritageConfig.INVENTORY_POLICY.get());
             CompoundTag state = state(player);
             player.teleportTo(destination.level(), destination.position().getX() + 0.5,
                     destination.position().getY(), destination.position().getZ() + 0.5, java.util.Set.of(), state.getFloat("yaw"), 0);
@@ -124,6 +133,12 @@ public final class SelectionManager {
             state.putBoolean("pending", false);
             state.putString("spawn_choice", spawn.id().toString());
             state.putString("kit_choice", kit.id().toString());
+            state.putString("homeland_dimension", destination.level().dimension().location().toString());
+            state.putLong("homeland", destination.position().asLong());
+            if (HeritageConfig.HOMELAND_RESPAWN.get()) {
+                player.setRespawnPosition(destination.level().dimension(), destination.position(), state.getFloat("yaw"), true, false);
+            }
+            state.remove("reset");
             player.setGameMode(GameType.byId(state.getInt("mode")));
             player.getAbilities().loadSaveData(state);
             player.onUpdateAbilities();
@@ -138,10 +153,49 @@ public final class SelectionManager {
         }
     }
 
+    public static CompoundTag inspect(ServerPlayer player) {
+        return state(player).copy();
+    }
+
+    public static void reset(ServerPlayer player) {
+        if (pending(player)) throw new IllegalArgumentException("Recover the pending selection before resetting it");
+        state(player).putBoolean("complete", false);
+        state(player).putBoolean("reset", true);
+        LAST_REQUEST.remove(player.getUUID());
+        SENT_REVISION.remove(player.getUUID());
+        login(new PlayerEvent.PlayerLoggedInEvent(player));
+    }
+
+    public static void recover(ServerPlayer player) {
+        if (!pending(player)) throw new IllegalArgumentException("This player has no pending selection");
+        CompoundTag state = state(player);
+        var id = ResourceLocation.tryParse(state.getString("original_dimension"));
+        var level = id == null ? player.server.overworld() : player.server.getLevel(
+                net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.DIMENSION, id));
+        if (level == null) throw new IllegalArgumentException("The original dimension is unavailable");
+        BlockPos original = BlockPos.of(state.getLong("spawn"));
+        BlockPos position = SpawnResolver.safe(level, original) ? original : SpawnResolver.nearby(level, original, 32, null)
+                .orElseThrow(() -> new IllegalArgumentException("No safe ground near the original position"));
+        player.teleportTo(level, position.getX() + 0.5, position.getY(), position.getZ() + 0.5, state.getFloat("yaw"), 0);
+        state.putBoolean("pending", false);
+        state.putBoolean("complete", true);
+        state.remove("reset");
+        player.setGameMode(GameType.byId(state.getInt("mode")));
+        player.getAbilities().loadSaveData(state);
+        player.onUpdateAbilities();
+        player.setNoGravity(state.getBoolean("no_gravity"));
+        player.fallDistance = 0;
+        LAST_REQUEST.remove(player.getUUID());
+        SENT_REVISION.remove(player.getUUID());
+        PacketDistributor.sendToPlayer(player, new HeritageNetwork.Catalog("{}"));
+        player.inventoryMenu.sendAllDataToRemote();
+    }
+
     private static void sendChoices(ServerPlayer player, String error) {
         JsonObject json = new JsonObject();
         json.addProperty("revision", HeritageCatalog.revision());
         json.addProperty("error", error);
+        json.addProperty("inventory_policy", state(player).getBoolean("reset") ? "PRESERVE" : HeritageConfig.INVENTORY_POLICY.get().name());
         JsonArray spawns = new JsonArray();
         for (var spawn : HeritageCatalog.spawns().values()) {
             JsonObject choice = new JsonObject();

@@ -16,6 +16,7 @@ public final class KingdomsHeritage {
         modEventBus.addListener(com.jvn.kingdomsheritage.network.HeritageNetwork::register);
         net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(com.jvn.kingdomsheritage.data.HeritageCatalog::register);
         net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(com.jvn.kingdomsheritage.server.KitService::commands);
+        net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(com.jvn.kingdomsheritage.server.HeritageCommands::register);
         net.neoforged.neoforge.common.NeoForge.EVENT_BUS.register(com.jvn.kingdomsheritage.server.SelectionManager.class);
     }
 }

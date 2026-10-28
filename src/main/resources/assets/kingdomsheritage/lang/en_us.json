@@ -6,5 +6,14 @@
   "screen.kingdomsheritage.wait": "Preparing...",
   "screen.kingdomsheritage.expand": "Read description",
   "screen.kingdomsheritage.collapse": "Collapse description",
-  "screen.kingdomsheritage.step_location": "Step 1 of 2"
+  "screen.kingdomsheritage.step_location": "Step 1 of 2",
+  "commands.kingdomsheritage.inspect": "%s: pending=%s, complete=%s, location=%s, kit=%s, homeland=%s",
+  "commands.kingdomsheritage.recovered": "Recovered %s to their original location with inventory preserved.",
+  "commands.kingdomsheritage.reset": "Reopened selection for %s. Existing inventory will be preserved and no kit will be granted.",
+  "commands.kingdomsheritage.invalid": "%s: %s",
+  "commands.kingdomsheritage.validated": "Checked %s locations and %s kits. Found %s definition errors. Terrain searches are checked when selecting a location.",
+  "commands.kingdomsheritage.validation_player": "Use /heritage validate <player> to also check that player's equipment slots.",
+  "screen.kingdomsheritage.policy.replace": "This kit replaces your inventory and equipment.",
+  "screen.kingdomsheritage.policy.merge": "Your existing items are kept. Kit items use available inventory space.",
+  "screen.kingdomsheritage.policy.preserve": "Your inventory is preserved. No kit items will be granted."
 }

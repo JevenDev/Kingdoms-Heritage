@@ -104,18 +104,21 @@ public final class KitSelection {
     }
 
     private void preview() {
-        player.getInventory().clearContent();
-        var slots = EquipmentCompat.slots(player);
-        slots.forEach(slot -> slot.set().accept(ItemStack.EMPTY));
-        for (var entry : stacks) {
-            if (entry.inventory().equals("player")) player.getInventory().setItem(entry.index(), entry.stack().copy());
-            else slots.stream().filter(slot -> slot.matches(entry)).findFirst().ifPresent(slot -> slot.set().accept(entry.stack().copy()));
+        restore();
+        if (!problem.isEmpty()) return;
+        var choice = choices.get(index);
+        var policy = catalog.has("inventory_policy") ? com.jvn.kingdomsheritage.HeritageConfig.InventoryPolicy.valueOf(
+                catalog.get("inventory_policy").getAsString()) : com.jvn.kingdomsheritage.HeritageConfig.InventoryPolicy.REPLACE;
+        try {
+            var kit = KitDefinition.parse(ResourceLocation.parse(choice.get("id").getAsString()), choice);
+            com.jvn.kingdomsheritage.data.KitLoadout.apply(player, kit, stacks, policy);
+        } catch (IllegalArgumentException error) {
+            problem = error.getMessage();
         }
-        player.getInventory().selected = choices.get(index).get("selected_slot").getAsInt();
     }
 
     void restore() {
-        for (int slot = 0; slot < original.size(); slot++) player.getInventory().setItem(slot, original.get(slot));
+        for (int slot = 0; slot < original.size(); slot++) player.getInventory().setItem(slot, original.get(slot).copy());
         for (var current : EquipmentCompat.slots(player)) {
             ItemStack restored = ItemStack.EMPTY;
             for (int slot = 0; slot < equipment.size(); slot++) {
@@ -139,7 +142,9 @@ public final class KitSelection {
         back.active = !submitted;
         confirm.active = !submitted && problem.isEmpty();
         confirm.setMessage(Component.translatable(submitted ? "screen.kingdomsheritage.wait" : "screen.kingdomsheritage.begin"));
-        confirm.setTooltip(problem.isEmpty() ? null : Tooltip.create(Component.literal(problem)));
+        confirm.setTooltip(Tooltip.create(problem.isEmpty() ? Component.translatable("screen.kingdomsheritage.policy."
+                + (catalog.has("inventory_policy") ? catalog.get("inventory_policy").getAsString().toLowerCase(java.util.Locale.ROOT) : "replace"))
+                : Component.literal(problem)));
     }
 
     private static void init(ScreenEvent.Init.Post event) {
