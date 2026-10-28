@@ -1,14 +1,17 @@
 package com.jvn.kingdomsheritage.client;
 
 import com.google.gson.JsonObject;
+import com.jvn.kingdomsheritage.network.HeritageNetwork;
 import com.mojang.blaze3d.systems.RenderSystem;
 import java.util.List;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.screens.inventory.tooltip.DefaultTooltipPositioner;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.neoforged.neoforge.network.PacketDistributor;
 
 public final class SpawnSelectScreen extends Screen {
     private static final int CARD_WIDTH = 128;
@@ -22,6 +25,7 @@ public final class SpawnSelectScreen extends Screen {
     private static final ResourceLocation FALLBACK = texture("campaign_select_screen_card_fallback");
     private final JsonObject catalog;
     private final List<JsonObject> choices;
+    private final JsonObject automaticKit;
     private JsonObject selected;
     private JsonObject expanded;
     private int page;
@@ -29,10 +33,16 @@ public final class SpawnSelectScreen extends Screen {
     private int top;
     private Button next;
     private double descriptionScroll;
+    private boolean submitted;
+    private long submittedAt;
 
     public SpawnSelectScreen(JsonObject catalog) {
         super(Component.translatable("screen.kingdomsheritage.location"));
         this.catalog = catalog;
+        var kits = catalog.getAsJsonArray("kits");
+        JsonObject onlyKit = kits.size() == 1 ? kits.get(0).getAsJsonObject() : null;
+        automaticKit = onlyKit != null && onlyKit.getAsJsonArray("items").isEmpty()
+                && onlyKit.get("problem").getAsString().isEmpty() ? onlyKit : null;
         choices = catalog.getAsJsonArray("spawns").asList().stream().map(value -> value.getAsJsonObject()).toList();
     }
 
@@ -77,10 +87,9 @@ public final class SpawnSelectScreen extends Screen {
         int buttonWidth = Math.min(130, (width - 100) / 2);
         addRenderableWidget(Button.builder(Component.translatable("menu.disconnect"), button -> ClientSelection.disconnect())
                 .bounds(width / 2 - buttonWidth - 4, height - 28, buttonWidth, 20).build());
-        next = addRenderableWidget(Button.builder(Component.translatable("screen.kingdomsheritage.next"), button ->
-                        ClientSelection.openKits(selected.get("id").getAsString()))
+        next = addRenderableWidget(Button.builder(Component.empty(), button -> confirm())
                 .bounds(width / 2 + 4, height - 28, buttonWidth, 20).build());
-        next.active = selected != null;
+        updateNext();
         if (expanded == null && choices.size() > PAGE_SIZE) {
             var previous = addRenderableWidget(Button.builder(Component.literal("<"), button -> { page--; rebuildWidgets(); })
                     .bounds(8, height - 28, 20, 20).build());
@@ -91,9 +100,41 @@ public final class SpawnSelectScreen extends Screen {
         }
     }
 
+    private void confirm() {
+        if (selected == null || submitted) return;
+        if (automaticKit == null) {
+            ClientSelection.openKits(selected.get("id").getAsString());
+            return;
+        }
+        submitted = true;
+        submittedAt = net.minecraft.Util.getMillis();
+        updateNext();
+        PacketDistributor.sendToServer(new HeritageNetwork.Choose(selected.get("id").getAsString(),
+                automaticKit.get("id").getAsString(), catalog.get("revision").getAsLong()));
+    }
+
+    private void updateNext() {
+        next.active = selected != null && !submitted;
+        next.setMessage(Component.translatable(submitted ? "screen.kingdomsheritage.wait"
+                : automaticKit == null ? "screen.kingdomsheritage.next" : "screen.kingdomsheritage.begin"));
+    }
+
+    @Override
+    public void tick() {
+        if (submitted && net.minecraft.Util.getMillis() - submittedAt > 10000) {
+            submitted = false;
+            updateNext();
+        }
+    }
+
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         super.render(graphics, mouseX, mouseY, partialTick);
+        for (var child : children()) {
+            if (child instanceof Card card && card.isHovered() && card.getTooltip() != null) {
+                setTooltipForNextRenderPass(card.getTooltip(), DefaultTooltipPositioner.INSTANCE, true);
+            }
+        }
         graphics.drawCenteredString(font, title, width / 2, 12, 0xffffff);
         String error = catalog.get("error").getAsString();
         if (!error.isEmpty()) {
@@ -101,7 +142,7 @@ public final class SpawnSelectScreen extends Screen {
             for (int index = 0; index < Math.min(2, lines.size()); index++) {
                 graphics.drawCenteredString(font, lines.get(index), width / 2, height - 51 + index * 9, 0xffaaaa);
             }
-        } else graphics.drawCenteredString(font, Component.translatable("screen.kingdomsheritage.step_location"), width / 2, height - 43, 0xffffff);
+        } else if (automaticKit == null) graphics.drawCenteredString(font, Component.translatable("screen.kingdomsheritage.step_location"), width / 2, height - 43, 0xffffff);
     }
 
     @Override
@@ -128,7 +169,7 @@ public final class SpawnSelectScreen extends Screen {
         private Card(int x, JsonObject choice) {
             super(x, top, Math.round((expanded == null ? CARD_WIDTH : EXPANDED_WIDTH) * scale),
                     Math.round(CARD_HEIGHT * scale), Component.literal(choice.get("title").getAsString()),
-                    button -> { selected = choice; next.active = true; }, DEFAULT_NARRATION);
+                    button -> { selected = choice; updateNext(); }, DEFAULT_NARRATION);
             this.choice = choice;
             ResourceLocation requested = ResourceLocation.parse(choice.get("image").getAsString());
             cover = minecraft.getResourceManager().getResource(requested).isPresent() ? requested : FALLBACK;
