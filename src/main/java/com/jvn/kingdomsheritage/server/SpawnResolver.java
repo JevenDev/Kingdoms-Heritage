@@ -4,6 +4,7 @@ import com.jvn.kingdomsheritage.HeritageConfig;
 import com.jvn.kingdomsheritage.data.SpawnDefinition;
 import java.util.Optional;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.HolderSet;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
@@ -12,6 +13,7 @@ import net.minecraft.tags.BlockTags;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.levelgen.Heightmap;
+import net.minecraft.world.level.levelgen.structure.Structure;
 import net.minecraft.world.phys.AABB;
 
 public final class SpawnResolver {
@@ -49,10 +51,12 @@ public final class SpawnResolver {
         }
         BlockPos target;
         if (definition.kind() == SpawnDefinition.Kind.STRUCTURE) {
-            target = level.findNearestMapStructure(TagKey.create(Registries.STRUCTURE, definition.target()),
-                    origin, Math.max(1, HeritageConfig.SEARCH_RADIUS.get() / 16), false);
+            target = structure(level, definition, origin);
         } else {
             var biome = ResourceKey.create(Registries.BIOME, definition.target());
+            if (!level.registryAccess().registryOrThrow(Registries.BIOME).containsKey(definition.target())) {
+                throw new IllegalArgumentException("Unknown biome: " + definition.target());
+            }
             var found = level.findClosestBiome3d(holder -> holder.is(biome), origin,
                     HeritageConfig.SEARCH_RADIUS.get(), 32, 64);
             target = found == null ? null : found.getFirst();
@@ -63,12 +67,31 @@ public final class SpawnResolver {
                 .orElseThrow(() -> new IllegalArgumentException("No safe ground found at this location")));
     }
 
+    private static BlockPos structure(ServerLevel level, SpawnDefinition definition, BlockPos origin) {
+        if (!level.getServer().getWorldData().worldGenOptions().generateStructures()) {
+            throw new IllegalArgumentException("Structure generation is disabled in this world");
+        }
+        var registry = level.registryAccess().registryOrThrow(Registries.STRUCTURE);
+        HolderSet<Structure> structures = registry.getTag(TagKey.create(Registries.STRUCTURE, definition.target()))
+                .filter(tag -> tag.size() > 0).orElse(null);
+        if (structures == null && !definition.targetTag()) {
+            structures = registry.getHolder(ResourceKey.create(Registries.STRUCTURE, definition.target()))
+                    .map(HolderSet::direct).orElse(null);
+        }
+        if (structures == null) throw new IllegalArgumentException("Unknown or empty structure target: " + definition.target());
+        var found = level.getChunkSource().getGenerator().findNearestMapStructure(level, structures,
+                origin, Math.max(1, HeritageConfig.SEARCH_RADIUS.get() / 16), false);
+        return found == null ? null : found.getFirst();
+    }
+
     static Optional<BlockPos> nearby(ServerLevel level, BlockPos center, int radius, SpawnDefinition biome) {
         for (int ring = 0; ring <= radius; ring++) {
             for (int dx = -ring; dx <= ring; dx++) {
                 for (int dz = -ring; dz <= ring; dz++) {
                     if (Math.max(Math.abs(dx), Math.abs(dz)) != ring) continue;
-                    BlockPos position = surface(level, center.getX() + dx, center.getZ() + dz);
+                    BlockPos column = center.offset(dx, 0, dz);
+                    if (!level.getWorldBorder().isWithinBounds(column)) continue;
+                    BlockPos position = surface(level, column.getX(), column.getZ());
                     if (biome != null && !level.getBiome(position).is(ResourceKey.create(Registries.BIOME, biome.target()))) continue;
                     if (safe(level, position)) return Optional.of(position);
                 }
