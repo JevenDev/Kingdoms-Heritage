@@ -6,7 +6,7 @@ import net.minecraft.util.GsonHelper;
 
 public record SpawnDefinition(ResourceLocation id, String title, String description, ResourceLocation image,
                               int order, Kind kind, ResourceLocation dimension, ResourceLocation target,
-                              int x, int y, int z, boolean targetTag) {
+                              int x, int y, int z, boolean targetTag, ResourceLocation piece) {
     public enum Kind { DEFAULT, RANDOM, BIOME, STRUCTURE, FIXED }
 
     public static SpawnDefinition parse(ResourceLocation id, JsonObject json) {
@@ -18,6 +18,8 @@ public record SpawnDefinition(ResourceLocation id, String title, String descript
         boolean targetTag = targetName != null && targetName.startsWith("#");
         if (targetTag && kind != Kind.STRUCTURE) throw new IllegalArgumentException("Biome targets require a biome ID");
         ResourceLocation target = targetName == null ? null : ResourceLocation.parse(targetTag ? targetName.substring(1) : targetName);
+        ResourceLocation piece = json.has("piece") ? ResourceLocation.parse(GsonHelper.getAsString(json, "piece")) : null;
+        if (piece != null && kind != Kind.STRUCTURE) throw new IllegalArgumentException("Only structure locations support a preferred piece");
         ResourceLocation image = ResourceLocation.parse(GsonHelper.getAsString(json, "image",
                 "kingdomsheritage:textures/gui/campaign_select_screen/campaign_select_screen_card_fallback.png"));
         int x = GsonHelper.getAsInt(json, "x", 0);
@@ -30,6 +32,6 @@ public record SpawnDefinition(ResourceLocation id, String title, String descript
             throw new IllegalArgumentException("Fixed locations require x, y and z");
         }
         return new SpawnDefinition(id, title, description, image, GsonHelper.getAsInt(json, "order", 0),
-                kind, dimension, target, x, y, z, targetTag);
+                kind, dimension, target, x, y, z, targetTag, piece);
     }
 }

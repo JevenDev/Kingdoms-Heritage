@@ -1,6 +1,6 @@
 {
   "title": "Village",
-  "description": "Start near the closest village.",
+  "description": "Start in the closest village.",
   "type": "structure",
   "order": 1,
   "target": "minecraft:village"
