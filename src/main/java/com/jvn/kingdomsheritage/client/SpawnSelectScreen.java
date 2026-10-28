@@ -13,6 +13,7 @@ import net.minecraft.client.gui.screens.inventory.tooltip.DefaultTooltipPosition
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.neoforged.neoforge.network.PacketDistributor;
+import org.lwjgl.glfw.GLFW;
 
 public final class SpawnSelectScreen extends Screen {
     private static final int CARD_WIDTH = 128;
@@ -21,6 +22,8 @@ public final class SpawnSelectScreen extends Screen {
     private static final int PAGE_SIZE = 10;
     private static final ResourceLocation CARD = texture("campaign_select_screen_card");
     private static final ResourceLocation EXPANDED = texture("campaign_select_screen_card_expanded");
+    private static final ResourceLocation CARET = texture("campaign_select_screen_card_caret_expand");
+    private static final ResourceLocation COLLAPSE = texture("campaign_select_screen_card_caret_expanded");
     private static final ResourceLocation FALLBACK = texture("campaign_select_screen_card_fallback");
     private final JsonObject catalog;
     private final List<JsonObject> choices;
@@ -73,14 +76,23 @@ public final class SpawnSelectScreen extends Screen {
             cards.add(addWidget(new Card(x, choice)));
         }
         preview = expanded != null ? expanded : visible.contains(selected) ? selected : visible.getFirst();
-        int descriptionWidth = Math.min(160, width - 32);
-        description = addRenderableWidget(Button.builder(Component.translatable(expanded == null
-                        ? "screen.kingdomsheritage.expand" : "screen.kingdomsheritage.collapse"), button -> {
+        description = addWidget(new Button(0, 0, Math.max(12, Math.round(19 * scale)), Math.max(18, Math.round(32 * scale)),
+                Component.translatable(expanded == null ? "screen.kingdomsheritage.expand" : "screen.kingdomsheritage.collapse"),
+                button -> {
                     selected = preview;
                     expanded = expanded == null ? preview : null;
                     descriptionScroll = 0;
                     rebuildWidgets();
-                }).bounds((width - descriptionWidth) / 2, height - 70, descriptionWidth, 20).build());
+                }, message -> message.get()) {
+            @Override
+            protected void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+                graphics.pose().pushPose();
+                graphics.pose().translate(getX(), getY(), 0);
+                graphics.pose().scale(scale, scale, 1);
+                blit(graphics, expanded == null ? CARET : COLLAPSE, 5, 9, 7, 10);
+                graphics.pose().popPose();
+            }
+        });
         updateDescription();
         int buttonWidth = Math.min(130, (width - 100) / 2);
         addRenderableWidget(Button.builder(Component.translatable("menu.disconnect"), button -> ClientSelection.disconnect())
@@ -100,7 +112,19 @@ public final class SpawnSelectScreen extends Screen {
 
     private void updateDescription() {
         description.visible = expanded != null || !preview.get("description").getAsString().isBlank();
-        description.setTooltip(Tooltip.create(Component.literal(preview.get("title").getAsString())));
+        description.setTooltip(Tooltip.create(description.getMessage()));
+        positionDescription();
+    }
+
+    private void positionDescription() {
+        for (int index = 0; index < cards.size(); index++) {
+            Card card = cards.get(index);
+            if (card.choice != preview) continue;
+            int right = index + 1 < cards.size() ? Math.min(card.getRight(), cards.get(index + 1).getX()) : card.getRight();
+            description.setX(card.getX() + Math.min(Math.round(109 * scale), Math.max(0, right - card.getX() - description.getWidth())));
+            description.setY(card.getY() + Math.round(80 * scale));
+            return;
+        }
     }
 
     private Card cardAt(double mouseX, double mouseY) {
@@ -116,6 +140,7 @@ public final class SpawnSelectScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (description.mouseClicked(mouseX, mouseY, button)) return true;
         Card card = cardAt(mouseX, mouseY);
         if (card != null && button == 0) {
             card.playDownSound(minecraft.getSoundManager());
@@ -125,6 +150,20 @@ public final class SpawnSelectScreen extends Screen {
             return true;
         }
         return super.mouseClicked(mouseX, mouseY, button);
+    }
+
+    @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (getFocused() instanceof Card card && (keyCode == GLFW.GLFW_KEY_LEFT || keyCode == GLFW.GLFW_KEY_RIGHT)) {
+            int index = cards.indexOf(card) + (keyCode == GLFW.GLFW_KEY_LEFT ? -1 : 1);
+            if (index >= 0 && index < cards.size()) {
+                setFocused(cards.get(index));
+                preview = cards.get(index).choice;
+                updateDescription();
+            }
+            return true;
+        }
+        return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
     private void confirm() {
@@ -177,7 +216,15 @@ public final class SpawnSelectScreen extends Screen {
             if (card != foreground) card.draw(graphics, mouseX, mouseY, partialTick, layer++ * 10);
         }
         if (foreground != null) foreground.draw(graphics, mouseX, mouseY, partialTick, cards.size() * 10);
-        if (hovered != null) setTooltipForNextRenderPass(hovered.getTooltip(), DefaultTooltipPositioner.INSTANCE, true);
+        positionDescription();
+        graphics.pose().pushPose();
+        graphics.pose().translate(0, 0, (cards.size() + 1) * 10);
+        description.render(graphics, mouseX, mouseY, partialTick);
+        graphics.flush();
+        graphics.pose().popPose();
+        if (hovered != null && (!description.visible || !description.isHovered())) {
+            setTooltipForNextRenderPass(hovered.getTooltip(), DefaultTooltipPositioner.INSTANCE, true);
+        }
         if (expanded == null && choices.size() > PAGE_SIZE) {
             graphics.drawCenteredString(font, Component.literal((page + 1) + " / " + ((choices.size() + PAGE_SIZE - 1) / PAGE_SIZE)),
                     width - 18, height - 43, 0xffffff);
