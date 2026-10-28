@@ -24,7 +24,9 @@ public final class SpawnResolver {
         if (level == null) throw new IllegalArgumentException("Dimension is unavailable: " + definition.dimension());
         BlockPos origin = level.getSharedSpawnPos();
         if (definition.kind() == SpawnDefinition.Kind.DEFAULT) {
-            return new Destination(level, nearby(level, level == player.server.overworld() ? originalSpawn : origin, 32, null)
+            BlockPos preferred = level == player.server.overworld() ? originalSpawn : origin;
+            if (safe(level, preferred)) return new Destination(level, preferred);
+            return new Destination(level, nearby(level, preferred, 32, null)
                     .orElseThrow(() -> new IllegalArgumentException("No safe ground near world spawn")));
         }
         if (definition.kind() == SpawnDefinition.Kind.RANDOM) {
@@ -61,8 +63,7 @@ public final class SpawnResolver {
                 .orElseThrow(() -> new IllegalArgumentException("No safe ground found at this location")));
     }
 
-    private static Optional<BlockPos> nearby(ServerLevel level, BlockPos center, int radius, SpawnDefinition biome) {
-        if (biome == null && safe(level, center)) return Optional.of(center);
+    static Optional<BlockPos> nearby(ServerLevel level, BlockPos center, int radius, SpawnDefinition biome) {
         for (int ring = 0; ring <= radius; ring++) {
             for (int dx = -ring; dx <= ring; dx++) {
                 for (int dz = -ring; dz <= ring; dz++) {
@@ -77,15 +78,17 @@ public final class SpawnResolver {
     }
 
     private static BlockPos surface(ServerLevel level, int x, int z) {
-        return level.getHeightmapPos(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, new BlockPos(x, 0, z));
+        var chunk = level.getChunk(x >> 4, z >> 4);
+        return new BlockPos(x, chunk.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x & 15, z & 15) + 1, z);
     }
 
     static boolean safe(ServerLevel level, BlockPos position) {
         AABB body = new AABB(position.getX() + 0.2, position.getY(), position.getZ() + 0.2,
                 position.getX() + 0.8, position.getY() + 1.8, position.getZ() + 0.8);
         if (position.getY() <= level.getMinBuildHeight() || position.getY() + 2 >= level.getMaxBuildHeight()
-                || !level.getWorldBorder().isWithinBounds(body) || !level.noCollision(body)
-                || level.containsAnyLiquid(body)) return false;
+                || !level.getWorldBorder().isWithinBounds(body)) return false;
+        level.getChunkAt(position);
+        if (!level.noCollision(body) || level.containsAnyLiquid(body)) return false;
         var ground = level.getBlockState(position.below());
         if (!ground.isFaceSturdy(level, position.below(), net.minecraft.core.Direction.UP)
                 || ground.is(BlockTags.LEAVES)) return false;

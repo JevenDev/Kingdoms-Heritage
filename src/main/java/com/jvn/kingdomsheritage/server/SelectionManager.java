@@ -119,7 +119,7 @@ public final class SelectionManager {
             KitService.apply(player, kit, stacks);
             CompoundTag state = state(player);
             player.teleportTo(destination.level(), destination.position().getX() + 0.5,
-                    destination.position().getY(), destination.position().getZ() + 0.5, state.getFloat("yaw"), 0);
+                    destination.position().getY(), destination.position().getZ() + 0.5, java.util.Set.of(), state.getFloat("yaw"), 0);
             state.putBoolean("complete", true);
             state.putBoolean("pending", false);
             state.putString("spawn_choice", spawn.id().toString());
