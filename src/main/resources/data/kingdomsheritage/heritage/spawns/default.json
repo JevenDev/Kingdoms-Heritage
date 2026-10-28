@@ -2,5 +2,5 @@
   "title": "Default",
   "description": "Begin at your normal world spawn.",
   "type": "default",
-  "order": 3
+  "order": 0
 }

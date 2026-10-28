@@ -2,5 +2,5 @@
   "title": "Random",
   "description": "Begin somewhere safe within the configured distance of world spawn.",
   "type": "random",
-  "order": 0
+  "order": 1
 }
