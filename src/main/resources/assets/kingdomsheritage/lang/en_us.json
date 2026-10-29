@@ -1,6 +1,11 @@
 {
   "intro.kingdomsheritage.wilderness": "Wilderness",
   "intro.kingdomsheritage.unknown": "Unknown",
+  "structure.minecraft.village_desert": "Desert Village",
+  "structure.minecraft.village_plains": "Plains Village",
+  "structure.minecraft.village_savanna": "Savanna Village",
+  "structure.minecraft.village_snowy": "Snowy Village",
+  "structure.minecraft.village_taiga": "Taiga Village",
   "screen.kingdomsheritage.location": "Choose your starting location",
   "screen.kingdomsheritage.kit": "Choose your starting kit",
   "screen.kingdomsheritage.next": "Choose kit",
