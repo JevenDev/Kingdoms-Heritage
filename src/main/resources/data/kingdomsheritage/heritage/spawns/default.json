@@ -5,6 +5,7 @@
   "title_key": "heritage.kingdomsheritage.spawns.default.title",
   "intro": {
     "text": "You woke up in a <biome>...",
-    "cinematic_bars": true
+    "cinematic_bars": true,
+    "hide_hud_during_bars": true
   }
 }

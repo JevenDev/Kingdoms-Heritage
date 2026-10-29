@@ -82,15 +82,23 @@ public final class ClientSelection {
     }
 
     private static void hideHud(net.neoforged.neoforge.client.event.RenderGuiEvent.Pre event) {
-        if (catalog != null) event.setCanceled(true);
+        if (catalog != null) {
+            event.setCanceled(true);
+        } else if (SpawnIntroOverlay.hidesHud()) {
+            event.setCanceled(true);
+            renderIntro(event.getGuiGraphics(), event.getPartialTick().getGameTimeDeltaPartialTick(false));
+        }
     }
 
     private static void renderIntroAfterHud(net.neoforged.neoforge.client.event.RenderGuiEvent.Post event) {
+        renderIntro(event.getGuiGraphics(), event.getPartialTick().getGameTimeDeltaPartialTick(false));
+    }
+
+    private static void renderIntro(net.minecraft.client.gui.GuiGraphics graphics, float partialTick) {
         if (!SpawnIntroOverlay.active()) return;
-        var graphics = event.getGuiGraphics();
         graphics.flush();
         com.mojang.blaze3d.systems.RenderSystem.clear(org.lwjgl.opengl.GL11.GL_DEPTH_BUFFER_BIT, Minecraft.ON_OSX);
-        SpawnIntroOverlay.render(graphics, event.getPartialTick().getGameTimeDeltaPartialTick(false));
+        SpawnIntroOverlay.render(graphics, partialTick);
         graphics.flush();
     }
 

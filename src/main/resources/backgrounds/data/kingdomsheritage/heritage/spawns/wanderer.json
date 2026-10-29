@@ -10,6 +10,7 @@
   "random_radius": 2000,
   "intro": {
     "text": "You woke up in a <biome>...",
-    "cinematic_bars": true
+    "cinematic_bars": true,
+    "hide_hud_during_bars": true
   }
 }

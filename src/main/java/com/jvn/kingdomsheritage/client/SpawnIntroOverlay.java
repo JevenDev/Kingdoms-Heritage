@@ -78,6 +78,7 @@ public final class SpawnIntroOverlay {
     }
 
     public static boolean active() { return intro != null; }
+    static boolean hidesHud() { return active() && intro.cinematicBars() && intro.hideHudDuringBars(); }
     public static boolean blocked() { return active() && (!ready || intro.control() == IntroDefinition.Control.AFTER_TITLE); }
 
     static void tick() {

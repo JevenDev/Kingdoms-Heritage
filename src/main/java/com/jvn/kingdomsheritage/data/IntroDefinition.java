@@ -12,7 +12,7 @@ public record IntroDefinition(Component text, Component subtitle, boolean title,
                               Control control, boolean blip, int revealTicks, int holdTicks,
                               int fadeOutTicks, int fadeFromBlackTicks, boolean cinematicBars, BarStyle barStyle,
                               int barTransitionTicks, Position titlePosition, Position subtitlePosition, int blackHoldTicks,
-                              boolean outline) {
+                              boolean outline, boolean hideHudDuringBars) {
     public enum Animation { FADE_IN, WORD_BY_WORD, LETTER_BY_LETTER, IMMEDIATE }
     public enum Control { AFTER_TITLE, DURING_TITLE }
     public enum BarStyle { RANDOM, STRAIGHT }
@@ -70,6 +70,16 @@ public record IntroDefinition(Component text, Component subtitle, boolean title,
                 fadeFromBlackTicks, cinematicBars, barStyle, barTransitionTicks, titlePosition, subtitlePosition, blackHoldTicks, true);
     }
 
+    public IntroDefinition(Component text, Component subtitle, boolean title, Animation animation,
+                           Control control, boolean blip, int revealTicks, int holdTicks,
+                           int fadeOutTicks, int fadeFromBlackTicks, boolean cinematicBars, BarStyle barStyle,
+                           int barTransitionTicks, Position titlePosition, Position subtitlePosition, int blackHoldTicks,
+                           boolean outline) {
+        this(text, subtitle, title, animation, control, blip, revealTicks, holdTicks, fadeOutTicks,
+                fadeFromBlackTicks, cinematicBars, barStyle, barTransitionTicks, titlePosition, subtitlePosition,
+                blackHoldTicks, outline, false);
+    }
+
     public static IntroDefinition parse(JsonObject json) {
         Component text = component(json, "text", false);
         Component subtitle = component(json, "subtitle", true);
@@ -86,7 +96,7 @@ public record IntroDefinition(Component text, Component subtitle, boolean title,
                 ticks(json, "bar_transition_ticks", 40),
                 Position.parse(GsonHelper.getAsString(json, "title_position", "mid_center")),
                 Position.parse(GsonHelper.getAsString(json, "subtitle_position", "mid_center")), ticks(json, "black_hold_ticks", 60, 0),
-                GsonHelper.getAsBoolean(json, "outline", true));
+                GsonHelper.getAsBoolean(json, "outline", true), GsonHelper.getAsBoolean(json, "hide_hud_during_bars", false));
     }
 
     private static Component component(JsonObject json, String key, boolean optional) {
@@ -138,6 +148,7 @@ public record IntroDefinition(Component text, Component subtitle, boolean title,
         json.addProperty("fade_from_black_ticks", fadeFromBlackTicks);
         json.addProperty("black_hold_ticks", blackHoldTicks);
         json.addProperty("cinematic_bars", cinematicBars);
+        json.addProperty("hide_hud_during_bars", hideHudDuringBars);
         json.addProperty("bar_style", barStyle.name().toLowerCase(Locale.ROOT));
         json.addProperty("bar_transition_ticks", barTransitionTicks);
         json.addProperty("title_position", titlePosition.name().toLowerCase(Locale.ROOT));
