@@ -11,7 +11,7 @@ import net.minecraft.util.GsonHelper;
 public record IntroDefinition(Component text, Component subtitle, boolean title, Animation animation,
                               Control control, boolean blip, int revealTicks, int holdTicks,
                               int fadeOutTicks, int fadeFromBlackTicks, boolean cinematicBars, BarStyle barStyle,
-                              int barTransitionTicks, Position titlePosition, Position subtitlePosition) {
+                              int barTransitionTicks, Position titlePosition, Position subtitlePosition, int blackHoldTicks) {
     public enum Animation { FADE_IN, WORD_BY_WORD, LETTER_BY_LETTER, IMMEDIATE }
     public enum Control { AFTER_TITLE, DURING_TITLE }
     public enum BarStyle { RANDOM, STRAIGHT }
@@ -53,6 +53,14 @@ public record IntroDefinition(Component text, Component subtitle, boolean title,
                 fadeFromBlackTicks, false, BarStyle.RANDOM, 40, Position.MID_CENTER, Position.MID_CENTER);
     }
 
+    public IntroDefinition(Component text, Component subtitle, boolean title, Animation animation,
+                           Control control, boolean blip, int revealTicks, int holdTicks,
+                           int fadeOutTicks, int fadeFromBlackTicks, boolean cinematicBars, BarStyle barStyle,
+                           int barTransitionTicks, Position titlePosition, Position subtitlePosition) {
+        this(text, subtitle, title, animation, control, blip, revealTicks, holdTicks, fadeOutTicks,
+                fadeFromBlackTicks, cinematicBars, barStyle, barTransitionTicks, titlePosition, subtitlePosition, 60);
+    }
+
     public static IntroDefinition parse(JsonObject json) {
         Component text = component(json, "text", false);
         Component subtitle = component(json, "subtitle", true);
@@ -68,7 +76,7 @@ public record IntroDefinition(Component text, Component subtitle, boolean title,
                 BarStyle.valueOf(GsonHelper.getAsString(json, "bar_style", "random").toUpperCase(Locale.ROOT)),
                 ticks(json, "bar_transition_ticks", 40),
                 Position.parse(GsonHelper.getAsString(json, "title_position", "mid_center")),
-                Position.parse(GsonHelper.getAsString(json, "subtitle_position", "mid_center")));
+                Position.parse(GsonHelper.getAsString(json, "subtitle_position", "mid_center")), ticks(json, "black_hold_ticks", 60, 0));
     }
 
     private static Component component(JsonObject json, String key, boolean optional) {
@@ -81,19 +89,27 @@ public record IntroDefinition(Component text, Component subtitle, boolean title,
     }
 
     private static int ticks(JsonObject json, String key, int fallback) {
+        return ticks(json, key, fallback, 1);
+    }
+
+    private static int ticks(JsonObject json, String key, int fallback, int minimum) {
         if (!json.has(key)) return fallback;
         var value = json.get(key);
         if (!value.isJsonPrimitive() || !value.getAsJsonPrimitive().isNumber()) {
             throw new IllegalArgumentException(key + " must be a whole number of ticks");
         }
         double number = value.getAsDouble();
-        if (!Double.isFinite(number) || number != Math.rint(number) || number < 1 || number > 1200) {
-            throw new IllegalArgumentException(key + " must be between 1 and 1200 ticks");
+        if (!Double.isFinite(number) || number != Math.rint(number) || number < minimum || number > 1200) {
+            throw new IllegalArgumentException(key + " must be between " + minimum + " and 1200 ticks");
         }
         return (int) number;
     }
 
     public int durationTicks() {
+        return blackHoldTicks + presentationTicks();
+    }
+
+    public int presentationTicks() {
         return Math.max(fadeFromBlackTicks, (animation == Animation.IMMEDIATE ? 0 : revealTicks) + holdTicks + fadeOutTicks);
     }
 
@@ -109,6 +125,7 @@ public record IntroDefinition(Component text, Component subtitle, boolean title,
         json.addProperty("hold_ticks", holdTicks);
         json.addProperty("fade_out_ticks", fadeOutTicks);
         json.addProperty("fade_from_black_ticks", fadeFromBlackTicks);
+        json.addProperty("black_hold_ticks", blackHoldTicks);
         json.addProperty("cinematic_bars", cinematicBars);
         json.addProperty("bar_style", barStyle.name().toLowerCase(Locale.ROOT));
         json.addProperty("bar_transition_ticks", barTransitionTicks);

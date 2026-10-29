@@ -47,6 +47,7 @@ public final class SpawnIntroOverlay {
         NeoForge.EVENT_BUS.addListener(SpawnIntroOverlay::screen);
         NeoForge.EVENT_BUS.addListener(SpawnIntroOverlay::interaction);
         NeoForge.EVENT_BUS.addListener(SpawnIntroOverlay::scroll);
+        NeoForge.EVENT_BUS.addListener(SpawnIntroOverlay::fov);
     }
 
     static void start(JsonObject message) {
@@ -95,7 +96,7 @@ public final class SpawnIntroOverlay {
             finish();
             return;
         }
-        blip(minecraft, visible(age));
+        if (age >= intro.blackHoldTicks()) blip(minecraft, visible(age - intro.blackHoldTicks()));
     }
 
     private static void finish() {
@@ -136,25 +137,42 @@ public final class SpawnIntroOverlay {
         nextBlip = visible + 3 + minecraft.player.getRandom().nextInt(3);
     }
 
+    private static float elapsed(float partialTick) {
+        return ready ? age + (Minecraft.getInstance().isPaused() ? 0 : partialTick) : 0;
+    }
+
+    static float worldReveal(float ticks) {
+        if (!active()) return 1;
+        float progress = Mth.clamp((ticks - intro.blackHoldTicks()) / intro.fadeFromBlackTicks(), 0, 1);
+        return progress * progress * (3 - 2 * progress);
+    }
+
+    private static void fov(net.neoforged.neoforge.client.event.ViewportEvent.ComputeFov event) {
+        if (active() && event.usedConfiguredFov()) {
+            event.setFOV(Math.max(1, event.getFOV() - 10 * (1 - worldReveal(elapsed((float) event.getPartialTick())))));
+        }
+    }
+
     static void render(GuiGraphics graphics, float partialTick) {
         if (!active()) return;
         Minecraft minecraft = Minecraft.getInstance();
         int width = graphics.guiWidth();
         int height = graphics.guiHeight();
-        float ticks = ready ? age + (minecraft.isPaused() ? 0 : partialTick) : 0;
-        int black = Math.round(255 * (1 - Mth.clamp(ticks / intro.fadeFromBlackTicks(), 0, 1)));
+        float elapsed = elapsed(partialTick);
+        int black = Math.round(255 * (1 - worldReveal(elapsed)));
         if (black > 0) graphics.fill(0, 0, width, height, black << 24);
-        if (!ready) return;
+        if (!ready || elapsed < intro.blackHoldTicks()) return;
+        float ticks = elapsed - intro.blackHoldTicks();
         if (intro.cinematicBars()) {
             IntroCinematicBars.render(graphics, width, height,
-                    IntroCinematicBars.visibility(ticks, intro.durationTicks(), intro.barTransitionTicks()), barSlant);
+                    IntroCinematicBars.visibility(ticks, intro.presentationTicks(), intro.barTransitionTicks()), barSlant);
         }
         if (layout == null || layoutWidth != width || layoutHeight != height) {
             layoutWidth = width;
             layoutHeight = height;
             layout = IntroLayout.create(minecraft.font, width, height, intro, text, subtitle, barSlant);
         }
-        float alpha = Mth.clamp((intro.durationTicks() - ticks) / intro.fadeOutTicks(), 0, 1);
+        float alpha = Mth.clamp((intro.presentationTicks() - ticks) / intro.fadeOutTicks(), 0, 1);
         if (intro.animation() == IntroDefinition.Animation.FADE_IN) alpha *= Mth.clamp(ticks / intro.revealTicks(), 0, 1);
         int opacity = Math.round(alpha * 255);
         if (opacity < 4) return;

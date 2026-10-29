@@ -35,6 +35,7 @@ public final class ClientSelection {
         KitSelection.register();
         SpawnIntroOverlay.register();
         NeoForge.EVENT_BUS.addListener(ClientSelection::hideHud);
+        NeoForge.EVENT_BUS.addListener(ClientSelection::renderIntroAfterHud);
         NeoForge.EVENT_BUS.addListener(ClientSelection::hideHand);
     }
 
@@ -81,12 +82,20 @@ public final class ClientSelection {
     }
 
     private static void hideHud(net.neoforged.neoforge.client.event.RenderGuiEvent.Pre event) {
-        if (catalog != null || SpawnIntroOverlay.active()) event.setCanceled(true);
-        SpawnIntroOverlay.render(event.getGuiGraphics(), event.getPartialTick().getGameTimeDeltaPartialTick(false));
+        if (catalog != null) event.setCanceled(true);
+    }
+
+    private static void renderIntroAfterHud(net.neoforged.neoforge.client.event.RenderGuiEvent.Post event) {
+        if (!SpawnIntroOverlay.active()) return;
+        var graphics = event.getGuiGraphics();
+        graphics.flush();
+        com.mojang.blaze3d.systems.RenderSystem.clear(org.lwjgl.opengl.GL11.GL_DEPTH_BUFFER_BIT, Minecraft.ON_OSX);
+        SpawnIntroOverlay.render(graphics, event.getPartialTick().getGameTimeDeltaPartialTick(false));
+        graphics.flush();
     }
 
     private static void hideHand(net.neoforged.neoforge.client.event.RenderHandEvent event) {
-        if (catalog != null || SpawnIntroOverlay.active()) event.setCanceled(true);
+        if (catalog != null) event.setCanceled(true);
     }
 
     static void openKits(String spawn) {
