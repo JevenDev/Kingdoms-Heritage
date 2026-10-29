@@ -25,6 +25,13 @@ ordering="NONE"
 side="BOTH"
 
 [[dependencies."${mod_id}"]]
+modId="toucanlib"
+type="required"
+versionRange="[0.6.0,0.7.0)"
+ordering="AFTER"
+side="BOTH"
+
+[[dependencies."${mod_id}"]]
 modId="minecraft"
 type="required"
 versionRange="${minecraft_version_range}"

@@ -60,15 +60,17 @@ public final class SpawnIntroOverlay {
         var names = Map.of("biome", IntroText.location("biome", id(locations, "biome")),
                 "structure", IntroText.location("structure", id(locations, "structure")),
                 "dimension", IntroText.location("dimension", id(locations, "dimension")));
-        text = IntroText.glyphs(IntroText.resolve(intro.text(), names), 0);
-        subtitle = IntroText.glyphs(IntroText.resolve(intro.subtitle(), names), text.size() + 1);
+        var styledText = IntroMarkup.style(IntroText.resolve(intro.text(), names));
+        var styledSubtitle = IntroMarkup.style(IntroText.resolve(intro.subtitle(), names));
+        text = IntroText.glyphs(styledText, 0);
+        subtitle = IntroText.glyphs(styledSubtitle, text.size() + 1);
         var combined = new ArrayList<>(text);
         combined.add(new IntroText.Glyph('\n', net.minecraft.network.chat.Style.EMPTY, text.size()));
         combined.addAll(subtitle);
         all = List.copyOf(combined);
         wordEnds = IntroText.wordEnds(all);
         Minecraft.getInstance().getNarrator().sayNow(
-                IntroText.resolve(intro.text(), names).copy().append("\n").append(IntroText.resolve(intro.subtitle(), names)));
+                styledText.copy().append("\n").append(styledSubtitle));
     }
 
     private static String id(JsonObject locations, String key) {
@@ -177,18 +179,18 @@ public final class SpawnIntroOverlay {
         int opacity = Math.round(alpha * 255);
         if (opacity < 4) return;
         int color = (opacity << 24) | 0xFFFFFF;
-        draw(graphics, layout.title(), visible(ticks), color);
-        draw(graphics, layout.subtitle(), visible(ticks), color);
+        draw(graphics, layout.title(), visible(ticks), color, (int) ticks);
+        draw(graphics, layout.subtitle(), visible(ticks), color, (int) ticks);
     }
 
-    private static void draw(GuiGraphics graphics, IntroLayout.Block block, int visible, int color) {
+    private static void draw(GuiGraphics graphics, IntroLayout.Block block, int visible, int color, int ticks) {
         graphics.pose().pushPose();
         graphics.pose().translate(block.anchorX(), block.top(), 0);
         graphics.pose().scale(block.scale(), block.scale(), 1);
         for (int index = 0; index < block.lines().size(); index++) {
             var line = block.lines().get(index);
-            graphics.drawString(Minecraft.getInstance().font, line.visible(visible),
-                    Math.round(block.lineLeft(line)), index * block.lineHeight(), color, true);
+            com.jvn.toucanlib.client.ToucanTextRenderer.renderOutlinedLine(graphics, Minecraft.getInstance().font,
+                    line.visible(visible), Math.round(block.lineLeft(line)), index * block.lineHeight(), color, ticks);
         }
         graphics.pose().popPose();
     }

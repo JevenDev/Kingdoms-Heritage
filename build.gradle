@@ -10,12 +10,18 @@ tasks.named('wrapper', Wrapper).configure {
 }
 
 repositories {
+    exclusiveContent {
+        forRepository { mavenLocal() }
+        filter { includeGroup 'com.jvn.toucanlib' }
+    }
+    maven { url = 'https://maven.architectury.dev/' }
     maven { url = 'https://maven.theillusivec4.top/' }
     maven { url = 'https://maven.wispforest.io/releases/' }
     maven { url = 'https://maven.su5ed.dev/releases/' }
 }
 
 dependencies {
+    implementation 'com.jvn.toucanlib:toucanlib-neoforge-1.21.1:0.6.0'
     compileOnly('top.theillusivec4.curios:curios-neoforge:9.5.1+1.21.1') {
         transitive = false
     }

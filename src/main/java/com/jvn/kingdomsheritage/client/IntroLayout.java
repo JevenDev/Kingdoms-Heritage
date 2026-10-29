@@ -15,7 +15,9 @@ record IntroLayout(IntroLayout.Block title, IntroLayout.Block subtitle) {
 
     static IntroLayout create(Font font, int width, int height, IntroDefinition intro,
                               List<IntroText.Glyph> text, List<IntroText.Glyph> subtitle, float slant) {
-        float margin = Math.min(20, Math.min(width, height) / 4F);
+        int horizontalPadding = Math.max(IntroText.effectPadding(text, false), IntroText.effectPadding(subtitle, false));
+        int verticalPadding = Math.max(IntroText.effectPadding(text, true), IntroText.effectPadding(subtitle, true));
+        float margin = Math.min(20 + Math.max(horizontalPadding, verticalPadding) * 1.5F, Math.min(width, height) / 4F);
         float top = margin;
         float bottom = height - margin;
         if (intro.cinematicBars()) {
@@ -31,7 +33,7 @@ record IntroLayout(IntroLayout.Block title, IntroLayout.Block subtitle) {
         float wrapWidth = !together && !separateRows ? availableWidth / 3 : availableWidth;
         float maxHeight = separateRows ? availableHeight / 3 : availableHeight;
         float titleScale = intro.title() ? 1.5F : 1;
-        int lineHeight = font.lineHeight + 3;
+        int lineHeight = font.lineHeight + 3 + verticalPadding * 2;
         var titleLines = IntroText.wrap(font, text, Math.max(1, (int) (wrapWidth / titleScale)));
         var subtitleLines = subtitle.isEmpty() ? List.<IntroText.Line>of()
                 : IntroText.wrap(font, subtitle, Math.max(1, (int) wrapWidth));

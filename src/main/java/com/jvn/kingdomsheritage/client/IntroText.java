@@ -68,6 +68,14 @@ final class IntroText {
         return List.copyOf(glyphs);
     }
 
+    static int effectPadding(List<Glyph> glyphs, boolean vertical) {
+        var spans = glyphs.stream().map(glyph -> com.jvn.toucanlib.client.ToucanTextRenderer.glyphEffect(glyph.style()))
+                .filter(java.util.Objects::nonNull).map(effect -> new com.jvn.toucanlib.client.ToucanTextSpan("", effect.effects())).toList();
+        if (spans.isEmpty()) return 0;
+        return vertical ? com.jvn.toucanlib.client.ToucanTextRenderer.verticalPadding(spans)
+                : com.jvn.toucanlib.client.ToucanTextRenderer.horizontalPadding(spans);
+    }
+
     static List<Integer> wordEnds(List<Glyph> glyphs) {
         List<Integer> ends = new ArrayList<>();
         for (int index = 0; index < glyphs.size(); index++) {
