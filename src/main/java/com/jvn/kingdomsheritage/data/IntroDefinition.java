@@ -10,9 +10,48 @@ import net.minecraft.util.GsonHelper;
 
 public record IntroDefinition(Component text, Component subtitle, boolean title, Animation animation,
                               Control control, boolean blip, int revealTicks, int holdTicks,
-                              int fadeOutTicks, int fadeFromBlackTicks) {
+                              int fadeOutTicks, int fadeFromBlackTicks, boolean cinematicBars, BarStyle barStyle,
+                              int barTransitionTicks, Position titlePosition, Position subtitlePosition) {
     public enum Animation { FADE_IN, WORD_BY_WORD, LETTER_BY_LETTER, IMMEDIATE }
     public enum Control { AFTER_TITLE, DURING_TITLE }
+    public enum BarStyle { RANDOM, STRAIGHT }
+    public enum Position {
+        MID_CENTER(1, 1), TOP_CENTER(1, 0), BOTTOM_CENTER(1, 2), LEFT_CENTER(0, 1), RIGHT_CENTER(2, 1),
+        TOP_LEFT(0, 0), TOP_RIGHT(2, 0), BOTTOM_LEFT(0, 2), BOTTOM_RIGHT(2, 2);
+
+        private final int column;
+        private final int row;
+
+        Position(int column, int row) {
+            this.column = column;
+            this.row = row;
+        }
+
+        public int column() { return column; }
+        public int row() { return row; }
+
+        public static Position parse(String value) {
+            return switch (value.trim().toUpperCase(Locale.ROOT).replace(' ', '_')) {
+                case "CENTER", "MC", "MID_C" -> MID_CENTER;
+                case "TC", "TOP_C" -> TOP_CENTER;
+                case "BC", "BOTTOM_C" -> BOTTOM_CENTER;
+                case "LC", "LEFT_C" -> LEFT_CENTER;
+                case "RC", "RIGHT_C" -> RIGHT_CENTER;
+                case "TL" -> TOP_LEFT;
+                case "TR" -> TOP_RIGHT;
+                case "BL" -> BOTTOM_LEFT;
+                case "BR" -> BOTTOM_RIGHT;
+                default -> valueOf(value.trim().toUpperCase(Locale.ROOT).replace(' ', '_'));
+            };
+        }
+    }
+
+    public IntroDefinition(Component text, Component subtitle, boolean title, Animation animation,
+                           Control control, boolean blip, int revealTicks, int holdTicks,
+                           int fadeOutTicks, int fadeFromBlackTicks) {
+        this(text, subtitle, title, animation, control, blip, revealTicks, holdTicks, fadeOutTicks,
+                fadeFromBlackTicks, false, BarStyle.RANDOM, 40, Position.MID_CENTER, Position.MID_CENTER);
+    }
 
     public static IntroDefinition parse(JsonObject json) {
         Component text = component(json, "text", false);
@@ -25,7 +64,11 @@ public record IntroDefinition(Component text, Component subtitle, boolean title,
                 Control.valueOf(GsonHelper.getAsString(json, "control", "after_title").toUpperCase(Locale.ROOT)),
                 GsonHelper.getAsBoolean(json, "blip", false), ticks(json, "reveal_ticks", 40),
                 ticks(json, "hold_ticks", 60), ticks(json, "fade_out_ticks", 20),
-                ticks(json, "fade_from_black_ticks", 60));
+                ticks(json, "fade_from_black_ticks", 60), GsonHelper.getAsBoolean(json, "cinematic_bars", false),
+                BarStyle.valueOf(GsonHelper.getAsString(json, "bar_style", "random").toUpperCase(Locale.ROOT)),
+                ticks(json, "bar_transition_ticks", 40),
+                Position.parse(GsonHelper.getAsString(json, "title_position", "mid_center")),
+                Position.parse(GsonHelper.getAsString(json, "subtitle_position", "mid_center")));
     }
 
     private static Component component(JsonObject json, String key, boolean optional) {
@@ -66,6 +109,11 @@ public record IntroDefinition(Component text, Component subtitle, boolean title,
         json.addProperty("hold_ticks", holdTicks);
         json.addProperty("fade_out_ticks", fadeOutTicks);
         json.addProperty("fade_from_black_ticks", fadeFromBlackTicks);
+        json.addProperty("cinematic_bars", cinematicBars);
+        json.addProperty("bar_style", barStyle.name().toLowerCase(Locale.ROOT));
+        json.addProperty("bar_transition_ticks", barTransitionTicks);
+        json.addProperty("title_position", titlePosition.name().toLowerCase(Locale.ROOT));
+        json.addProperty("subtitle_position", subtitlePosition.name().toLowerCase(Locale.ROOT));
         return json;
     }
 }

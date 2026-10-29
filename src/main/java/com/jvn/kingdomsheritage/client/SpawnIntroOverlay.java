@@ -32,9 +32,10 @@ public final class SpawnIntroOverlay {
     private static List<IntroText.Glyph> subtitle = List.of();
     private static List<IntroText.Glyph> all = List.of();
     private static List<Integer> wordEnds = List.of();
-    private static List<IntroText.Line> textLines = List.of();
-    private static List<IntroText.Line> subtitleLines = List.of();
+    private static IntroLayout layout;
     private static int layoutWidth;
+    private static int layoutHeight;
+    private static float barSlant;
     private static int age;
     private static int lastAudible;
     private static int nextBlip;
@@ -52,6 +53,7 @@ public final class SpawnIntroOverlay {
         clear();
         intro = IntroDefinition.parse(message.getAsJsonObject("intro"));
         token = UUID.fromString(message.get("token").getAsString());
+        barSlant = IntroCinematicBars.sampleSlant(token, intro.barStyle());
         JsonObject locations = message.getAsJsonObject("locations");
         dimension = ResourceLocation.parse(locations.get("dimension").getAsString());
         var names = Map.of("biome", IntroText.location("biome", id(locations, "biome")),
@@ -107,7 +109,9 @@ public final class SpawnIntroOverlay {
         token = null;
         dimension = null;
         text = subtitle = all = List.of();
-        textLines = subtitleLines = List.of();
+        layout = null;
+        layoutHeight = 0;
+        barSlant = 0;
         wordEnds = List.of();
         age = layoutWidth = lastAudible = 0;
         nextBlip = 3;
@@ -141,37 +145,32 @@ public final class SpawnIntroOverlay {
         int black = Math.round(255 * (1 - Mth.clamp(ticks / intro.fadeFromBlackTicks(), 0, 1)));
         if (black > 0) graphics.fill(0, 0, width, height, black << 24);
         if (!ready) return;
-        float titleScale = intro.title() ? 1.5F : 1;
-        if (layoutWidth != width) {
-            layoutWidth = width;
-            textLines = IntroText.wrap(minecraft.font, text, Math.max(1, (int) ((width - 40) / titleScale)));
-            subtitleLines = subtitle.isEmpty() ? List.of() : IntroText.wrap(minecraft.font, subtitle, Math.max(1, width - 40));
+        if (intro.cinematicBars()) {
+            IntroCinematicBars.render(graphics, width, height,
+                    IntroCinematicBars.visibility(ticks, intro.durationTicks(), intro.barTransitionTicks()), barSlant);
         }
-        int lineHeight = minecraft.font.lineHeight + 3;
-        float textHeight = textLines.size() * lineHeight * titleScale;
-        float totalHeight = textHeight + (subtitleLines.isEmpty() ? 0 : 8 + subtitleLines.size() * lineHeight);
-        float fit = Math.min(1, Math.max(1, height - 40) / totalHeight);
+        if (layout == null || layoutWidth != width || layoutHeight != height) {
+            layoutWidth = width;
+            layoutHeight = height;
+            layout = IntroLayout.create(minecraft.font, width, height, intro, text, subtitle, barSlant);
+        }
         float alpha = Mth.clamp((intro.durationTicks() - ticks) / intro.fadeOutTicks(), 0, 1);
         if (intro.animation() == IntroDefinition.Animation.FADE_IN) alpha *= Mth.clamp(ticks / intro.revealTicks(), 0, 1);
         int opacity = Math.round(alpha * 255);
         if (opacity < 4) return;
         int color = (opacity << 24) | 0xFFFFFF;
-        graphics.pose().pushPose();
-        graphics.pose().translate(width / 2F, (height - totalHeight * fit) / 2F, 0);
-        graphics.pose().scale(fit, fit, 1);
-        draw(graphics, textLines, titleScale, 0, visible(ticks), color, lineHeight);
-        draw(graphics, subtitleLines, 1, textHeight + 8, visible(ticks), color, lineHeight);
-        graphics.pose().popPose();
+        draw(graphics, layout.title(), visible(ticks), color);
+        draw(graphics, layout.subtitle(), visible(ticks), color);
     }
 
-    private static void draw(GuiGraphics graphics, List<IntroText.Line> lines, float scale, float top,
-                             int visible, int color, int lineHeight) {
+    private static void draw(GuiGraphics graphics, IntroLayout.Block block, int visible, int color) {
         graphics.pose().pushPose();
-        graphics.pose().translate(0, top, 0);
-        graphics.pose().scale(scale, scale, 1);
-        for (int index = 0; index < lines.size(); index++) {
-            var line = lines.get(index);
-            graphics.drawString(Minecraft.getInstance().font, line.visible(visible), -line.width() / 2, index * lineHeight, color, true);
+        graphics.pose().translate(block.anchorX(), block.top(), 0);
+        graphics.pose().scale(block.scale(), block.scale(), 1);
+        for (int index = 0; index < block.lines().size(); index++) {
+            var line = block.lines().get(index);
+            graphics.drawString(Minecraft.getInstance().font, line.visible(visible),
+                    Math.round(block.lineLeft(line)), index * block.lineHeight(), color, true);
         }
         graphics.pose().popPose();
     }
