@@ -1,4 +1,6 @@
 {
+  "intro.kingdomsheritage.wilderness": "Wilderness",
+  "intro.kingdomsheritage.unknown": "Unknown",
   "screen.kingdomsheritage.location": "Choose your starting location",
   "screen.kingdomsheritage.kit": "Choose your starting kit",
   "screen.kingdomsheritage.next": "Choose kit",

@@ -16,6 +16,6 @@ public abstract class SelectionPacketGuard {
     @Inject(method = {"handleContainerClick", "handleContainerButtonClick", "handlePlaceRecipe",
             "handleSetCreativeModeSlot", "handlePlayerAction", "handleSetCarriedItem"}, at = @At("HEAD"), cancellable = true)
     private void protectSelectionInventory(CallbackInfo callback) {
-        if (player.server.isSameThread() && SelectionManager.pending(player)) callback.cancel();
+        if (player.server.isSameThread() && SelectionManager.blocked(player)) callback.cancel();
     }
 }

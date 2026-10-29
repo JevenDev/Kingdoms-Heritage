@@ -6,7 +6,11 @@
     "SelectionPacketGuard"
   ],
   "client": [
-    "AccessoriesCraftingPreview"
+    "AccessoriesCraftingPreview",
+    "IntroMouseGuard",
+    "IntroKeyGuard",
+    "IntroToastGuard",
+    "IntroSavingIndicatorGuard"
   ],
   "injectors": {
     "defaultRequire": 1

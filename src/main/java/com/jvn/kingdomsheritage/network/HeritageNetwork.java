@@ -34,8 +34,17 @@ public final class HeritageNetwork {
         @Override public Type<Choose> type() { return TYPE; }
     }
 
+    public record FinishIntro(java.util.UUID token) implements CustomPacketPayload {
+        public static final Type<FinishIntro> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(KingdomsHeritage.MOD_ID, "finish_intro"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, FinishIntro> CODEC = StreamCodec.of(
+                (buffer, value) -> buffer.writeUUID(value.token), buffer -> new FinishIntro(buffer.readUUID()));
+        @Override public Type<FinishIntro> type() { return TYPE; }
+    }
+
     public static void register(RegisterPayloadHandlersEvent event) {
-        var registrar = event.registrar("2");
+        var registrar = event.registrar("3");
+        registrar.playToServer(FinishIntro.TYPE, FinishIntro.CODEC, (packet, context) ->
+                com.jvn.kingdomsheritage.server.SpawnIntro.finish((ServerPlayer) context.player(), packet.token));
         registrar.playToClient(Catalog.TYPE, Catalog.CODEC, (packet, context) -> clientReceiver.accept(packet.json));
         registrar.playToServer(Choose.TYPE, Choose.CODEC, (packet, context) ->
                 SelectionManager.choose((ServerPlayer) context.player(), packet));

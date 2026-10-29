@@ -33,6 +33,7 @@ public final class ClientSelection {
         NeoForge.EVENT_BUS.addListener(ClientSelection::movement);
         NeoForge.EVENT_BUS.addListener(ClientSelection::logout);
         KitSelection.register();
+        SpawnIntroOverlay.register();
         NeoForge.EVENT_BUS.addListener(ClientSelection::hideHud);
         NeoForge.EVENT_BUS.addListener(ClientSelection::hideHand);
     }
@@ -49,6 +50,7 @@ public final class ClientSelection {
             }
             return;
         }
+        SpawnIntroOverlay.clear();
         progress = "";
         String spawnId = kits != null ? kits.spawnId() : selection == null ? null : selection.selectedId();
         String kitId = kits == null ? null : kits.kitId();
@@ -62,6 +64,7 @@ public final class ClientSelection {
             selection = null;
             if (minecraft.player != null) minecraft.player.closeContainer();
             minecraft.setScreen(null);
+            if (next.has("intro")) SpawnIntroOverlay.start(next);
             return;
         }
         catalog = next;
@@ -78,11 +81,12 @@ public final class ClientSelection {
     }
 
     private static void hideHud(net.neoforged.neoforge.client.event.RenderGuiEvent.Pre event) {
-        if (catalog != null) event.setCanceled(true);
+        if (catalog != null || SpawnIntroOverlay.active()) event.setCanceled(true);
+        SpawnIntroOverlay.render(event.getGuiGraphics(), event.getPartialTick().getGameTimeDeltaPartialTick(false));
     }
 
     private static void hideHand(net.neoforged.neoforge.client.event.RenderHandEvent event) {
-        if (catalog != null) event.setCanceled(true);
+        if (catalog != null || SpawnIntroOverlay.active()) event.setCanceled(true);
     }
 
     static void openKits(String spawn) {
@@ -116,6 +120,7 @@ public final class ClientSelection {
     }
 
     private static void tick(ClientTickEvent.Post event) {
+        SpawnIntroOverlay.tick();
         Minecraft minecraft = Minecraft.getInstance();
         if (catalog == null || minecraft.level == null || minecraft.player == null) return;
         if (kits != null) {
@@ -127,7 +132,7 @@ public final class ClientSelection {
     }
 
     private static void movement(MovementInputUpdateEvent event) {
-        if (catalog == null) return;
+        if (catalog == null && !SpawnIntroOverlay.blocked()) return;
         var input = event.getInput();
         input.forwardImpulse = 0;
         input.leftImpulse = 0;
@@ -137,6 +142,7 @@ public final class ClientSelection {
     }
 
     private static void logout(ClientPlayerNetworkEvent.LoggingOut event) {
+        SpawnIntroOverlay.clear();
         if (kits != null) kits.restore();
         kits = null;
         catalog = null;
@@ -145,6 +151,7 @@ public final class ClientSelection {
     }
 
     static void disconnect() {
+        SpawnIntroOverlay.clear();
         Minecraft minecraft = Minecraft.getInstance();
         if (kits != null) kits.restore();
         kits = null;

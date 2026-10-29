@@ -8,14 +8,22 @@ import net.minecraft.util.GsonHelper;
 public record SpawnDefinition(ResourceLocation id, String title, String description, ResourceLocation image,
                               int order, Kind kind, ResourceLocation dimension, ResourceLocation target,
                               int x, int y, int z, boolean targetTag, ResourceLocation piece,
-                              List<String> kits, int searchRadius, int randomRadius, String titleKey, String descriptionKey) {
+                              List<String> kits, int searchRadius, int randomRadius, String titleKey, String descriptionKey, IntroDefinition intro) {
     public enum Kind { DEFAULT, RANDOM, BIOME, STRUCTURE, FIXED }
 
     public SpawnDefinition(ResourceLocation id, String title, String description, ResourceLocation image,
                            int order, Kind kind, ResourceLocation dimension, ResourceLocation target,
                            int x, int y, int z, boolean targetTag, ResourceLocation piece) {
         this(id, title, description, image, order, kind, dimension, target, x, y, z, targetTag, piece,
-                List.of(), 0, 0, "", "");
+                List.of(), 0, 0, "", "", null);
+    }
+
+    public SpawnDefinition(ResourceLocation id, String title, String description, ResourceLocation image,
+                           int order, Kind kind, ResourceLocation dimension, ResourceLocation target,
+                           int x, int y, int z, boolean targetTag, ResourceLocation piece,
+                           List<String> kits, int searchRadius, int randomRadius, String titleKey, String descriptionKey) {
+        this(id, title, description, image, order, kind, dimension, target, x, y, z, targetTag, piece,
+                kits, searchRadius, randomRadius, titleKey, descriptionKey, null);
     }
 
     public static SpawnDefinition parse(ResourceLocation id, JsonObject json) {
@@ -42,7 +50,8 @@ public record SpawnDefinition(ResourceLocation id, String title, String descript
         return new SpawnDefinition(id, title, description, image, GsonHelper.getAsInt(json, "order", 0),
                 kind, dimension, target, x, y, z, targetTag, piece, DefinitionJson.ids(json, "kits", true),
                 radius(json, "search_radius"), radius(json, "random_radius"),
-                DefinitionJson.text(json, "title_key", 256, true), DefinitionJson.text(json, "description_key", 256, true));
+                DefinitionJson.text(json, "title_key", 256, true), DefinitionJson.text(json, "description_key", 256, true),
+                json.has("intro") ? IntroDefinition.parse(GsonHelper.getAsJsonObject(json, "intro")) : null);
     }
 
     private static int radius(JsonObject json, String key) {

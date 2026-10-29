@@ -56,9 +56,14 @@ public final class SelectionManager {
         return state(player).getBoolean("pending");
     }
 
+    public static boolean blocked(Player player) {
+        return pending(player) || SpawnIntro.locked(player);
+    }
+
     @SubscribeEvent
     public static void login(PlayerEvent.PlayerLoggedInEvent event) {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
+        SpawnIntro.release(player);
         CompoundTag state = state(player);
         if (state.getBoolean("complete")) return;
         if (!state.getBoolean("pending") && !state.getBoolean("reset") && HeritageConfig.EXEMPT_EXISTING_PLAYERS.get()
@@ -104,7 +109,9 @@ public final class SelectionManager {
 
     @SubscribeEvent
     public static void tick(PlayerTickEvent.Post event) {
-        if (!(event.getEntity() instanceof ServerPlayer player) || !pending(player)) return;
+        if (!(event.getEntity() instanceof ServerPlayer player)) return;
+        SpawnIntro.tick(player);
+        if (!pending(player)) return;
         hold(player);
         if (player.tickCount >= 20 && (SENT_REVISION.getOrDefault(player.getUUID(), -1L) != HeritageCatalog.revision())) {
             PREPARATIONS.remove(player.getUUID());
@@ -175,6 +182,7 @@ public final class SelectionManager {
             sendProgress(player, "applying");
             KingdomsHeritage.LOGGER.debug("Prepared Heritage location {} in {} ms of server work",
                     spawn.id(), preparation.search().workMillis());
+            JsonObject intro = SpawnIntro.prepare(spawn, destination);
             KitService.apply(player, kit, stacks, inventoryPolicy(player));
             CompoundTag state = state(player);
             player.teleportTo(destination.level(), destination.position().getX() + 0.5,
@@ -196,7 +204,7 @@ public final class SelectionManager {
             player.closeContainer();
             player.fallDistance = 0;
             player.invulnerableTime = 100;
-            PacketDistributor.sendToPlayer(player, new HeritageNetwork.Catalog("{}"));
+            SpawnIntro.begin(player, spawn.intro(), intro);
             player.inventoryMenu.sendAllDataToRemote();
         } catch (IllegalArgumentException error) {
             sendChoices(player, HeritageException.component(error));
@@ -218,6 +226,7 @@ public final class SelectionManager {
     }
 
     public static void reset(ServerPlayer player) {
+        SpawnIntro.release(player);
         if (pending(player)) throw new HeritageException("pending", "Recover the pending selection before resetting it");
         state(player).putBoolean("complete", false);
         state(player).putBoolean("reset", true);
@@ -316,7 +325,7 @@ public final class SelectionManager {
 
     @SubscribeEvent
     public static void damage(LivingIncomingDamageEvent event) {
-        if (event.getEntity() instanceof ServerPlayer player && pending(player)) event.setCanceled(true);
+        if (event.getEntity() instanceof ServerPlayer player && blocked(player)) event.setCanceled(true);
     }
 
     @SubscribeEvent
@@ -335,14 +344,14 @@ public final class SelectionManager {
     public static void breakBlock(PlayerInteractEvent.LeftClickBlock event) { interact(event); }
 
     private static void interact(PlayerInteractEvent event) {
-        if (event.getEntity() instanceof ServerPlayer player && pending(player) && event instanceof ICancellableEvent cancellable) {
+        if (event.getEntity() instanceof ServerPlayer player && blocked(player) && event instanceof ICancellableEvent cancellable) {
             cancellable.setCanceled(true);
         }
     }
 
     @SubscribeEvent
     public static void attack(AttackEntityEvent event) {
-        if (pending(event.getEntity())) event.setCanceled(true);
+        if (blocked(event.getEntity())) event.setCanceled(true);
     }
 
     @SubscribeEvent
@@ -352,6 +361,7 @@ public final class SelectionManager {
 
     @SubscribeEvent
     public static void logout(PlayerEvent.PlayerLoggedOutEvent event) {
+        if (event.getEntity() instanceof ServerPlayer player) SpawnIntro.release(player);
         PREPARATIONS.remove(event.getEntity().getUUID());
         LAST_REQUEST.remove(event.getEntity().getUUID());
         SENT_REVISION.remove(event.getEntity().getUUID());
@@ -359,6 +369,7 @@ public final class SelectionManager {
 
     @SubscribeEvent
     public static void respawn(PlayerEvent.PlayerRespawnEvent event) {
+        if (event.getEntity() instanceof ServerPlayer player) SpawnIntro.release(player);
         if (event.getEntity() instanceof ServerPlayer player && pending(player)) {
             PREPARATIONS.remove(player.getUUID());
             hold(player);
@@ -369,6 +380,7 @@ public final class SelectionManager {
     @SubscribeEvent
     public static void stop(ServerStoppedEvent event) {
         PREPARATIONS.clear();
+        SpawnIntro.clear();
         SpawnResolver.clearCache();
         LAST_REQUEST.clear();
         SENT_REVISION.clear();
