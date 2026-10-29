@@ -1,8 +1,10 @@
 {
   "title": "Random",
-  "description": "Begin somewhere safe within the configured distance of world spawn.",
   "type": "random",
   "order": 1,
   "title_key": "heritage.kingdomsheritage.spawns.random.title",
-  "description_key": "heritage.kingdomsheritage.spawns.random.description"
+  "intro": {
+    "text": "You woke up in a <biome>...",
+    "cinematic_bars": true
+  }
 }

@@ -1,13 +1,15 @@
 {
   "title": "Wanderer",
-  "description": "Begin at a safe random wilderness location within 2,000 blocks of world spawn. Carry bread, a wooden sword, and a few torches for the road.",
   "title_key": "heritage.kingdomsheritage.backgrounds.wanderer.title",
-  "description_key": "heritage.kingdomsheritage.backgrounds.wanderer.description",
   "type": "random",
   "order": 5,
   "kits": [
     "kingdomsheritage:wanderer",
     "kingdomsheritage:default"
   ],
-  "random_radius": 2000
+  "random_radius": 2000,
+  "intro": {
+    "text": "You woke up in a <biome>...",
+    "cinematic_bars": true
+  }
 }

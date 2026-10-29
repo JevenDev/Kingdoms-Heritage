@@ -1,8 +1,10 @@
 {
   "title": "Default",
-  "description": "Begin at your normal world spawn.",
   "type": "default",
   "order": 0,
   "title_key": "heritage.kingdomsheritage.spawns.default.title",
-  "description_key": "heritage.kingdomsheritage.spawns.default.description"
+  "intro": {
+    "text": "You woke up in a <biome>...",
+    "cinematic_bars": true
+  }
 }
