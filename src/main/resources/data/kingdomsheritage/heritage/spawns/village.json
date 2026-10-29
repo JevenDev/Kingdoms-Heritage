@@ -6,6 +6,8 @@
   "title_key": "heritage.kingdomsheritage.spawns.village.title",
   "intro": {
     "text": "You woke up in a <structure>...",
+    "title_position": "left_center",
+    "subtitle_position": "left_center",
     "cinematic_bars": true,
     "hide_hud_during_bars": true
   }
