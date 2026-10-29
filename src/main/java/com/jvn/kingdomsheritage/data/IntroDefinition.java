@@ -11,7 +11,8 @@ import net.minecraft.util.GsonHelper;
 public record IntroDefinition(Component text, Component subtitle, boolean title, Animation animation,
                               Control control, boolean blip, int revealTicks, int holdTicks,
                               int fadeOutTicks, int fadeFromBlackTicks, boolean cinematicBars, BarStyle barStyle,
-                              int barTransitionTicks, Position titlePosition, Position subtitlePosition, int blackHoldTicks) {
+                              int barTransitionTicks, Position titlePosition, Position subtitlePosition, int blackHoldTicks,
+                              boolean outline) {
     public enum Animation { FADE_IN, WORD_BY_WORD, LETTER_BY_LETTER, IMMEDIATE }
     public enum Control { AFTER_TITLE, DURING_TITLE }
     public enum BarStyle { RANDOM, STRAIGHT }
@@ -61,6 +62,14 @@ public record IntroDefinition(Component text, Component subtitle, boolean title,
                 fadeFromBlackTicks, cinematicBars, barStyle, barTransitionTicks, titlePosition, subtitlePosition, 60);
     }
 
+    public IntroDefinition(Component text, Component subtitle, boolean title, Animation animation,
+                           Control control, boolean blip, int revealTicks, int holdTicks,
+                           int fadeOutTicks, int fadeFromBlackTicks, boolean cinematicBars, BarStyle barStyle,
+                           int barTransitionTicks, Position titlePosition, Position subtitlePosition, int blackHoldTicks) {
+        this(text, subtitle, title, animation, control, blip, revealTicks, holdTicks, fadeOutTicks,
+                fadeFromBlackTicks, cinematicBars, barStyle, barTransitionTicks, titlePosition, subtitlePosition, blackHoldTicks, true);
+    }
+
     public static IntroDefinition parse(JsonObject json) {
         Component text = component(json, "text", false);
         Component subtitle = component(json, "subtitle", true);
@@ -76,7 +85,8 @@ public record IntroDefinition(Component text, Component subtitle, boolean title,
                 BarStyle.valueOf(GsonHelper.getAsString(json, "bar_style", "random").toUpperCase(Locale.ROOT)),
                 ticks(json, "bar_transition_ticks", 40),
                 Position.parse(GsonHelper.getAsString(json, "title_position", "mid_center")),
-                Position.parse(GsonHelper.getAsString(json, "subtitle_position", "mid_center")), ticks(json, "black_hold_ticks", 60, 0));
+                Position.parse(GsonHelper.getAsString(json, "subtitle_position", "mid_center")), ticks(json, "black_hold_ticks", 60, 0),
+                GsonHelper.getAsBoolean(json, "outline", true));
     }
 
     private static Component component(JsonObject json, String key, boolean optional) {
@@ -118,6 +128,7 @@ public record IntroDefinition(Component text, Component subtitle, boolean title,
         json.add("text", com.google.gson.JsonParser.parseString(Component.Serializer.toJson(text, registries)));
         json.add("subtitle", com.google.gson.JsonParser.parseString(Component.Serializer.toJson(subtitle, registries)));
         json.addProperty("title", title);
+        json.addProperty("outline", outline);
         json.addProperty("animation", animation.name().toLowerCase(Locale.ROOT));
         json.addProperty("control", control.name().toLowerCase(Locale.ROOT));
         json.addProperty("blip", blip);

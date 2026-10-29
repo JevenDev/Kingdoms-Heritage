@@ -189,8 +189,13 @@ public final class SpawnIntroOverlay {
         graphics.pose().scale(block.scale(), block.scale(), 1);
         for (int index = 0; index < block.lines().size(); index++) {
             var line = block.lines().get(index);
-            com.jvn.toucanlib.client.ToucanTextRenderer.renderOutlinedLine(graphics, Minecraft.getInstance().font,
-                    line.visible(visible), Math.round(block.lineLeft(line)), index * block.lineHeight(), color, ticks);
+            if (intro.outline()) {
+                com.jvn.toucanlib.client.ToucanTextRenderer.renderOutlinedLine(graphics, Minecraft.getInstance().font,
+                        line.visible(visible), Math.round(block.lineLeft(line)), index * block.lineHeight(), color, ticks);
+            } else {
+                com.jvn.toucanlib.client.ToucanTextRenderer.renderLine(graphics, Minecraft.getInstance().font,
+                        line.visible(visible), Math.round(block.lineLeft(line)), index * block.lineHeight(), color, color >>> 24, ticks);
+            }
         }
         graphics.pose().popPose();
     }
