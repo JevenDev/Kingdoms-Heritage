@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Heritage cinematic intro",
-  "description": "Standalone intro object for Minecraft 1.21.1. Full Minecraft component decoding and the combined serialized text limit are checked in-game.",
+  "description": "Intro settings for Minecraft 1.21.1. The game checks the text format and total text length.",
   "type": "object",
   "required": [
     "text"
@@ -331,7 +331,7 @@
           "default": 50
         }
       },
-      "description": "Screen percentages. The matching position determines anchor alignment. Null restores preset placement."
+      "description": "X, Y and line width as percentages of the screen. The named position chooses which part of the text sits at X/Y. Use null to return to that position."
     }
   }
 }

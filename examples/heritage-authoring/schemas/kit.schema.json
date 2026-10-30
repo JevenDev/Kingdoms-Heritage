@@ -67,7 +67,7 @@
         "items": {
           "$ref": "#/$defs/itemEntry"
         },
-        "description": "Player or equipment entries. Inventory, slot, index and cosmetic must identify a unique slot."
+        "description": "Items for player or equipment slots. Do not repeat the same inventory, slot, index and cosmetic settings."
       }
     },
     "allOf": [
@@ -145,7 +145,7 @@
               "type": "object"
             }
           },
-          "description": "Minecraft 1.21.1 item-stack JSON. The game validates components and the item-specific stack limit."
+          "description": "Minecraft 1.21.1 item data. The game checks the item components and stack limit."
         }
       },
       "if": {

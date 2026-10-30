@@ -31,20 +31,22 @@
   .document-name .draft-status { white-space: normal; }
   .assembler .document-name > .stack { flex-direction: row; align-items: center; gap: 8px; }
   .document-actions-menu { display: block; position: relative; flex: 0 0 auto; }
-  .document-actions-menu > summary { display: inline-flex; align-items: center; justify-content: center; height: var(--control-height); padding: 0 10px; border: 1px solid #eee; border-radius: 6px; background: #eee; color: #000; font-weight: 600; cursor: pointer; list-style: none; }
+  .document-actions-menu > summary { display: inline-flex; align-items: center; justify-content: center; height: var(--control-height); padding: 0 10px; border: 1px solid transparent; border-radius: 6px; background: var(--panel); color: var(--text); font-weight: 600; cursor: pointer; list-style: none; }
+  .document-actions-menu > summary:hover { background: var(--panel-2); }
+  .document-actions-menu > summary:active { background: var(--panel-3); }
   .document-actions-menu > summary::-webkit-details-marker { display: none; }
-  .document-actions-menu .document-file-actions { display: grid; grid-template-columns: minmax(0,1fr); position: absolute; right: 0; top: calc(100% + 8px); z-index: 30; width: min(360px,calc(100vw - 32px)); max-height: calc(100dvh - 100px); overflow: auto; overscroll-behavior: contain; padding: 10px; border: 1px solid #444; border-radius: 6px; background: #080808; }
+  .document-actions-menu .document-file-actions { display: grid; grid-template-columns: minmax(0,1fr); position: absolute; right: 0; top: calc(100% + 8px); z-index: 30; width: min(360px,calc(100vw - 32px)); max-height: calc(100dvh - 100px); overflow: auto; overscroll-behavior: contain; padding: 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
   .document-actions-menu .document-file-actions select { width: 100%; max-width: none; }
   .assembler .pack-configuration { min-height: 34px; max-height: 25%; margin-bottom: 8px; }
 }
 
 :is(.intro-editor, .kit-editor, .assembler) button:not([role=tab]):not(.item-choice):not(.mc-inventory *):not(.location-summary button) {
   font-family: 'Archivo', sans-serif;
-  background: #eee !important;
-  border-color: #eee !important;
-  color: #000 !important;
+  background: var(--panel) !important;
+  border-color: transparent !important;
+  color: var(--text) !important;
   font-weight: 600;
 }
-:is(.intro-editor, .kit-editor, .assembler) button:not([role=tab]):not(.item-choice):not(.mc-inventory *):not(.location-summary button):hover:not(:disabled) { background: #fff !important; }
-:is(.intro-editor, .kit-editor, .assembler) button:not([role=tab]):not(.item-choice):not(.mc-inventory *):not(.location-summary button):active:not(:disabled) { background: #ddd !important; }
-:is(.intro-editor, .kit-editor, .assembler) button:not([role=tab]):not(.item-choice):not(.mc-inventory *):not(.location-summary button)[aria-pressed=true] { border-color: #e4c17a !important; }
+:is(.intro-editor, .kit-editor, .assembler) button:not([role=tab]):not(.item-choice):not(.mc-inventory *):not(.location-summary button):hover:not(:disabled) { background: var(--panel-2) !important; }
+:is(.intro-editor, .kit-editor, .assembler) button:not([role=tab]):not(.item-choice):not(.mc-inventory *):not(.location-summary button):active:not(:disabled) { background: var(--panel-3) !important; }
+:is(.intro-editor, .kit-editor, .assembler) button:not([role=tab]):not(.item-choice):not(.mc-inventory *):not(.location-summary button)[aria-pressed=true] { background: var(--panel-3) !important; }

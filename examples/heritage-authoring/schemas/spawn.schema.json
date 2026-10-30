@@ -102,13 +102,13 @@
         "type": "integer",
         "minimum": 16,
         "maximum": 30000,
-        "description": "Omit to inherit the pool value or server configuration. Explicit zero is invalid."
+        "description": "Leave out to use the pool or server setting. Zero is not allowed."
       },
       "random_radius": {
         "type": "integer",
         "minimum": 16,
         "maximum": 30000,
-        "description": "Omit to inherit the pool value or server configuration. Explicit zero is invalid."
+        "description": "Leave out to use the pool or server setting. Zero is not allowed."
       },
       "intro": {
         "$ref": "intro.schema.json"
@@ -121,7 +121,7 @@
           "pattern": "^#?(?:[a-z0-9_.-]+:)?[a-z0-9/._-]+$"
         },
         "default": [],
-        "description": "Allowed kit IDs or #tags. Empty allows all enabled kits."
+        "description": "Allowed kit IDs or #tags. Leave empty to allow all enabled kits."
       },
       "pool": {
         "type": "array",
@@ -291,13 +291,13 @@
           "type": "integer",
           "minimum": 16,
           "maximum": 30000,
-          "description": "Omit to inherit the pool value or server configuration. Explicit zero is invalid."
+          "description": "Leave out to use the pool or server setting. Zero is not allowed."
         },
         "random_radius": {
           "type": "integer",
           "minimum": 16,
           "maximum": 30000,
-          "description": "Omit to inherit the pool value or server configuration. Explicit zero is invalid."
+          "description": "Leave out to use the pool or server setting. Zero is not allowed."
         },
         "intro": {
           "anyOf": [
@@ -308,7 +308,7 @@
               "type": "null"
             }
           ],
-          "description": "Omit to inherit the pool intro. An object replaces it completely. Null disables it."
+          "description": "Leave out to use the pool intro. Set an intro to replace the whole pool intro, or use null to skip it."
         }
       },
       "additionalProperties": false,
