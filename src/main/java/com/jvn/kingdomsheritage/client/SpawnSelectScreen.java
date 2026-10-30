@@ -4,6 +4,7 @@ import com.google.gson.JsonObject;
 import com.jvn.kingdomsheritage.data.DefinitionJson;
 import com.jvn.kingdomsheritage.network.HeritageNetwork;
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.math.Axis;
 import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.client.gui.GuiGraphics;
@@ -13,6 +14,7 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.tooltip.DefaultTooltipPositioner;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.Mth;
 import net.neoforged.neoforge.network.PacketDistributor;
 import org.lwjgl.glfw.GLFW;
 
@@ -94,9 +96,11 @@ public final class SpawnSelectScreen extends Screen {
                 }, message -> message.get()) {
             @Override
             protected void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+                Card card = cards.stream().filter(candidate -> candidate.choice == preview).findFirst().orElse(null);
+                if (card == null) return;
                 graphics.pose().pushPose();
-                graphics.pose().translate(getX(), getY(), 0);
-                graphics.pose().scale(scale, scale, 1);
+                card.applyPose(graphics);
+                graphics.pose().translate((getX() - card.getX()) / scale, 80, 0);
                 blit(graphics, expanded == null ? CARET : COLLAPSE, 5, 9, 7, 10);
                 graphics.pose().popPose();
             }
@@ -214,15 +218,14 @@ public final class SpawnSelectScreen extends Screen {
         }
         super.render(graphics, mouseX, mouseY, partialTick);
         graphics.flush();
+        Card active = foreground;
         if (foreground == null) foreground = cards.stream().filter(card -> card.choice == preview).findFirst().orElse(null);
         long now = net.minecraft.Util.getMillis();
-        float blend = 1 - (float) Math.exp(-Math.min(100, now - renderedAt) / 55.0);
+        float delta = Mth.clamp((now - renderedAt) / 1000F, 0, 0.05F);
         renderedAt = now;
         int layer = 0;
         for (var card : cards) {
-            float target = expanded != null ? 0 : card == foreground ? 12 : card.choice == selected ? 4 : 0;
-            card.lift += (target - card.lift) * blend;
-            card.setY(top - Math.round(card.lift * scale));
+            card.animate(delta, card == active, mouseX);
             if (card != foreground) card.draw(graphics, mouseX, mouseY, partialTick, layer++ * 10);
         }
         if (foreground != null) foreground.draw(graphics, mouseX, mouseY, partialTick, cards.size() * 10);
@@ -270,6 +273,9 @@ public final class SpawnSelectScreen extends Screen {
         private final JsonObject choice;
         private final ResourceLocation cover;
         private float lift;
+        private float hover;
+        private float selection;
+        private float tilt;
 
         private Card(int x, JsonObject choice) {
             super(x, top, Math.round((expanded == null ? CARD_WIDTH : EXPANDED_WIDTH) * scale),
@@ -286,6 +292,26 @@ public final class SpawnSelectScreen extends Screen {
             return cardAt(mouseX, mouseY) == this;
         }
 
+        private void animate(float delta, boolean active, int mouseX) {
+            float response = 1 - (float) Math.exp(-delta * 12);
+            float targetLift = expanded != null ? 0 : active ? 12 : choice == selected ? 4 : 0;
+            lift = Mth.lerp(response, lift, targetLift);
+            hover = Mth.lerp(response, hover, active ? 1 : 0);
+            selection = Mth.lerp(response, selection, choice == selected ? 1 : 0);
+            float horizontal = Mth.clamp((mouseX - getX()) / (CARD_WIDTH * scale) * 2 - 1, -1, 1);
+            float targetTilt = expanded == null && active && this == hovered ? horizontal * 1.25F : 0;
+            tilt = Mth.lerp(1 - (float) Math.exp(-delta * 10), tilt, targetTilt);
+            setY(top - Math.round(lift * scale));
+        }
+
+        private void applyPose(GuiGraphics graphics) {
+            graphics.pose().translate(getX(), top - lift * scale, 0);
+            graphics.pose().scale(scale, scale, 1);
+            graphics.pose().translate(CARD_WIDTH / 2F, CARD_HEIGHT / 2F, 0);
+            graphics.pose().mulPose(Axis.ZP.rotationDegrees(tilt));
+            graphics.pose().translate(-CARD_WIDTH / 2F, -CARD_HEIGHT / 2F, 0);
+        }
+
         private void draw(GuiGraphics graphics, int mouseX, int mouseY, float partialTick, int layer) {
             isHovered = this == hovered;
             graphics.pose().pushPose();
@@ -298,13 +324,14 @@ public final class SpawnSelectScreen extends Screen {
         @Override
         protected void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
             graphics.pose().pushPose();
-            graphics.pose().translate(getX(), getY(), 0);
-            graphics.pose().scale(scale, scale, 1);
+            applyPose(graphics);
             if (cover.equals(FALLBACK)) blit(graphics, cover, 0, 0, CARD_WIDTH, CARD_HEIGHT);
             else blit(graphics, cover, 4, 4, CARD_WIDTH - 8, CARD_HEIGHT - 8);
             blit(graphics, expanded == null ? CARD : EXPANDED, 0, 0, expanded == null ? CARD_WIDTH : EXPANDED_WIDTH, CARD_HEIGHT);
-            if (choice == selected) graphics.renderOutline(2, 2, 124, 188, 0xfff2cd83);
-            else if (isHoveredOrFocused()) graphics.renderOutline(2, 2, 124, 188, 0xffeeeeee);
+            int selectionAlpha = Math.round(selection * 255);
+            int hoverAlpha = Math.round(hover * (1 - selection) * 255);
+            if (selectionAlpha > 0) graphics.renderOutline(2, 2, 124, 188, selectionAlpha << 24 | 0xf2cd83);
+            if (hoverAlpha > 0) graphics.renderOutline(2, 2, 124, 188, hoverAlpha << 24 | 0xeeeeee);
             float titleScale = Math.max(1.5F, Math.min(2, 114F / Math.max(1, font.width(getMessage()))));
             var lines = font.split(getMessage(), (int) (114 / titleScale));
             lines = lines.subList(0, Math.min(3, lines.size()));
