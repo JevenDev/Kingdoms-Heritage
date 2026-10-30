@@ -3,7 +3,7 @@
 const colors = {black:0x000000,dark_blue:0x0000aa,dark_green:0x00aa00,dark_aqua:0x00aaaa,dark_red:0xaa0000,dark_purple:0xaa00aa,gold:0xffaa00,gray:0xaaaaaa,dark_gray:0x555555,blue:0x5555ff,green:0x55ff55,aqua:0x55ffff,red:0xff5555,light_purple:0xff55ff,yellow:0xffff55,white:0xffffff};
 const aliases = {i:'italic',italics:'italic',b:'bold',u:'underline',underlined:'underline',s:'strike',strikethrough:'strike',obfuscate:'obfuscated',magic:'obfuscated',wavy:'wave',shaky:'shake',pulsing:'pulse',jumping:'jump',bounce:'jump',bouncy:'jump'};
 const positions = {mid_center:[1,1],top_center:[1,0],bottom_center:[1,2],left_center:[0,1],right_center:[2,1],top_left:[0,0],top_right:[2,0],bottom_left:[0,2],bottom_right:[2,2]};
-const defaults = {text:'You woke up in <wave><gold><biome></gold></wave>...',subtitle:'<italic>A new journey begins.</italic>',title:false,outline:true,animation:'word_by_word',control:'after_title',blip:true,black_hold_ticks:60,fade_from_black_ticks:60,reveal_ticks:40,hold_ticks:60,fade_out_ticks:20,cinematic_bars:true,bar_style:'random',bar_transition_ticks:40,hide_hud_during_bars:true,title_position:'left_center',subtitle_position:'left_center'};
+const defaults = {text:'You woke up in <wave><gold><biome></gold></wave>...',subtitle:'<italic>A new journey begins.</italic>',title:false,large_subtitle:false,outline:true,animation:'word_by_word',control:'after_title',blip:true,black_hold_ticks:60,fade_from_black_ticks:60,reveal_ticks:40,hold_ticks:60,fade_out_ticks:20,cinematic_bars:true,bar_style:'random',bar_transition_ticks:40,hide_hud_during_bars:true,title_position:'left_center',subtitle_position:'left_center'};
 const packDefaults = {...defaults,text:'',subtitle:'',animation:'fade_in',blip:false,cinematic_bars:false,hide_hud_during_bars:false,title_position:'mid_center',subtitle_position:'mid_center'};
 const positionAliases = {center:'mid_center',mc:'mid_center',mid_c:'mid_center',tc:'top_center',top_c:'top_center',bc:'bottom_center',bottom_c:'bottom_center',lc:'left_center',left_c:'left_center',rc:'right_center',right_c:'right_center',tl:'top_left',tr:'top_right',bl:'bottom_left',br:'bottom_right'};
 function readJson(source) {
@@ -213,7 +213,7 @@ function layout(cfg,main,sub,width,height,slant,advance) {
   }
   const aw=Math.max(1,width-margin*2), ah=Math.max(1,bottom-top);
   const p=positions[cfg.title_position], q=positions[cfg.subtitle_position];
-  const ts=cfg.title?1.5:1, lh=12+pads[1]*2;
+  const ts=cfg.title?1.5:1, ss=cfg.large_subtitle?1.5:1, lh=12+pads[1]*2;
   if(cfg.title_coordinates||cfg.subtitle_coordinates) {
     const span=(anchor,size,alignment)=>alignment===0?size-anchor:alignment===2?anchor:2*Math.min(anchor,size-anchor);
     function positioned(glyphs,scale,pos,coordinates) {
@@ -226,22 +226,22 @@ function layout(cfg,main,sub,width,height,slant,advance) {
       const y=coordinates?anchorY-lines.length*lh*scale*pos[1]/2:top+(ah-lines.length*lh*scale)*pos[1]/2;
       return {lines,scale,column:pos[0],x,y,lineHeight:lh,...(coordinates?{wrapWidth:maxWidth}:{})};
     }
-    return [positioned(main,ts,p,cfg.title_coordinates),positioned(sub,1,q,cfg.subtitle_coordinates)];
+    return [positioned(main,ts,p,cfg.title_coordinates),positioned(sub,ss,q,cfg.subtitle_coordinates)];
   }
   const together=!sub.length || cfg.title_position===cfg.subtitle_position, rows=!together&&p[1]!==q[1];
   const ww=!together&&!rows?aw/(Math.abs(p[0]-q[0])===2?2:3):aw;
   const maxHeight=rows?ah/3:ah;
-  const a=wrap(main,Math.max(1,Math.trunc(ww/ts)),advance), b=sub.length?wrap(sub,Math.max(1,Math.trunc(ww)),advance):[];
+  const a=wrap(main,Math.max(1,Math.trunc(ww/ts)),advance), b=sub.length?wrap(sub,Math.max(1,Math.trunc(ww/ss)),advance):[];
   const maxWidth=lines=>Math.max(0,...lines.map(line=>line.width));
   function place(lines,scale,pos) {
     scale*=Math.min(1,maxHeight/Math.max(1,lines.length*lh*scale),ww/Math.max(1,maxWidth(lines)*scale));
     return {lines,scale,column:pos[0],x:margin+aw*pos[0]/2,y:top+(ah-lines.length*lh*scale)*pos[1]/2,lineHeight:lh};
   }
-  if(!together) return [place(a,ts,p),place(b,1,q)];
-  const th=a.length*lh*ts, sh=b.length*lh, gap=b.length?8:0;
-  const fit=Math.min(1,ah/(th+gap+sh),aw/Math.max(1,maxWidth(a)*ts,maxWidth(b)));
+  if(!together) return [place(a,ts,p),place(b,ss,q)];
+  const th=a.length*lh*ts, sh=b.length*lh*ss, gap=b.length?8:0;
+  const fit=Math.min(1,ah/(th+gap+sh),aw/Math.max(1,maxWidth(a)*ts,maxWidth(b)*ss));
   const x=margin+aw*p[0]/2,y=top+(ah-(th+gap+sh)*fit)*p[1]/2;
-  return [{lines:a,scale:ts*fit,column:p[0],x,y,lineHeight:lh},{lines:b,scale:fit,column:p[0],x,y:y+(th+gap)*fit,lineHeight:lh}];
+  return [{lines:a,scale:ts*fit,column:p[0],x,y,lineHeight:lh},{lines:b,scale:ss*fit,column:p[0],x,y:y+(th+gap)*fit,lineHeight:lh}];
 }
 function presentation(cfg) { return Math.max(cfg.fade_from_black_ticks,(cfg.animation==='immediate'?0:cfg.reveal_ticks)+cfg.hold_ticks+cfg.fade_out_ticks); }
 function duration(cfg) { return cfg.black_hold_ticks+presentation(cfg); }
@@ -267,7 +267,7 @@ function glyphFrame(g,tick,alpha) {
 }
 function validate(cfg) {
   for(const field of ['text','subtitle'])validateComponent(cfg[field]);
-  for(const key of ['title','outline','blip','cinematic_bars','hide_hud_during_bars']) if(typeof cfg[key]!=='boolean') throw new Error(key+' must be true or false.');
+  for(const key of ['title','large_subtitle','outline','blip','cinematic_bars','hide_hud_during_bars']) if(typeof cfg[key]!=='boolean') throw new Error(key+' must be true or false.');
   if(!componentText(cfg.text).trim()) throw new Error('Enter some main text.');
   if(JSON.stringify({text:cfg.text}).length+JSON.stringify({text:cfg.subtitle}).length>16384) throw new Error('Text and subtitle exceed the 16,384-character limit.');
   for(const field of ['black_hold_ticks','fade_from_black_ticks','reveal_ticks','hold_ticks','fade_out_ticks','bar_transition_ticks']) {

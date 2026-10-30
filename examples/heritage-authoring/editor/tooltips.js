@@ -51,6 +51,7 @@ globalThis.HeritageTooltips={setup({font,sprite,screen='intro'}) {
     text:['Main text','Supports style tags, location tags, and line breaks.'],
     subtitle:['Subtitle','Optional second message. Style and position it separately.'],
     title:['Larger title','1.5 times the normal size. Shrinks to fit if needed.'],
+    large_subtitle:['Larger subtitle','1.5 times the normal size. Shrinks to fit if needed.'],
     subtitle_position:['Subtitle position','Choose the same position as the title to place the subtitle below it.'],
     blip:['Dialogue blips','Play a blip as text appears. Muting the preview does not turn this off.'],
     black_hold_ticks:['Black screen','Time on a black screen before the intro. 20 ticks = 1 second.'],

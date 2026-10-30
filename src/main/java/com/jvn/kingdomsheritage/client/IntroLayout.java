@@ -27,11 +27,12 @@ record IntroLayout(IntroLayout.Block title, IntroLayout.Block subtitle) {
         float availableWidth = Math.max(1, width - margin * 2);
         float availableHeight = Math.max(1, bottom - top);
         float titleScale = intro.title() ? 1.5F : 1;
+        float subtitleScale = intro.largeSubtitle() ? 1.5F : 1;
         int lineHeight = font.lineHeight + 3 + verticalPadding * 2;
         if (intro.titleCoordinates() != null || intro.subtitleCoordinates() != null) {
             return new IntroLayout(positioned(font, text, titleScale, intro.titlePosition(), intro.titleCoordinates(),
                     lineHeight, width, height, margin, top, availableWidth, availableHeight),
-                    positioned(font, subtitle, 1, intro.subtitlePosition(), intro.subtitleCoordinates(),
+                    positioned(font, subtitle, subtitleScale, intro.subtitlePosition(), intro.subtitleCoordinates(),
                             lineHeight, width, height, margin, top, availableWidth, availableHeight));
         }
         var titlePosition = intro.titlePosition();
@@ -44,21 +45,21 @@ record IntroLayout(IntroLayout.Block title, IntroLayout.Block subtitle) {
         float maxHeight = separateRows ? availableHeight / 3 : availableHeight;
         var titleLines = IntroText.wrap(font, text, Math.max(1, (int) (wrapWidth / titleScale)));
         var subtitleLines = subtitle.isEmpty() ? List.<IntroText.Line>of()
-                : IntroText.wrap(font, subtitle, Math.max(1, (int) wrapWidth));
+                : IntroText.wrap(font, subtitle, Math.max(1, (int) (wrapWidth / subtitleScale)));
         float titleHeight = titleLines.size() * lineHeight * titleScale;
-        float subtitleHeight = subtitleLines.size() * lineHeight;
+        float subtitleHeight = subtitleLines.size() * lineHeight * subtitleScale;
         if (together) {
             float gap = subtitleLines.isEmpty() ? 0 : 8;
             float fit = Math.min(1, Math.min(availableHeight / (titleHeight + gap + subtitleHeight),
-                    availableWidth / Math.max(1, Math.max(maxWidth(titleLines) * titleScale, maxWidth(subtitleLines)))));
+                    availableWidth / Math.max(1, Math.max(maxWidth(titleLines) * titleScale, maxWidth(subtitleLines) * subtitleScale))));
             float anchorX = margin + availableWidth * titlePosition.column() / 2;
             float groupTop = top + (availableHeight - (titleHeight + gap + subtitleHeight) * fit) * titlePosition.row() / 2;
             return new IntroLayout(new Block(titleLines, anchorX, groupTop, titleScale * fit, titlePosition, lineHeight),
-                    new Block(subtitleLines, anchorX, groupTop + (titleHeight + gap) * fit, fit, titlePosition, lineHeight));
+                    new Block(subtitleLines, anchorX, groupTop + (titleHeight + gap) * fit, subtitleScale * fit, titlePosition, lineHeight));
         }
         return new IntroLayout(place(titleLines, titleScale, titlePosition, lineHeight, margin, top,
                 availableWidth, availableHeight, wrapWidth, maxHeight),
-                place(subtitleLines, 1, subtitlePosition, lineHeight, margin, top,
+                place(subtitleLines, subtitleScale, subtitlePosition, lineHeight, margin, top,
                         availableWidth, availableHeight, wrapWidth, maxHeight));
     }
 

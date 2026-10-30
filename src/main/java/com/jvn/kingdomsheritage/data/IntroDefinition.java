@@ -13,7 +13,7 @@ public record IntroDefinition(Component text, Component subtitle, boolean title,
                               int fadeOutTicks, int fadeFromBlackTicks, boolean cinematicBars, BarStyle barStyle,
                               int barTransitionTicks, Position titlePosition, Position subtitlePosition, int blackHoldTicks,
                               boolean outline, boolean hideHudDuringBars,
-                              Coordinates titleCoordinates, Coordinates subtitleCoordinates) {
+                              Coordinates titleCoordinates, Coordinates subtitleCoordinates, boolean largeSubtitle) {
     public enum Animation { FADE_IN, WORD_BY_WORD, LETTER_BY_LETTER, IMMEDIATE }
     public enum Control { AFTER_TITLE, DURING_TITLE }
     public enum BarStyle { RANDOM, STRAIGHT }
@@ -107,6 +107,17 @@ public record IntroDefinition(Component text, Component subtitle, boolean title,
                 blackHoldTicks, outline, hideHudDuringBars, null, null);
     }
 
+    public IntroDefinition(Component text, Component subtitle, boolean title, Animation animation,
+                           Control control, boolean blip, int revealTicks, int holdTicks,
+                           int fadeOutTicks, int fadeFromBlackTicks, boolean cinematicBars, BarStyle barStyle,
+                           int barTransitionTicks, Position titlePosition, Position subtitlePosition, int blackHoldTicks,
+                           boolean outline, boolean hideHudDuringBars,
+                           Coordinates titleCoordinates, Coordinates subtitleCoordinates) {
+        this(text, subtitle, title, animation, control, blip, revealTicks, holdTicks, fadeOutTicks,
+                fadeFromBlackTicks, cinematicBars, barStyle, barTransitionTicks, titlePosition, subtitlePosition,
+                blackHoldTicks, outline, hideHudDuringBars, titleCoordinates, subtitleCoordinates, false);
+    }
+
     public static IntroDefinition parse(JsonObject json) {
         Component text = component(json, "text", false);
         Component subtitle = component(json, "subtitle", true);
@@ -124,7 +135,8 @@ public record IntroDefinition(Component text, Component subtitle, boolean title,
                 Position.parse(GsonHelper.getAsString(json, "title_position", "mid_center")),
                 Position.parse(GsonHelper.getAsString(json, "subtitle_position", "mid_center")), ticks(json, "black_hold_ticks", 60, 0),
                 GsonHelper.getAsBoolean(json, "outline", true), GsonHelper.getAsBoolean(json, "hide_hud_during_bars", false),
-                coordinates(json, "title_coordinates"), coordinates(json, "subtitle_coordinates"));
+                coordinates(json, "title_coordinates"), coordinates(json, "subtitle_coordinates"),
+                GsonHelper.getAsBoolean(json, "large_subtitle", false));
     }
 
     private static Coordinates coordinates(JsonObject json, String key) {
@@ -187,6 +199,7 @@ public record IntroDefinition(Component text, Component subtitle, boolean title,
         json.add("text", com.google.gson.JsonParser.parseString(Component.Serializer.toJson(text, registries)));
         json.add("subtitle", com.google.gson.JsonParser.parseString(Component.Serializer.toJson(subtitle, registries)));
         json.addProperty("title", title);
+        json.addProperty("large_subtitle", largeSubtitle);
         json.addProperty("outline", outline);
         json.addProperty("animation", animation.name().toLowerCase(Locale.ROOT));
         json.addProperty("control", control.name().toLowerCase(Locale.ROOT));
