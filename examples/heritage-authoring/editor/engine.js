@@ -203,6 +203,11 @@ function bounds(block) {
   const width=block.wrapWidth??textWidth;
   return {x:block.x-width*block.column/2,y:block.y,width,height:block.lines.length*block.lineHeight*block.scale};
 }
+function guiViewport(width,height,requested=0) {
+  const maxScale=Math.max(1,Math.min(Math.floor(width/320),Math.floor(height/240)));
+  const scale=requested===0?maxScale:Math.max(1,Math.min(requested,maxScale));
+  return {width,height,scale,maxScale,guiWidth:Math.ceil(width/scale),guiHeight:Math.ceil(height/scale)};
+}
 function layout(cfg,main,sub,width,height,slant,advance) {
   const pads=padding([...main,...sub]), margin=Math.min(20+Math.max(...pads)*1.5,Math.min(width,height)/4);
   let top=margin,bottom=height-margin;
@@ -288,7 +293,7 @@ function validate(cfg) {
   if(!['random','straight'].includes(cfg.bar_style)) throw new Error('Unknown bar style.');
   return cfg;
 }
-const api={componentText,validateComponent,colors,positions,defaults,packDefaults,readJson,updateJson,parse,wrap,padding,bounds,layout,presentation,duration,wordEnds,visible,glyphFrame,validate,clamp,active};
+const api={componentText,validateComponent,colors,positions,defaults,packDefaults,readJson,updateJson,parse,wrap,padding,bounds,guiViewport,layout,presentation,duration,wordEnds,visible,glyphFrame,validate,clamp,active};
 if(typeof module!=='undefined') module.exports=api;
 else globalThis.HeritagePreview=api;
 })();

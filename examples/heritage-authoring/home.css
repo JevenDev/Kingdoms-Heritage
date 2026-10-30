@@ -1,4 +1,4 @@
-@import url('editor/site.css');
+@import url('editor/site.css?v=3');
 .home { min-height: 100dvh; display: flex; flex-direction: column; }
 .home header { flex-shrink: 0; }
 .home-main { width: 100%; max-width: 1000px; margin: 0 auto; padding: 48px 32px 56px; flex: 1; }

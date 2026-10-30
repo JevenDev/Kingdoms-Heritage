@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Kingdoms: Heritage intro editor</title><link rel="stylesheet" href="editor/editor.css?v=8"><link rel="stylesheet" href="editor/workflow.css?v=2"><link rel="stylesheet" href="editor/controls.css?v=6"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Kingdoms: Heritage intro editor</title><link rel="stylesheet" href="editor/editor.css?v=12"><link rel="stylesheet" href="editor/workflow.css?v=2"><link rel="stylesheet" href="editor/controls.css?v=6"></head>
 <body class="intro-editor">
 <header><h1><a class="home-link" href="index.html" aria-label="Kingdoms: Heritage home">Kingdoms: Heritage</a><span>Intro editor</span></h1><nav aria-label="Documentation"><a href="kit-editor.html" data-icon="braces">Kit creator</a><a href="docs.html" data-icon="book-open">Documentation</a><a href="docs.html#/text-styles" data-icon="images">Style examples</a><a href="pack-assembler.html" data-icon="map-pin">Pack assembler</a></nav></header>
 <main>
@@ -33,12 +33,12 @@
 </div>
 <div class="preview-column">
 <section class="preview-pane" aria-label="Live preview">
-<div class="section-heading"><h2>Preview</h2><label class="preview-size">GUI size <select id="viewport"><option value="320">320 × 180</option><option value="480" selected>480 × 270</option><option value="640">640 × 360</option></select></label><label class="background-control"><span class="sr-only">Background</span><input id="background" type="color" value="#252525"></label></div>
+<div class="section-heading"><h2>Preview</h2><label class="preview-resolution">Resolution <select id="resolution" aria-label="Preview resolution"><option value="1280x720">1280 × 720</option><option value="1366x768">1366 × 768</option><option value="1920x1080" selected>1920 × 1080</option><option value="2560x1440">2560 × 1440</option><option value="3440x1440">3440 × 1440</option><option value="3840x2160">3840 × 2160</option></select></label><label class="preview-size">GUI scale <select id="viewport" aria-label="Preview GUI scale"><option value="0">Auto</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4" selected>4</option></select></label><label class="background-control"><span class="sr-only">Background</span><input id="background" type="color" value="#252525"></label></div>
+<div class="playback"><button id="play" class="primary" type="button" disabled>Play</button><button id="restart" type="button" disabled>Restart</button><input id="timeline" type="range" min="0" max="180" step="1" value="110" aria-label="Intro timeline" disabled><output id="clock">5.5 / 9.0 s</output><button id="mute" type="button" aria-label="Mute preview sound">Mute</button></div>
+<div class="preview-footer"><span id="phase">Loading Minecraft font…</span><label class="check"><input id="loop" type="checkbox"> Loop</label></div>
 <canvas id="preview" width="960" height="540" role="img" tabindex="0" aria-label="Live Minecraft intro preview with movable text boxes" aria-describedby="position-help"></canvas>
 <div class="position-toolbar"><label class="check"><input id="show-text-boxes" type="checkbox" checked> Text boxes</label><button id="move-title" type="button" aria-pressed="false">Move title</button><button id="move-subtitle" type="button" aria-pressed="false">Move subtitle</button></div>
 <p id="position-help" class="hint position-help">Drag a text box, or select it and use arrow keys. Hold Shift for larger steps.</p>
-<div class="playback"><button id="play" class="primary" type="button" disabled>Play</button><button id="restart" type="button" disabled>Restart</button><input id="timeline" type="range" min="0" max="180" step="1" value="110" aria-label="Intro timeline" disabled><output id="clock">5.5 / 9.0 s</output><button id="mute" type="button" aria-label="Mute preview sound">Mute</button></div>
-<div class="preview-footer"><span id="phase">Loading Minecraft font…</span><label class="check"><input id="loop" type="checkbox"> Loop</label></div>
 <p id="font-warning" class="notice" hidden></p><p id="audio-status" class="notice" role="status"></p>
 </section>
 <div class="options">
@@ -68,5 +68,5 @@
 </main>
 <dialog id="delete-draft-dialog" aria-labelledby="delete-draft-heading"><form method="dialog"><h2 id="delete-draft-heading">Delete this saved draft?</h2><p>Save a JSON copy first if you want to keep it. Packs that use this draft will need a replacement.</p><div class="dialog-actions"><button value="cancel" autofocus>Cancel</button><button id="confirm-delete-draft" type="button">Delete draft</button></div></form></dialog>
 <footer class="site-footer">Not affiliated with Mojang or Microsoft.</footer>
-<script src="editor/session.js?v=4"></script><script src="editor/icons.js"></script><script src="editor/assets.js"></script><script src="editor/engine.js?v=6"></script><script src="editor/tooltips.js?v=4"></script><script src="editor/json-editor.js"></script><script src="kit/drafts.js?v=3"></script><script src="editor/editor.js?v=8"></script>
+<script src="editor/session.js?v=4"></script><script src="editor/icons.js"></script><script src="editor/assets.js"></script><script src="editor/engine.js?v=7"></script><script src="editor/tooltips.js?v=5"></script><script src="editor/json-editor.js"></script><script src="kit/drafts.js?v=3"></script><script src="editor/editor.js?v=9"></script>
 </body></html>

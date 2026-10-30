@@ -2,7 +2,7 @@
 'use strict';
 const P=HeritagePreview, $=id=>document.getElementById(id),storageKey='heritage.introEditor.v1';
 if(!await HeritageSession.acquire(storageKey))return;
-const previewFields=['viewport','background','biome','structure','dimension','loop','show-text-boxes'];
+const previewFields=['resolution','viewport','background','biome','structure','dimension','loop','show-text-boxes'];
 const canvas=$('preview'), ctx=canvas.getContext('2d'), font=new Map(), tinted=new Map(), widthBuckets=new Map();
 let jsonState=P.readJson(JSON.stringify({intro:P.defaults}));
 let config=jsonState.config, main=[], sub=[], all=[], blocks=[], cues=[], revealEnds=[];
@@ -11,6 +11,7 @@ let audioContext, audioBuffer, gain;
 let history=[], historyIndex=-1, restoringHistory=false, historyGroup=null, historyTime=0, currentValidation={error:null,fromJson:false};
 let workspace,saveTimer,saveUnavailable=false,saveBlocked=false;
 let selectedBlock=null,drag=null;
+let preview=P.guiViewport(1920,1080,4);
 function draftOptions() {
   if(!workspace)return;
   const field=$('intro-drafts'),ids=[...workspace.entries.keys()];
@@ -119,7 +120,10 @@ function restoreHistory(direction) {
   $('json').value=snapshot.source;
   fillFields();
   if(!recovered&&Array.isArray(snapshot.values)&&snapshot.values.length===fields.length)fields.forEach((field,i)=>{if(field.type==='checkbox')field.checked=snapshot.values[i];else field.value=snapshot.values[i];});
-  for(const id of previewFields)if(snapshot.preview?.[id]!==undefined){if($(id).type==='checkbox')$(id).checked=snapshot.preview[id];else $(id).value=snapshot.preview[id];}
+  $('resolution').value=snapshot.preview?.resolution??'1920x1080';
+  if(!$('resolution').value)$('resolution').value='1920x1080';
+  for(const id of previewFields)if(id!=='resolution'&&id!=='viewport'&&snapshot.preview?.[id]!==undefined){if($(id).type==='checkbox')$(id).checked=snapshot.preview[id];else $(id).value=snapshot.preview[id];}
+  updateGuiScale(Number(snapshot.preview?.viewport??4));
   $('json').setSelectionRange(...snapshot.selection);
   $('preset').value='custom';
   validation(restoredValidation.error,restoredValidation.fromJson);
@@ -228,13 +232,27 @@ function buildCues() {
 }
 function glyph(ch) { return font.get(ch)||font.get('?'); }
 function advance(g) { return glyph(g.ch).advance+(g.effect.bold?1:0); }
+function updateGuiScale(requested=Number($('viewport').value)) {
+  const [width,height]=$('resolution').value.split('x').map(Number);
+  if([320,480,640].includes(requested))requested=Math.round(width/requested);
+  preview=P.guiViewport(width,height,requested);
+  const field=$('viewport');
+  field.replaceChildren(...Array.from({length:preview.maxScale+1},(_,scale)=>{
+    const size=P.guiViewport(width,height,scale),option=document.createElement('option');
+    option.value=scale;option.textContent=(scale===0?'Auto':scale)+' ('+size.guiWidth+' × '+size.guiHeight+')';
+    return option;
+  }));
+  field.value=requested===0?'0':String(preview.scale);
+}
 function rebuild() {
   main=P.parse(config.text,names());
   sub=P.parse(config.subtitle,names(),main.length+1);
   all=[...main,{ch:'\n',index:main.length,effect:{}},...sub];
   revealEnds=config.animation==='word_by_word'?P.wordEnds(all):[];
-  const w=Number($('viewport').value), h=w*9/16;
-  canvas.width=w*2; canvas.height=h*2;
+  updateGuiScale();
+  const w=preview.guiWidth,h=preview.guiHeight;
+  canvas.width=preview.width;canvas.height=preview.height;
+  canvas.style.aspectRatio=preview.width+' / '+preview.height;
   blocks=P.layout(config,main,sub,w,h,config.bar_style==='random'?slant:0,advance);
   cues=buildCues();
   const missing=[...new Set(all.filter(g=>!font.has(g.ch)&&g.ch!=='\n').map(g=>g.ch))];
@@ -326,7 +344,7 @@ function editing(event) {
 }
 function coordinatesFor(kind) {
   if(config[kind+'_coordinates'])return {...config[kind+'_coordinates']};
-  const block=blocks[kind==='title'?0:1],w=canvas.width/2,h=canvas.height/2;
+  const block=blocks[kind==='title'?0:1],w=preview.guiWidth,h=preview.guiHeight;
   const height=block.lines.length*block.lineHeight*block.scale;
   const width=Math.max(0,...block.lines.map(line=>line.width))*block.scale;
   const position=P.positions[config[kind+'_position']];
@@ -349,7 +367,7 @@ function selectBlock(kind) {
 }
 function point(event) {
   const rect=canvas.getBoundingClientRect();
-  return {x:(event.clientX-rect.left)/rect.width*canvas.width/2,y:(event.clientY-rect.top)/rect.height*canvas.height/2};
+  return {x:(event.clientX-rect.left)/rect.width*preview.width/preview.scale,y:(event.clientY-rect.top)/rect.height*preview.height/preview.scale};
 }
 function blockAt(point) {
   const order=selectedBlock===null?[1,0]:[selectedBlock==='title'?0:1,selectedBlock==='title'?1:0];
@@ -409,7 +427,7 @@ function setupPositionControls() {
     if(!drag.moved&&Math.abs(dx)+Math.abs(dy)<1)return;
     drag.moved=true;
     const round=value=>Math.round(P.clamp(value,0,100)*10)/10;
-    setCoordinates(drag.kind,{...drag.coordinates,x:round(drag.coordinates.x+dx/(canvas.width/2)*100),y:round(drag.coordinates.y+dy/(canvas.height/2)*100)});
+    setCoordinates(drag.kind,{...drag.coordinates,x:round(drag.coordinates.x+dx/preview.guiWidth*100),y:round(drag.coordinates.y+dy/preview.guiHeight*100)});
   });
   canvas.addEventListener('pointerup',event=>{if(event.pointerId===drag?.pointerId)finishDrag();});
   canvas.addEventListener('pointercancel',()=>finishDrag(true));
@@ -499,8 +517,8 @@ function bars(w,h,ticks) {
   }
 }
 function draw() {
-  const w=canvas.width/2,h=canvas.height/2;
-  ctx.setTransform(2,0,0,2,0,0);ctx.imageSmoothingEnabled=false;ctx.globalAlpha=1;
+  const w=preview.guiWidth,h=preview.guiHeight;
+  ctx.setTransform(preview.scale,0,0,preview.scale,0,0);ctx.imageSmoothingEnabled=false;ctx.globalAlpha=1;
   ctx.fillStyle=$('background').value;ctx.fillRect(0,0,w,h);
   const elapsed=time-config.black_hold_ticks, total=P.duration(config);
   if(time<total) {
@@ -634,7 +652,7 @@ $('mute').addEventListener('click',()=>{
   if(!muted&&playing&&config.blip) prepareAudio().catch(error=>{$('audio-status').textContent=error.message;});
 });
 $('background').addEventListener('input',()=>{draw();scheduleSave();});
-$('viewport').addEventListener('change',()=>{rebuild();draw();scheduleSave();});
+for(const id of ['resolution','viewport'])$(id).addEventListener('change',()=>{rebuild();draw();scheduleSave();});
 $('loop').addEventListener('change',scheduleSave);
 for(const id of ['biome','structure','dimension']) $(id).addEventListener('input',()=>{pause();refreshPreview();scheduleSave();});
 $('json').addEventListener('input',applyJson);
