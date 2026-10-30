@@ -9,8 +9,20 @@
   "subtitle_key": "heritage.kingdomsheritage.spawns.village.subtitle",
   "intro": {
     "text": "You woke up in a <structure>...",
+    "subtitle": "... How did you get here?",
     "title_position": "left_center",
-    "subtitle_position": "left_center",
+    "subtitle_position": "right_center",
+    "title_coordinates": {
+      "width": 35,
+      "x": 7.1,
+      "y": 63.1
+    },
+    "large_subtitle": true,
+    "subtitle_coordinates": {
+      "width": 38.2,
+      "x": 56.4,
+      "y": 71.2
+    },
     "cinematic_bars": true,
     "hide_hud_during_bars": true
   }
