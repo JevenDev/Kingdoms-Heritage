@@ -1,6 +1,8 @@
 {
   "title": "Settler",
+  "subtitle": "Farming supplies",
   "title_key": "heritage.kingdomsheritage.backgrounds.settler.title",
+  "subtitle_key": "heritage.kingdomsheritage.backgrounds.settler.subtitle",
   "type": "structure",
   "order": 4,
   "kits": [

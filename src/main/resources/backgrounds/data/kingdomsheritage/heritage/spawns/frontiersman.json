@@ -1,6 +1,8 @@
 {
   "title": "Frontiersman",
+  "subtitle": "Building supplies",
   "title_key": "heritage.kingdomsheritage.backgrounds.frontiersman.title",
+  "subtitle_key": "heritage.kingdomsheritage.backgrounds.frontiersman.subtitle",
   "type": "biome",
   "order": 6,
   "kits": [

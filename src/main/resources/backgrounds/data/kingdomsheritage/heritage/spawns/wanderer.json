@@ -1,6 +1,8 @@
 {
   "title": "Wanderer",
+  "subtitle": "Travel supplies",
   "title_key": "heritage.kingdomsheritage.backgrounds.wanderer.title",
+  "subtitle_key": "heritage.kingdomsheritage.backgrounds.wanderer.subtitle",
   "type": "random",
   "order": 5,
   "kits": [

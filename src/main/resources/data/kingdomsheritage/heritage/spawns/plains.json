@@ -1,10 +1,12 @@
 {
   "title": "Plains",
+  "subtitle": "Open grasslands",
   "image": "kingdomsheritage:textures/gui/locations/plains.png",
   "type": "biome",
   "order": 3,
   "target": "minecraft:plains",
   "title_key": "heritage.kingdomsheritage.spawns.plains.title",
+  "subtitle_key": "heritage.kingdomsheritage.spawns.plains.subtitle",
   "intro": {
     "text": "You woke up in a <biome>...",
     "title_position": "left_center",

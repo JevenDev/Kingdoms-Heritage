@@ -273,9 +273,11 @@ public final class SelectionManager {
             JsonObject choice = new JsonObject();
             choice.addProperty("id", spawn.id().toString());
             choice.addProperty("title", spawn.title());
+            choice.addProperty("subtitle", spawn.subtitle());
             choice.addProperty("description", spawn.description());
             choice.addProperty("image", spawn.image().toString());
             choice.addProperty("title_key", spawn.titleKey());
+            choice.addProperty("subtitle_key", spawn.subtitleKey());
             choice.addProperty("description_key", spawn.descriptionKey());
             JsonArray allowed = new JsonArray();
             HeritageCatalog.kits().values().stream().filter(spawn::allows).forEach(kit -> allowed.add(kit.id().toString()));

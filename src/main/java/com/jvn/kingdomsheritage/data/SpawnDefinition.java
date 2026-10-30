@@ -10,7 +10,8 @@ import net.minecraft.util.RandomSource;
 public record SpawnDefinition(ResourceLocation id, String title, String description, ResourceLocation image,
                               int order, Kind kind, ResourceLocation dimension, ResourceLocation target,
                               int x, int y, int z, boolean targetTag, ResourceLocation piece,
-                              List<String> kits, int searchRadius, int randomRadius, String titleKey, String descriptionKey, IntroDefinition intro, List<SpawnDefinition> pool) {
+                              List<String> kits, int searchRadius, int randomRadius, String titleKey, String descriptionKey, IntroDefinition intro, List<SpawnDefinition> pool,
+                              String subtitle, String subtitleKey) {
     public enum Kind { DEFAULT, RANDOM, BIOME, STRUCTURE, FIXED, POOL }
 
     public SpawnDefinition {
@@ -22,6 +23,15 @@ public record SpawnDefinition(ResourceLocation id, String title, String descript
         if (pool.stream().anyMatch(entry -> entry.kind() == Kind.POOL)) {
             throw new IllegalArgumentException("A pool cannot contain another pool");
         }
+    }
+
+    public SpawnDefinition(ResourceLocation id, String title, String description, ResourceLocation image,
+                           int order, Kind kind, ResourceLocation dimension, ResourceLocation target,
+                           int x, int y, int z, boolean targetTag, ResourceLocation piece,
+                           List<String> kits, int searchRadius, int randomRadius, String titleKey, String descriptionKey,
+                           IntroDefinition intro, List<SpawnDefinition> pool) {
+        this(id, title, description, image, order, kind, dimension, target, x, y, z, targetTag, piece,
+                kits, searchRadius, randomRadius, titleKey, descriptionKey, intro, pool, "", "");
     }
 
     public SpawnDefinition(ResourceLocation id, String title, String description, ResourceLocation image,
@@ -50,6 +60,7 @@ public record SpawnDefinition(ResourceLocation id, String title, String descript
     public static SpawnDefinition parse(ResourceLocation id, JsonObject json) {
         String title = DefinitionJson.text(json, "title", 120, false);
         String description = DefinitionJson.text(json, "description", 4000, true);
+        String subtitle = json.has("subtitle") ? DefinitionJson.text(json, "subtitle", 120, true) : "";
         Kind kind = Kind.valueOf(GsonHelper.getAsString(json, "type").toUpperCase(java.util.Locale.ROOT));
         ResourceLocation dimension = ResourceLocation.parse(GsonHelper.getAsString(json, "dimension", "minecraft:overworld"));
         String targetName = kind == Kind.BIOME || kind == Kind.STRUCTURE ? GsonHelper.getAsString(json, "target") : null;
@@ -72,7 +83,8 @@ public record SpawnDefinition(ResourceLocation id, String title, String descript
                 kind, dimension, target, x, y, z, targetTag, piece, DefinitionJson.ids(json, "kits", true),
                 radius(json, "search_radius"), radius(json, "random_radius"),
                 DefinitionJson.text(json, "title_key", 256, true), DefinitionJson.text(json, "description_key", 256, true),
-                json.has("intro") ? IntroDefinition.parse(GsonHelper.getAsJsonObject(json, "intro")) : null, pool(id, json, kind));
+                json.has("intro") ? IntroDefinition.parse(GsonHelper.getAsJsonObject(json, "intro")) : null, pool(id, json, kind),
+                subtitle, DefinitionJson.text(json, "subtitle_key", 256, true));
     }
 
     private static List<SpawnDefinition> pool(ResourceLocation id, JsonObject json, Kind kind) {

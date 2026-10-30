@@ -1,9 +1,11 @@
 {
   "title": "Random",
+  "subtitle": "Random wilderness",
   "image": "kingdomsheritage:textures/gui/locations/random.png",
   "type": "random",
   "order": 1,
   "title_key": "heritage.kingdomsheritage.spawns.random.title",
+  "subtitle_key": "heritage.kingdomsheritage.spawns.random.subtitle",
   "intro": {
     "text": "You woke up in a <biome>...",
     "title_position": "left_center",

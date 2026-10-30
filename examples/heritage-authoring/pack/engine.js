@@ -10,7 +10,7 @@ const types=['default','random','biome','structure','fixed','pool'];
 const bundledSpawns=['default','random','plains','village'];
 const emptyKit={id:'builtin-empty',name:'Empty-handed',document:{title:'Empty-handed',description:'Begin with an empty inventory.',items:[]},error:'',warnings:[]};
 const numericFields=['x','y','z','order','search_radius','random_radius'];
-const fields=['title','description','title_key','description_key','type','dimension','target','piece','x','y','z','order','search_radius','random_radius','image'];
+const fields=['title','subtitle','description','title_key','subtitle_key','description_key','type','dimension','target','piece','x','y','z','order','search_radius','random_radius','image'];
 const destinationFields=['type','dimension','target','piece','x','y','z','search_radius','random_radius','intro'];
 const slug=value=>String(value).toLowerCase().replace(/[^a-z0-9_-]+/g,'_').replace(/^_+|_+$/g,'')||'untitled';
 function fileId(value,label) {
@@ -93,7 +93,7 @@ function validateSpawn(document,allowUnknown=false) {
   if(!object(document))throw new Error('A location must be an object.');
   const title=document.title??document.title_key;
   if(typeof title!=='string'||!title.trim()||title.length>120)throw new Error('Enter a location title or title key from 1 to 120 characters.');
-  for(const [key,max] of [['description',4000],['title_key',256],['description_key',256]])if(document[key]!==undefined&&(typeof document[key]!=='string'||document[key].length>max))throw new Error(key+' must be text up to '+max+' characters.');
+  for(const [key,max] of [['subtitle',120],['description',4000],['title_key',256],['subtitle_key',256],['description_key',256]])if(document[key]!==undefined&&(typeof document[key]!=='string'||document[key].length>max))throw new Error(key+' must be text up to '+max+' characters.');
   const type=typeof document.type==='string'?document.type.toLowerCase():'';
   if(!types.includes(type))throw new Error('Choose a location type.');
   if(document.enabled===false)throw new Error('This location is disabled.');

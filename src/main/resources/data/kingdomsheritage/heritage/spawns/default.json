@@ -1,9 +1,11 @@
 {
   "title": "Default",
+  "subtitle": "World spawn",
   "image": "kingdomsheritage:textures/gui/locations/default.png",
   "type": "default",
   "order": 0,
   "title_key": "heritage.kingdomsheritage.spawns.default.title",
+  "subtitle_key": "heritage.kingdomsheritage.spawns.default.subtitle",
   "intro": {
     "text": "You woke up in a <biome>...",
     "title_position": "left_center",

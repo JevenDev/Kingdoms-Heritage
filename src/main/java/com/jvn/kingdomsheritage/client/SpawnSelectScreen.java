@@ -314,6 +314,8 @@ public final class SpawnSelectScreen extends Screen {
             graphics.pose().scale(titleScale, titleScale, 1);
             for (int index = 0; index < lines.size(); index++) graphics.drawString(font, lines.get(index), 0, index * font.lineHeight, 0xffffff, true);
             graphics.pose().popPose();
+            String subtitle = DefinitionJson.component(choice, "subtitle").getString();
+            graphics.drawString(font, font.plainSubstrByWidth(subtitle, 114), 7, CARD_HEIGHT - 15, 0xffdddddd, true);
             if (expanded != null) {
                 var description = font.split(DefinitionJson.component(choice, "description"), 230);
                 descriptionScroll = Math.min(descriptionScroll, Math.max(0, description.size() * font.lineHeight - 170));

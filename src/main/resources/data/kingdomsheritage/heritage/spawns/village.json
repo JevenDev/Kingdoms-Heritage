@@ -1,10 +1,12 @@
 {
   "title": "Village",
+  "subtitle": "Nearby settlement",
   "image": "kingdomsheritage:textures/gui/locations/village.png",
   "type": "structure",
   "order": 2,
   "target": "minecraft:village",
   "title_key": "heritage.kingdomsheritage.spawns.village.title",
+  "subtitle_key": "heritage.kingdomsheritage.spawns.village.subtitle",
   "intro": {
     "text": "You woke up in a <structure>...",
     "title_position": "left_center",
