@@ -12,6 +12,7 @@ import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 
 public final class HeritageNetwork {
     public static Consumer<String> clientReceiver = json -> {};
+    public static Consumer<Boolean> joinReceiver = pending -> {};
 
     private HeritageNetwork() {}
 
@@ -21,6 +22,13 @@ public final class HeritageNetwork {
                 (buffer, value) -> buffer.writeUtf(value.json, 900000),
                 buffer -> new Catalog(buffer.readUtf(900000)));
         @Override public Type<Catalog> type() { return TYPE; }
+    }
+
+    public record JoinState(boolean pending) implements CustomPacketPayload {
+        public static final Type<JoinState> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(KingdomsHeritage.MOD_ID, "join_state"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, JoinState> CODEC = StreamCodec.of(
+                (buffer, value) -> buffer.writeBoolean(value.pending), buffer -> new JoinState(buffer.readBoolean()));
+        @Override public Type<JoinState> type() { return TYPE; }
     }
 
     public record Choose(String spawn, String kit, long revision) implements CustomPacketPayload {
@@ -48,5 +56,6 @@ public final class HeritageNetwork {
         registrar.playToClient(Catalog.TYPE, Catalog.CODEC, (packet, context) -> clientReceiver.accept(packet.json));
         registrar.playToServer(Choose.TYPE, Choose.CODEC, (packet, context) ->
                 SelectionManager.choose((ServerPlayer) context.player(), packet));
+        registrar.optional().playToClient(JoinState.TYPE, JoinState.CODEC, (packet, context) -> joinReceiver.accept(packet.pending));
     }
 }

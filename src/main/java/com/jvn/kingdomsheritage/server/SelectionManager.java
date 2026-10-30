@@ -34,6 +34,7 @@ import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 import net.neoforged.neoforge.event.tick.PlayerTickEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import net.neoforged.neoforge.network.PacketDistributor;
+import net.neoforged.neoforge.network.registration.NetworkRegistry;
 
 public final class SelectionManager {
     private record Preparation(ServerPlayer player, HeritageNetwork.Choose request, SpawnResolver.Search search) {}
@@ -65,10 +66,14 @@ public final class SelectionManager {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
         SpawnIntro.release(player);
         CompoundTag state = state(player);
-        if (state.getBoolean("complete")) return;
+        if (state.getBoolean("complete")) {
+            sendJoinState(player, false);
+            return;
+        }
         if (!state.getBoolean("pending") && !state.getBoolean("reset") && HeritageConfig.EXEMPT_EXISTING_PLAYERS.get()
                 && player.getStats().getValue(Stats.CUSTOM.get(Stats.PLAY_TIME)) > 0) {
             state.putBoolean("complete", true);
+            sendJoinState(player, false);
             return;
         }
         if (!state.getBoolean("pending")) {
@@ -81,6 +86,13 @@ public final class SelectionManager {
             state.putFloat("yaw", player.getYRot());
         }
         hold(player);
+        sendJoinState(player, true);
+    }
+
+    private static void sendJoinState(ServerPlayer player, boolean pending) {
+        if (NetworkRegistry.hasChannel(player.connection, HeritageNetwork.JoinState.TYPE.id())) {
+            PacketDistributor.sendToPlayer(player, new HeritageNetwork.JoinState(pending));
+        }
     }
 
     private static void hold(ServerPlayer player) {

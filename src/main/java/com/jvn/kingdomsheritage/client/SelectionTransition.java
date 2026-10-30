@@ -4,10 +4,16 @@ import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.screens.ConnectScreen;
 import net.minecraft.client.gui.screens.DeathScreen;
 import net.minecraft.client.gui.screens.DisconnectedScreen;
+import net.minecraft.client.gui.screens.GenericMessageScreen;
+import net.minecraft.client.gui.screens.LevelLoadingScreen;
+import net.minecraft.client.gui.screens.ProgressScreen;
 import net.minecraft.client.gui.screens.ReceivingLevelScreen;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.contents.TranslatableContents;
 import net.minecraft.util.Mth;
 import net.neoforged.bus.api.EventPriority;
 import net.neoforged.bus.api.ICancellableEvent;
@@ -18,6 +24,7 @@ import org.lwjgl.glfw.GLFW;
 final class SelectionTransition {
     private static final int DURATION_MILLIS = 300;
     private static boolean active;
+    private static boolean joining;
     private static boolean revealing;
     private static boolean awaitingWorld;
     private static long started;
@@ -38,6 +45,20 @@ final class SelectionTransition {
     }
 
     static boolean active() { return active; }
+    static boolean joining() { return joining; }
+
+    static void join() {
+        beginJoin(true);
+    }
+
+    private static void beginJoin(boolean opaque) {
+        if (joining && !opaque) return;
+        active = joining = true;
+        revealing = awaitingWorld = false;
+        from = opaque ? 1 : 0;
+        onBlack = null;
+        started = Util.getMillis();
+    }
 
     static void fadeOut(Runnable action) {
         if (active) return;
@@ -52,7 +73,7 @@ final class SelectionTransition {
         if (!active) return;
         from = opacity(Util.getMillis());
         revealing = true;
-        awaitingWorld = false;
+        joining = awaitingWorld = false;
         onBlack = null;
         started = Util.getMillis();
     }
@@ -60,6 +81,7 @@ final class SelectionTransition {
     static void arrive() {
         if (!active) return;
         awaitingWorld = true;
+        joining = false;
         onBlack = null;
     }
 
@@ -90,7 +112,7 @@ final class SelectionTransition {
     }
 
     static void clear() {
-        active = revealing = awaitingWorld = false;
+        active = joining = revealing = awaitingWorld = false;
         from = 0;
         onBlack = null;
         disconnect = null;
@@ -103,21 +125,27 @@ final class SelectionTransition {
     }
 
     private static boolean waiting() {
-        return active && !revealing && !awaitingWorld && onBlack == null
+        return active && !joining && !revealing && !awaitingWorld && onBlack == null
                 && Util.getMillis() - started >= DURATION_MILLIS + 400;
     }
 
     static void render(GuiGraphics graphics) {
         if (!active) return;
-        int alpha = Math.round(opacity(Util.getMillis()) * 255);
+        long now = Util.getMillis();
+        int alpha = Math.round(opacity(now) * 255);
         graphics.flush();
         graphics.pose().pushPose();
         graphics.pose().translate(0, 0, 1000);
         graphics.fill(0, 0, graphics.guiWidth(), graphics.guiHeight(), alpha << 24);
+        graphics.flush();
+        if (alpha >= 4 && (joining || awaitingWorld || waiting())) {
+            LoadingIndicator.render(graphics, graphics.guiWidth() / 2, graphics.guiHeight() / 2 - 8, now, alpha);
+            graphics.drawCenteredString(Minecraft.getInstance().font, joining || awaitingWorld
+                            ? Component.translatable("screen.kingdomsheritage.loading") : ClientSelection.progress(),
+                    graphics.guiWidth() / 2, graphics.guiHeight() / 2 + 16, alpha << 24 | 0xffffff);
+        }
         if (waiting()) {
             Minecraft minecraft = Minecraft.getInstance();
-            graphics.drawCenteredString(minecraft.font, ClientSelection.progress(), graphics.guiWidth() / 2,
-                    graphics.guiHeight() / 2, 0xffffff);
             if (disconnect == null) disconnect = Button.builder(Component.translatable("menu.disconnect"),
                     button -> ClientSelection.disconnect()).bounds(0, 0, 130, 20).build();
             disconnect.setPosition((graphics.guiWidth() - disconnect.getWidth()) / 2, graphics.guiHeight() - 28);
@@ -131,16 +159,26 @@ final class SelectionTransition {
 
     private static void screen(ScreenEvent.Render.Post event) {
         render(event.getGuiGraphics());
+        if (joining && loadingScreen(event.getScreen())) {
+            GuiGraphics graphics = event.getGuiGraphics();
+            graphics.pose().pushPose();
+            graphics.pose().translate(0, 0, 1100);
+            for (var child : event.getScreen().children()) {
+                if (child instanceof Button button) button.render(graphics, event.getMouseX(), event.getMouseY(), event.getPartialTick());
+            }
+            graphics.flush();
+            graphics.pose().popPose();
+        }
     }
 
     private static void mouse(ScreenEvent.MouseButtonPressed.Pre event) {
-        if (!active) return;
+        if (!active || joining && loadingScreen(event.getScreen())) return;
         if (waiting() && disconnect != null) disconnect.mouseClicked(event.getMouseX(), event.getMouseY(), event.getButton());
         event.setCanceled(true);
     }
 
     private static void key(ScreenEvent.KeyPressed.Pre event) {
-        if (!active) return;
+        if (!active || joining && loadingScreen(event.getScreen())) return;
         if (waiting() && disconnect != null) {
             if (event.getKeyCode() == GLFW.GLFW_KEY_TAB) disconnect.setFocused(true);
             else disconnect.keyPressed(event.getKeyCode(), event.getScanCode(), event.getModifiers());
@@ -149,10 +187,23 @@ final class SelectionTransition {
     }
 
     private static void input(ICancellableEvent event) {
-        if (active) event.setCanceled(true);
+        if (active && !joining) event.setCanceled(true);
+    }
+
+    private static boolean loadingScreen(Screen screen) {
+        if (screen instanceof ConnectScreen || screen instanceof LevelLoadingScreen || screen instanceof ReceivingLevelScreen) return true;
+        if (screen instanceof ProgressScreen) return joining;
+        return screen instanceof GenericMessageScreen && screen.getTitle().getContents() instanceof TranslatableContents contents
+                && (contents.getKey().equals("selectWorld.data_read") || contents.getKey().equals("createWorld.preparing"));
     }
 
     private static void opening(ScreenEvent.Opening event) {
-        if (event.getNewScreen() instanceof DeathScreen || event.getNewScreen() instanceof DisconnectedScreen) clear();
+        Screen screen = event.getNewScreen();
+        if (screen instanceof DeathScreen || screen instanceof DisconnectedScreen) {
+            clear();
+        } else if (screen != null && !(screen instanceof SpawnSelectScreen)) {
+            if ((Minecraft.getInstance().level == null || joining) && loadingScreen(screen)) beginJoin(false);
+            else if (joining) clear();
+        }
     }
 }

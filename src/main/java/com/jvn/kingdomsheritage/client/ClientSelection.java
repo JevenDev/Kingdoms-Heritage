@@ -8,6 +8,7 @@ import java.util.List;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.GenericMessageScreen;
 import net.minecraft.client.gui.screens.TitleScreen;
+import net.minecraft.network.ConnectionProtocol;
 import net.minecraft.network.chat.Component;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -17,6 +18,7 @@ import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.MovementInputUpdateEvent;
 import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.network.registration.NetworkRegistry;
 
 @EventBusSubscriber(modid = KingdomsHeritage.MOD_ID, value = Dist.CLIENT)
 public final class ClientSelection {
@@ -30,8 +32,13 @@ public final class ClientSelection {
     @SubscribeEvent
     public static void setup(FMLClientSetupEvent event) {
         HeritageNetwork.clientReceiver = ClientSelection::receive;
+        HeritageNetwork.joinReceiver = pending -> {
+            if (pending) SelectionTransition.join();
+            else SelectionTransition.arrive();
+        };
         NeoForge.EVENT_BUS.addListener(ClientSelection::tick);
         NeoForge.EVENT_BUS.addListener(ClientSelection::movement);
+        NeoForge.EVENT_BUS.addListener(ClientSelection::login);
         NeoForge.EVENT_BUS.addListener(ClientSelection::logout);
         KitSelection.register();
         SpawnIntroOverlay.register();
@@ -72,7 +79,7 @@ public final class ClientSelection {
             SelectionTransition.arrive();
             return;
         }
-        SelectionTransition.reveal();
+        if (!SelectionTransition.joining()) SelectionTransition.reveal();
         catalog = next;
         selection = new SpawnSelectScreen(catalog);
         selection.restoreSelection(spawnId);
@@ -83,11 +90,12 @@ public final class ClientSelection {
                 kits.restoreSelection(kitId);
                 kits.openInventory();
             }
+            if (SelectionTransition.joining()) SelectionTransition.reveal();
         }
     }
 
     private static void hideHud(net.neoforged.neoforge.client.event.RenderGuiEvent.Pre event) {
-        if (catalog != null || SpawnIntroOverlay.hidesHud()) {
+        if (catalog != null || SelectionTransition.joining() || SpawnIntroOverlay.hidesHud()) {
             event.setCanceled(true);
             renderIntro(event.getGuiGraphics(), event.getPartialTick().getGameTimeDeltaPartialTick(false));
         }
@@ -107,7 +115,7 @@ public final class ClientSelection {
     }
 
     private static void hideHand(net.neoforged.neoforge.client.event.RenderHandEvent event) {
-        if (catalog != null) event.setCanceled(true);
+        if (catalog != null || SelectionTransition.active()) event.setCanceled(true);
     }
 
     static void openKits(String spawn) {
@@ -157,6 +165,7 @@ public final class ClientSelection {
         } else if (!(minecraft.screen instanceof SpawnSelectScreen)) {
             minecraft.setScreen(selection);
         }
+        if (SelectionTransition.joining()) SelectionTransition.reveal();
     }
 
     private static void movement(MovementInputUpdateEvent event) {
@@ -169,8 +178,17 @@ public final class ClientSelection {
         input.up = input.down = input.left = input.right = false;
     }
 
+    private static void login(ClientPlayerNetworkEvent.LoggingIn event) {
+        if (NetworkRegistry.hasChannel(event.getConnection(), ConnectionProtocol.PLAY, HeritageNetwork.JoinState.TYPE.id())) {
+            SelectionTransition.join();
+        } else if (SelectionTransition.joining()) {
+            SelectionTransition.clear();
+        }
+    }
+
     private static void logout(ClientPlayerNetworkEvent.LoggingOut event) {
-        SelectionTransition.clear();
+        // starting an integrated server also fires a logout without a connection
+        if (event.getConnection() != null || !SelectionTransition.joining()) SelectionTransition.clear();
         SpawnIntroOverlay.clear();
         if (kits != null) kits.restore();
         kits = null;
