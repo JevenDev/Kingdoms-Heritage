@@ -1,4 +1,4 @@
-@import url('site.css');
+@import url('site.css?v=2');
 h2 { font-size: 15px; font-weight: 600; margin: 0; }
 nav { display: flex; align-items: center; gap: 24px; font-size: 13px; }
 a { display: inline-flex; align-items: center; gap: 7px; color: #aaa; text-decoration: none; }
@@ -15,6 +15,7 @@ textarea { resize: vertical; width: 100%; font-family: 'Monocraft', monospace; f
 .draft-status { font-size: calc(12px + var(--reading-increase)); color: #888; white-space: nowrap; }
 .document-file-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; }
 .document-file-actions button, .file-button { font-size: calc(12px + var(--reading-increase)); padding: 6px 9px; }
+.document-file-actions :is(button, .file-button, .handoff, select, input:not([type=file])) { display: inline-flex; align-items: center; justify-content: center; height: var(--control-height); min-height: var(--control-height); padding: 0 10px; font-size: var(--body-font-size); line-height: 1; white-space: nowrap; }
 .document-file-actions select { font: calc(11px + var(--reading-increase)) Monocraft,monospace; max-width: 160px; }
 .intro-name-control { display: flex; align-items: center; gap: 8px; color: #aaa; font-size: calc(12px + var(--reading-increase)); }
 .intro-name-control input { width: 180px; min-width: 0; padding: 5px 8px; }
@@ -169,3 +170,7 @@ legend { color: #aaa; font-size: calc(12px + var(--reading-increase)); padding: 
   .intro-name-control { grid-column: 1/-1; }
   .intro-name-control input { flex: 1; width: 100%; }
 }
+
+.intro-editor :is(button, select, input, textarea, .file-button, .handoff, label, legend, .toolbar span) { font-size: var(--body-font-size); }
+.intro-editor :is(button, select, input:not([type=checkbox]):not([type=range]):not([type=file]):not([type=color]), .file-button, .handoff) { height: var(--control-height); min-height: var(--control-height); padding-block: 0; line-height: 1; }
+.intro-editor input[type=color] { width: var(--control-height); height: var(--control-height); }

@@ -9,9 +9,9 @@ button { border-color: transparent; display: inline-flex; align-items: center; j
 button:where(:not(:disabled)):hover { background: #141414; color: #eee; }
 button:where(:not(:disabled)):active { background: #202020; }
 button:disabled { opacity: .4; cursor: default; }
-button.primary { background: #eee; border-color: #eee; color: #000; font-weight: 600; }
-button.primary:hover:not(:disabled) { background: #fff; color: #000; }
-button.primary:active:not(:disabled) { background: #ddd; }
+button.primary, .document-file-actions :is(button, .file-button, .handoff) { background: #eee; border-color: #eee; color: #000; font-weight: 600; }
+button.primary:hover:not(:disabled), .document-file-actions :is(button, .file-button, .handoff):hover:not(:disabled) { background: #fff; color: #000; }
+button.primary:active:not(:disabled), .document-file-actions :is(button, .file-button, .handoff):active:not(:disabled) { background: #ddd; }
 button.quiet { border-color: transparent; background: transparent; color: #aaa; }
 button.quiet:hover:not(:disabled) { color: #eee; background: #141414; }
 button.copy-success, button.copy-success:hover { color: #8fc98f; background: transparent; border-color: transparent; }
