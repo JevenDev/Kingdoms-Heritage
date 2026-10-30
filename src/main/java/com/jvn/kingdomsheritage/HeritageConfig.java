@@ -6,6 +6,8 @@ public final class HeritageConfig {
     public enum InventoryPolicy { REPLACE, MERGE, PRESERVE }
 
     public static final ModConfigSpec SPEC;
+    public static final ModConfigSpec CLIENT_SPEC;
+    public static final ModConfigSpec.BooleanValue SELECTION_MUSIC;
     public static final ModConfigSpec.EnumValue<InventoryPolicy> INVENTORY_POLICY;
     public static final ModConfigSpec.BooleanValue EXEMPT_EXISTING_PLAYERS;
     public static final ModConfigSpec.BooleanValue HOMELAND_RESPAWN;
@@ -20,6 +22,9 @@ public final class HeritageConfig {
         EXEMPT_EXISTING_PLAYERS = builder.define("exemptExistingPlayers", true);
         HOMELAND_RESPAWN = builder.define("homelandRespawn", false);
         SPEC = builder.build();
+        var client = new ModConfigSpec.Builder();
+        SELECTION_MUSIC = client.define("selectionMusic", true);
+        CLIENT_SPEC = client.build();
     }
 
     private HeritageConfig() {}

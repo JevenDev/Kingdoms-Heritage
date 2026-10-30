@@ -1,4 +1,12 @@
 {
+  "selection_music": {
+    "sounds": [
+      {
+        "name": "kingdomsheritage:music/selection",
+        "stream": true
+      }
+    ]
+  },
   "dialogue": {
     "sounds": [
       "kingdomsheritage:dialogue/dialogue_villager_01"

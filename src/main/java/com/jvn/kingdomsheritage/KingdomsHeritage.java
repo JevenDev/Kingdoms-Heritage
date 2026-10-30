@@ -13,6 +13,7 @@ public final class KingdomsHeritage {
 
     public KingdomsHeritage(IEventBus modEventBus, ModContainer container) {
         container.registerConfig(net.neoforged.fml.config.ModConfig.Type.SERVER, HeritageConfig.SPEC);
+        container.registerConfig(net.neoforged.fml.config.ModConfig.Type.CLIENT, HeritageConfig.CLIENT_SPEC);
         modEventBus.addListener(com.jvn.kingdomsheritage.network.HeritageNetwork::register);
         modEventBus.addListener((net.neoforged.neoforge.event.AddPackFindersEvent event) -> event.addPackFinders(
                 net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(MOD_ID, "backgrounds"),

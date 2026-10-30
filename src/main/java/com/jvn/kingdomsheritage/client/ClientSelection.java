@@ -42,6 +42,7 @@ public final class ClientSelection {
         NeoForge.EVENT_BUS.addListener(ClientSelection::logout);
         KitSelection.register();
         SpawnIntroOverlay.register();
+        SelectionMusic.register();
         SelectionTransition.register();
         NeoForge.EVENT_BUS.addListener(ClientSelection::hideHud);
         NeoForge.EVENT_BUS.addListener(ClientSelection::renderIntroAfterHud);
@@ -157,6 +158,7 @@ public final class ClientSelection {
     private static void tick(ClientTickEvent.Post event) {
         SelectionTransition.tick();
         SpawnIntroOverlay.tick();
+        SelectionMusic.tick(catalog != null || SpawnIntroOverlay.active());
         Minecraft minecraft = Minecraft.getInstance();
         if (catalog == null || minecraft.level == null || minecraft.player == null) return;
         if (kits != null) {
@@ -187,6 +189,7 @@ public final class ClientSelection {
     }
 
     private static void logout(ClientPlayerNetworkEvent.LoggingOut event) {
+        SelectionMusic.stop();
         // starting an integrated server also fires a logout without a connection
         if (event.getConnection() != null || !SelectionTransition.joining()) SelectionTransition.clear();
         SpawnIntroOverlay.clear();
@@ -198,6 +201,7 @@ public final class ClientSelection {
     }
 
     static void disconnect() {
+        SelectionMusic.stop();
         SelectionTransition.clear();
         SpawnIntroOverlay.clear();
         Minecraft minecraft = Minecraft.getInstance();
