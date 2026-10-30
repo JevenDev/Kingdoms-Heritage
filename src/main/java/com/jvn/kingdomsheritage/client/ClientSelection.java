@@ -35,6 +35,7 @@ public final class ClientSelection {
         NeoForge.EVENT_BUS.addListener(ClientSelection::logout);
         KitSelection.register();
         SpawnIntroOverlay.register();
+        SelectionTransition.register();
         NeoForge.EVENT_BUS.addListener(ClientSelection::hideHud);
         NeoForge.EVENT_BUS.addListener(ClientSelection::renderIntroAfterHud);
         NeoForge.EVENT_BUS.addListener(ClientSelection::hideHand);
@@ -49,6 +50,7 @@ public final class ClientSelection {
                 if (kits != null) kits.retry();
                 else if (selection != null) selection.retry();
                 progress = "";
+                SelectionTransition.reveal();
             }
             return;
         }
@@ -67,8 +69,10 @@ public final class ClientSelection {
             if (minecraft.player != null) minecraft.player.closeContainer();
             minecraft.setScreen(null);
             if (next.has("intro")) SpawnIntroOverlay.start(next);
+            SelectionTransition.arrive();
             return;
         }
+        SelectionTransition.reveal();
         catalog = next;
         selection = new SpawnSelectScreen(catalog);
         selection.restoreSelection(spawnId);
@@ -83,9 +87,7 @@ public final class ClientSelection {
     }
 
     private static void hideHud(net.neoforged.neoforge.client.event.RenderGuiEvent.Pre event) {
-        if (catalog != null) {
-            event.setCanceled(true);
-        } else if (SpawnIntroOverlay.hidesHud()) {
+        if (catalog != null || SpawnIntroOverlay.hidesHud()) {
             event.setCanceled(true);
             renderIntro(event.getGuiGraphics(), event.getPartialTick().getGameTimeDeltaPartialTick(false));
         }
@@ -96,10 +98,11 @@ public final class ClientSelection {
     }
 
     private static void renderIntro(net.minecraft.client.gui.GuiGraphics graphics, float partialTick) {
-        if (!SpawnIntroOverlay.active()) return;
+        if (!SpawnIntroOverlay.active() && !SelectionTransition.active()) return;
         graphics.flush();
         com.mojang.blaze3d.systems.RenderSystem.clear(org.lwjgl.opengl.GL11.GL_DEPTH_BUFFER_BIT, Minecraft.ON_OSX);
         SpawnIntroOverlay.render(graphics, partialTick);
+        if (Minecraft.getInstance().screen == null) SelectionTransition.render(graphics);
         graphics.flush();
     }
 
@@ -108,8 +111,11 @@ public final class ClientSelection {
     }
 
     static void openKits(String spawn) {
-        kits = new KitSelection(catalog, spawn);
-        kits.openInventory();
+        SelectionTransition.fadeOut(() -> {
+            kits = new KitSelection(catalog, spawn);
+            kits.openInventory();
+            SelectionTransition.reveal();
+        });
     }
 
     static Component progress() {
@@ -130,14 +136,18 @@ public final class ClientSelection {
     public static boolean choosingKit() { return kits != null; }
 
     static void back() {
-        if (kits != null) kits.restore();
-        kits = null;
-        Minecraft minecraft = Minecraft.getInstance();
-        minecraft.player.closeContainer();
-        minecraft.setScreen(selection);
+        SelectionTransition.fadeOut(() -> {
+            if (kits != null) kits.restore();
+            kits = null;
+            Minecraft minecraft = Minecraft.getInstance();
+            minecraft.player.closeContainer();
+            minecraft.setScreen(selection);
+            SelectionTransition.reveal();
+        });
     }
 
     private static void tick(ClientTickEvent.Post event) {
+        SelectionTransition.tick();
         SpawnIntroOverlay.tick();
         Minecraft minecraft = Minecraft.getInstance();
         if (catalog == null || minecraft.level == null || minecraft.player == null) return;
@@ -160,6 +170,7 @@ public final class ClientSelection {
     }
 
     private static void logout(ClientPlayerNetworkEvent.LoggingOut event) {
+        SelectionTransition.clear();
         SpawnIntroOverlay.clear();
         if (kits != null) kits.restore();
         kits = null;
@@ -169,6 +180,7 @@ public final class ClientSelection {
     }
 
     static void disconnect() {
+        SelectionTransition.clear();
         SpawnIntroOverlay.clear();
         Minecraft minecraft = Minecraft.getInstance();
         if (kits != null) kits.restore();

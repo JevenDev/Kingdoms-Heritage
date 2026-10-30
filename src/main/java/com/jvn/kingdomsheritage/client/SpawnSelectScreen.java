@@ -219,15 +219,16 @@ public final class SpawnSelectScreen extends Screen {
     }
 
     private void confirm() {
-        if (selected == null || submitted) return;
+        if (selected == null || submitted || SelectionTransition.active()) return;
         if (automaticKit == null) {
             ClientSelection.openKits(selected.get("id").getAsString());
             return;
         }
         submitted = true;
         updateNext();
-        PacketDistributor.sendToServer(new HeritageNetwork.Choose(selected.get("id").getAsString(),
-                automaticKit.get("id").getAsString(), catalog.get("revision").getAsLong()));
+        var request = new HeritageNetwork.Choose(selected.get("id").getAsString(),
+                automaticKit.get("id").getAsString(), catalog.get("revision").getAsLong());
+        SelectionTransition.fadeOut(() -> PacketDistributor.sendToServer(request));
     }
 
     private void updateNext() {

@@ -184,10 +184,12 @@ public final class KitSelection {
         selection.back = Button.builder(Component.translatable("gui.back"), button -> ClientSelection.back())
                 .bounds(8, screen.height - 27, 70, 20).build();
         selection.confirm = Button.builder(Component.translatable("screen.kingdomsheritage.begin"), button -> {
+            if (selection.submitted || SelectionTransition.active()) return;
             selection.submitted = true;
             selection.updateButtons();
-            PacketDistributor.sendToServer(new HeritageNetwork.Choose(selection.spawn,
-                    selection.choices.get(selection.index).get("id").getAsString(), selection.catalog.get("revision").getAsLong()));
+            var request = new HeritageNetwork.Choose(selection.spawn,
+                    selection.choices.get(selection.index).get("id").getAsString(), selection.catalog.get("revision").getAsLong());
+            SelectionTransition.fadeOut(() -> PacketDistributor.sendToServer(request));
         }).bounds(screen.width - 108, screen.height - 27, 100, 20).build();
         event.addListener(selection.previous);
         event.addListener(selection.next);
@@ -271,6 +273,7 @@ public final class KitSelection {
     }
 
     private static void mouse(ScreenEvent.MouseButtonPressed.Pre event) {
+        if (SelectionTransition.active()) return;
         if (ClientSelection.kits() == null || !isInventory(event.getScreen())) return;
         boolean overControl = event.getScreen().children().stream().anyMatch(child ->
                 child instanceof AbstractWidget widget && widget.active && widget.visible
@@ -282,6 +285,7 @@ public final class KitSelection {
     }
 
     private static void key(ScreenEvent.KeyPressed.Pre event) {
+        if (SelectionTransition.active()) return;
         if (ClientSelection.kits() == null || !isInventory(event.getScreen())) return;
         int key = event.getKeyCode();
         if (key == GLFW.GLFW_KEY_ESCAPE || Minecraft.getInstance().options.keyInventory.matches(key, event.getScanCode())) {

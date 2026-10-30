@@ -79,7 +79,7 @@ public final class SpawnIntroOverlay {
 
     public static boolean active() { return intro != null; }
     static boolean hidesHud() { return active() && intro.cinematicBars() && intro.hideHudDuringBars(); }
-    public static boolean blocked() { return active() && (!ready || intro.control() == IntroDefinition.Control.AFTER_TITLE); }
+    public static boolean blocked() { return SelectionTransition.active() || active() && (!ready || intro.control() == IntroDefinition.Control.AFTER_TITLE); }
 
     static void tick() {
         if (!active()) return;
@@ -95,6 +95,7 @@ public final class SpawnIntroOverlay {
         if (minecraft.isPaused() || minecraft.screen instanceof ReceivingLevelScreen
                 || !minecraft.level.hasChunkAt(minecraft.player.blockPosition())) return;
         ready = true;
+        SelectionTransition.introReady();
         if (++age >= intro.durationTicks()) {
             finish();
             return;
