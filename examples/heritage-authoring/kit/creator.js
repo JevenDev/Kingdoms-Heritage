@@ -1,8 +1,9 @@
-(() => {
+(async () => {
 'use strict';
 const K=HeritageKit,E=HeritageEquipment,M=HeritageKitMouse,V=HeritageInventory,T=HeritageItemText,$=id=>document.getElementById(id),storageKey='heritage.kitCreator.v1';
+if(!await HeritageSession.acquire(storageKey))return;
 const searchIndex=HeritageItems.items.map(item=>({item,search:(item.name+' '+item.id).toLowerCase()})),itemButtons=new Map();
-let documentState=K.copy(HeritageKitExamples[0].kit),selected=0,page=0,rawInvalid=false,errorState=null,drafts=new Map(),loreSources=new Map(),slotClipboard=null;
+let documentState={title:'My kit',items:[]},selected=0,page=0,rawInvalid=false,errorState=null,drafts=new Map(),loreSources=new Map(),slotClipboard=null;
 let kitWarnings=[],activeItemButton,carried=null,pendingDelete=null,selectedSlots=new Set(),selectionMode=false,selectionAnchor=null;
 let pageSize=90,pageCount=1,wheelPageTime=-Infinity;
 let history=[],historyIndex=-1,historyGroup=null,historyTime=0,saveTimer,saveUnavailable=false,saveBlocked=false,workspace;
@@ -69,6 +70,7 @@ function draftOptions() {
     option.textContent=name+(count>1?' ('+count+')':'');
   }
   field.value=workspace.active;
+  $('use-in-pack').href='pack-assembler.html?kit='+encodeURIComponent(workspace.active);
 }
 function activateKit(id) {
   if(id===workspace.active)return;
@@ -130,6 +132,7 @@ function feedback() {
   $('apply-components').disabled=locked||!view.entry(selected);
   const lore=view.entry(selected)?.item.components?.['minecraft:lore'],invalidLore=lore!==undefined&&!Array.isArray(lore);
   const loreLocked=locked||!view.entry(selected)||!!errorState||!!carried||drafts.has(selected)||invalidLore;
+  $('item-name').disabled=$('apply-name').disabled=locked||!view.entry(selected)||!!errorState||!!carried||drafts.has(selected);
   $('add-lore-line').disabled=loreLocked;
   for(const control of $('lore-lines').querySelectorAll('input,textarea,select,button'))control.disabled=loreLocked;
   $('lore-status').textContent=invalidLore?'Lore must be a list. Fix it in Item components.':drafts.has(selected)?"Apply or revert this item's pending edits to edit lore.":!view.entry(selected)?'Choose an item to add lore.':'';
@@ -147,6 +150,7 @@ function slotFields() {
   const stack=view.entry(selected)?.item,draft=drafts.get(selected);
   $('slot-name').textContent=E.name(selected);
   $('selected-name').textContent=stack?T.name(stack):'Empty slot';
+  $('item-name').value=stack?.components?.['minecraft:custom_name']?T.name(stack):'';
   $('selected-icon').replaceChildren(...(stack?[V.icon(stack.id)]:[]));
   $('count').value=stack?.count??1;$('count').max=stack?K.maxCount(stack):99;
   $('item-id').value=draft?.id??stack?.id??'';
@@ -607,6 +611,15 @@ $('search-items').addEventListener('input',()=>{page=0;browser();});$('item-cate
 $('clear-search').addEventListener('click',()=>{$('search-items').value='';page=0;browser();$('search-items').focus();});
 $('previous').addEventListener('click',()=>{page--;browser();});$('next').addEventListener('click',()=>{page++;browser();});
 $('kit-drafts').addEventListener('change',()=>activateKit($('kit-drafts').value));
+$('apply-name').addEventListener('click',()=>attempt(()=>{
+  if(!canEdit('item-name')||carried)return;
+  checkDraft(selected);
+  const stack=view.entry(selected)?.item;if(!stack)return;
+  const next=K.copy(stack);next.components={...next.components};
+  if($('item-name').value)next.components['minecraft:custom_name']=JSON.stringify({text:$('item-name').value});
+  else delete next.components['minecraft:custom_name'];
+  commit(E.setSlot(documentState,selected,next));notice('Display name updated.');
+},'item-name'));
 $('new-kit').addEventListener('click',()=>{openKit();tab('details');$('title').focus();$('title').select();});
 $('example').addEventListener('change',()=>{const sample=HeritageKitExamples.find(sample=>sample.id===$('example').value);if(sample)openKit(JSON.stringify(sample.kit,null,2));$('example').value='';});
 $('import').addEventListener('change',async()=>{
@@ -626,6 +639,7 @@ $('download').addEventListener('click',()=>{
   const title=typeof documentState.title==='string'?documentState.title:'kit';
   link.href=url;link.download=(title.toLowerCase().replace(/[^a-z0-9_-]+/g,'-').replace(/^-|-$/g,'')||'kit')+'.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);notice('Kit downloaded.');
 });
+HeritageSession.library({workspace:()=>workspace,snapshot,activate:activateKit,blank:()=>openKit(),kind:'kit',status:notice,persist:()=>{draftOptions();saveDraft();}});
 window.addEventListener('pagehide',saveDraft);
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')saveDraft();});
 let initialSource=JSON.stringify(documentState,null,2),saved,hadSavedDraft=false,loadFailure='';
@@ -649,6 +663,10 @@ if(saved&&typeof saved.source==='string') {
 $('kit-json').value=initialSource;const savedCursor=carried;carried=null;display();parse(false,false);carried=savedCursor;display();
 if(saved?.error&&!rawInvalid&&typeof saved.error.message==='string'){errorState=saved.error;display();if($(errorState.target))$(errorState.target).value=errorState.value;}
 history=[snapshot()];historyIndex=0;feedback();browser();
+const requested=new URLSearchParams(location.search).get('draft');
+if(requested&&workspace.entries.has(requested))activateKit(requested);
+else if(requested)notice('This kit is missing. Choose another saved kit.');
+if(!rawInvalid)tab('details');
 const linked=new URLSearchParams(location.search).get('kit');
 if(linked!==null){
   openKit(linked);

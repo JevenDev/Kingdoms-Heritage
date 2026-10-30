@@ -1,6 +1,7 @@
 (async () => {
 'use strict';
 const P=HeritagePreview, $=id=>document.getElementById(id),storageKey='heritage.introEditor.v1';
+if(!await HeritageSession.acquire(storageKey))return;
 const previewFields=['viewport','background','biome','structure','dimension','loop'];
 const canvas=$('preview'), ctx=canvas.getContext('2d'), font=new Map(), tinted=new Map(), widthBuckets=new Map();
 let jsonState=P.readJson(JSON.stringify({intro:P.defaults}));
@@ -22,6 +23,7 @@ function draftOptions() {
     option.textContent=name+(count>1?' ('+count+')':'');
   }
   field.value=workspace.active;
+  $('use-in-pack').href='pack-assembler.html?intro='+encodeURIComponent(workspace.active);
 }
 function saveDraft() {
   clearTimeout(saveTimer);
@@ -53,10 +55,10 @@ function openIntro(raw=JSON.stringify({intro:{text:'A new journey begins.',subti
   try{parsed=P.readJson(raw);}catch(failure){error={message:failure.message};}
   const state={
     name,source:raw,document:parsed.document,validation:{error,fromJson:!!error},
-    values:fields.map(field=>field.type==='checkbox'?parsed.config[field.dataset.field]:String(parsed.config[field.dataset.field])),
+    values:fields.map(field=>field.type==='checkbox'?parsed.config[field.dataset.field]:P.componentText(parsed.config[field.dataset.field])||String(parsed.config[field.dataset.field])),
     selection:[0,0],preview:historySnapshot().preview
   };
-  activateIntro(workspace.add(state));
+  activateIntro(workspace.add(state));if(!error)$('text-tab').click();
 }
 function loadDrafts() {
   const initial=historySnapshot();
@@ -80,7 +82,7 @@ function updateHistoryButtons() {
 function historySnapshot() {
   return {
     name:$('intro-name').value,source:$('json').value,document:jsonState.document,
-    validation:{...currentValidation,error:currentValidation.error?{message:currentValidation.error.message}:null},
+    validation:{...currentValidation,error:currentValidation.error?{message:currentValidation.error.message,field:currentValidation.error.field}:null},
     values:fields.map(field=>field.type==='checkbox'?field.checked:field.value),
     selection:[$('json').selectionStart,$('json').selectionEnd],
     preview:Object.fromEntries(previewFields.map(id=>[id,$(id).type==='checkbox'?$(id).checked:$(id).value]))
@@ -107,14 +109,19 @@ function restoreHistory(direction) {
   historyIndex=next;
   const snapshot=history[next];
   jsonState=P.readJson(JSON.stringify(snapshot.document));config=jsonState.config;
+  let restoredValidation=snapshot.validation,recovered=false;
+  if(restoredValidation?.error&&restoredValidation.fromJson) {
+    try{jsonState=P.readJson(snapshot.source);config=jsonState.config;restoredValidation={error:null,fromJson:false};recovered=true;}
+    catch(error){restoredValidation={error:{message:error.message,field:error.field},fromJson:true};}
+  }
   $('intro-name').value=typeof snapshot.name==='string'?snapshot.name:'Untitled intro';
   $('json').value=snapshot.source;
   fillFields();
-  if(Array.isArray(snapshot.values)&&snapshot.values.length===fields.length)fields.forEach((field,i)=>{if(field.type==='checkbox')field.checked=snapshot.values[i];else field.value=snapshot.values[i];});
+  if(!recovered&&Array.isArray(snapshot.values)&&snapshot.values.length===fields.length)fields.forEach((field,i)=>{if(field.type==='checkbox')field.checked=snapshot.values[i];else field.value=snapshot.values[i];});
   for(const id of previewFields)if(snapshot.preview?.[id]!==undefined){if($(id).type==='checkbox')$(id).checked=snapshot.preview[id];else $(id).value=snapshot.preview[id];}
   $('json').setSelectionRange(...snapshot.selection);
   $('preset').value='custom';
-  validation(snapshot.validation.error,snapshot.validation.fromJson);
+  validation(restoredValidation.error,restoredValidation.fromJson);
   refreshPreview();
   historyGroup=null;
   restoringHistory=false;
@@ -163,7 +170,8 @@ function fillFields() {
   for(const field of fields) {
     const value=config[field.dataset.field];
     if(field.type==='checkbox') field.checked=value;
-    else field.value=value;
+    else {field.value=['text','subtitle'].includes(field.dataset.field)?P.componentText(value):value;field.readOnly=['text','subtitle'].includes(field.dataset.field)&&typeof value!=='string';}
+    if(field.readOnly)field.title='Structured Minecraft text is preserved. Edit this field in JSON.';else field.removeAttribute('title');
   }
 }
 function stopSounds() { for(const source of sources) source.stop(); sources.clear(); }
@@ -222,6 +230,23 @@ function rebuild() {
 }
 function validation(error=null,fromJson=false) {
   currentValidation={error,fromJson};
+  for(const field of fields) {
+    const invalid=!fromJson&&error?.field===field.dataset.field;
+    field.setAttribute('aria-invalid',String(invalid));
+    const id='field-error-'+field.dataset.field;
+    let message=document.getElementById(id);
+    const label=field.closest('label');
+    field.setAttribute('aria-label',[...label.childNodes].filter(node=>node.nodeType===3||node.nodeName==='SPAN').map(node=>node.textContent).join('').trim());
+    if(!message){message=document.createElement('p');message.id=id;message.className='field-error';label.append(message);}
+    message.textContent=invalid?error.message:'';message.hidden=!invalid;
+    field.setAttribute('aria-describedby',id);
+    if(invalid) {
+      const panel=field.closest('[role=tabpanel]');
+      if(panel)document.querySelector('[aria-controls="'+panel.id+'"]')?.click();
+    }
+  }
+  $('component-notice').hidden=!['text','subtitle'].some(key=>typeof config[key]!=='string');
+
   valid=!error;
   syncCode();
   $('json-state').textContent=error?'Check '+(fromJson?'JSON':'options'):'JSON ready';
@@ -232,6 +257,7 @@ function validation(error=null,fromJson=false) {
   $('json').setAttribute('aria-invalid',String(!!error&&fromJson));
   $('restore-json').hidden=valid;
   $('copy-status').textContent='';
+  $('download-intro').disabled=!valid;
   for(const id of ['copy','format-json','play','restart']) $(id).disabled=!valid;
   for(const control of [...fields,...document.querySelectorAll('.text-editor button, .text-editor select')]) control.disabled=!!error&&fromJson;
 }
@@ -259,10 +285,11 @@ function editing(event) {
   try {
     const changes={};
     for(const field of fields) {
+      if(field.readOnly)continue;
       let value=field.value;
       if(field.type==='checkbox') value=field.checked;
       else if(field.type==='number') {
-        if(!field.value.trim()) throw new Error('Fill in every timing field.');
+        if(!field.value.trim()) throw Object.assign(new Error(field.closest('label').firstChild.textContent.trim()+' is required.'),{field:field.dataset.field});
         value=Number(field.value);
       }
       if(value!==config[field.dataset.field]) changes[field.dataset.field]=value;
@@ -406,6 +433,7 @@ async function play(restart=false) {
   if(!frameRequest)frameRequest=requestAnimationFrame(frame);
 }
 function wrapSelection(open,close) {
+  if(activeField.readOnly){$('copy-status').textContent='Edit structured text in JSON. Your component has been kept.';return;}
   const field=activeField,start=field.selectionStart,end=field.selectionEnd;
   const a=start===end?0:start,b=start===end?field.value.length:end;
   field.setRangeText(open+field.value.slice(a,b)+close,a,b,'select');
@@ -503,6 +531,7 @@ $('apply-effect').addEventListener('click',()=>wrapSelection('<'+$('effect').val
 $('apply-color').addEventListener('click',()=>wrapSelection('<color:'+$('color').value+'>','</color>'));
 $('apply-gradient').addEventListener('click',()=>wrapSelection('<gradient:'+$('color').value+':'+$('gradient-end').value+'>','</gradient>'));
 document.querySelectorAll('[data-token]').forEach(button=>button.addEventListener('click',()=>{
+  if(activeField.readOnly){$('copy-status').textContent='Edit structured text in JSON. Your component has been kept.';return;}
   activeField.setRangeText('<'+button.dataset.token+'>',activeField.selectionStart,activeField.selectionEnd,'end');
   activeField.focus();editing();
 }));
@@ -532,6 +561,22 @@ $('copy').addEventListener('click',async()=>{
     $('copy-status').textContent='Copy the selected JSON with Ctrl+C.';
   }
 });
+HeritageSession.library({workspace:()=>workspace,snapshot:historySnapshot,activate:activateIntro,blank:()=>openIntro(),kind:'intro',status:message=>{$('copy-status').textContent=message;},persist:()=>{draftOptions();saveDraft();}});
+$('import-intro').addEventListener('change',async()=>{
+  const file=$('import-intro').files[0];if(!file)return;
+  try{openIntro(await file.text(),file.name.replace(/\.json$/i,''));$('json-tab').click();}
+  catch(error){$('copy-status').textContent='Could not read intro: '+error.message;}
+  $('import-intro').value='';
+});
+$('download-intro').addEventListener('click',()=>{
+  if(!valid)return;
+  HeritageSession.download(jsonState.document,($('intro-name').value.replace(/[^a-z0-9_-]+/gi,'_')||'intro')+'.json');
+});
+const requested=new URLSearchParams(location.search).get('draft');
+if(requested&&workspace.entries.has(requested))activateIntro(requested);
+validation(currentValidation.error,currentValidation.fromJson);
+if(requested&&!workspace.entries.has(requested))$('copy-status').textContent='This intro is missing. Choose another saved intro.';
+if(valid)$('text-tab').click();
 HeritageTooltips.setup({font,sprite});
 window.addEventListener('pagehide',saveDraft);
 document.addEventListener('visibilitychange',()=>{if(document.hidden){pause();saveDraft();}});

@@ -1,0 +1,13 @@
+.session-notice{max-width:680px;margin:64px auto;padding:24px;border:1px solid #3c3c3c;border-radius:6px}
+.session-notice h2{margin-top:0}
+.session-notice p{line-height:1.6;color:#aaa}
+.workflow-nav{display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-bottom:20px;font-size:13px}
+.workflow-nav a[aria-current=page]{color:#fff;text-decoration:underline;text-underline-offset:5px}
+.field-error{color:#ff9292;font-size:13px;margin:6px 0}
+[aria-invalid=true]{border-color:#ff9292!important}
+.component-notice{color:#ccc;font-size:13px}
+.file-button{position:relative;display:inline-flex;align-items:center;padding:7px 11px;border:1px solid #3c3c3c;border-radius:6px;font-size:13px;cursor:pointer}
+.file-button:focus-within{outline:2px solid white}
+.library-edit{font-size:12px;margin-left:10px}
+.handoff{display:inline-flex;align-items:center;padding:7px 11px;border:1px solid #777;border-radius:6px;color:#eee}
+.item-name-actions{display:flex;gap:8px;align-items:center;margin-bottom:12px}

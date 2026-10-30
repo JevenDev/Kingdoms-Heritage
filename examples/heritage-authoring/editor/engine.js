@@ -57,10 +57,58 @@ function rainbow(p) {
   const rgb=[[v,t,low],[q,v,low],[low,v,t],[low,q,v],[t,low,v],[v,low,q]][Math.floor(h)%6];
   return rgb.reduce((value,c,i)=>value | Math.round(c*255)<<(16-i*8),0);
 }
-function parse(text, names={}, offset=0) {
+function componentText(value) {
+  if(typeof value==='string')return value;
+  if(Array.isArray(value))return value.map(componentText).join('');
+  if(!value||typeof value!=='object')return '';
+  let text=value.text??value.fallback??(value.translate?'['+value.translate+']':value.keybind??value.selector??value.score?.value??value.score?.name??value.nbt??'');
+  if(value.translate&&Array.isArray(value.with)) {
+    let index=0;
+    text=text.replace(/%(?:(\d+)\$)?s/g,(_,position)=>componentText(value.with[position?Number(position)-1:index++]??''));
+  }
+  return String(text)+(value.extra??[]).map(componentText).join('');
+}
+function validateComponent(value,depth=0) {
+  if(depth>64)throw new Error('Text components are nested too deeply.');
+  if(typeof value==='string')return;
+  if(Array.isArray(value)) {
+    if(!value.length)throw new Error('A text component array needs at least one entry.');
+    value.forEach(entry=>validateComponent(entry,depth+1));return;
+  }
+  if(!value||typeof value!=='object'||!['text','translate','score','selector','keybind','nbt'].some(key=>Object.hasOwn(value,key)))throw new Error('Use text or a Minecraft text component.');
+  for(const key of ['text','translate','fallback','selector','keybind','nbt'])if(value[key]!==undefined&&typeof value[key]!=='string')throw new Error(key+' in a text component must be text.');
+  for(const key of ['bold','italic','underlined','strikethrough','obfuscated'])if(value[key]!==undefined&&typeof value[key]!=='boolean')throw new Error(key+' in a text component must be true or false.');
+  for(const key of ['extra','with'])if(value[key]!==undefined) {
+    if(!Array.isArray(value[key]))throw new Error(key+' in a text component must be a list.');
+    value[key].forEach(entry=>validateComponent(entry,depth+1));
+  }
+  if(value.score!==undefined&&(!value.score||typeof value.score.name!=='string'||typeof value.score.objective!=='string'))throw new Error('A score component needs a name and objective.');
+}
+function parse(text, names={}, offset=0, inherited={}) {
+  if(typeof text!=='string') {
+    if(Array.isArray(text)) {
+      let result=[],base=inherited;
+      text.forEach((entry,index)=>{
+        if(index===0&&entry&&typeof entry==='object'&&!Array.isArray(entry))base={...inherited,...entry};
+        result.push(...parse(entry,names,offset+result.length,base));
+      });
+      return result;
+    }
+    const style={...inherited,...text},effect={};
+    for(const [key,target] of [['bold','bold'],['italic','italic'],['underlined','underline'],['strikethrough','strike'],['obfuscated','obfuscated']])if(typeof style[key]==='boolean')effect[target]=style[key];
+    const tint=typeof style.color==='string'?color(style.color):null;
+    if(tint!==null)effect.color=tint;
+    const own={...text};delete own.extra;
+    const result=parse(componentText(own),names,offset).map(glyph=>({...glyph,effect:{...effect,...glyph.effect},tint:glyph.effect.color??tint??glyph.tint}));
+    for(const child of text.extra??[])result.push(...parse(child,names,offset+result.length,style));
+    return result;
+  }
+
   text=text.replace(/\r\n?/g,'\n').replace(/<(biome|structure|dimension)>/g,(_,key)=>names[key] || ({biome:'Plains',structure:'Wilderness',dimension:'Overworld'})[key]);
   const base=[], chars=[];
   let style={};
+  for(const [key,target] of [['bold','bold'],['italic','italic'],['underlined','underline'],['strikethrough','strike'],['obfuscated','obfuscated']])if(typeof inherited[key]==='boolean')style[target]=inherited[key];
+  if(typeof inherited.color==='string'&&color(inherited.color)!==null)style.color=color(inherited.color);
   const legacyColors=Object.values(colors);
   for (let i=0;i<text.length;) {
     if (text[i]==='§' && i+1<text.length) {
@@ -193,13 +241,13 @@ function glyphFrame(g,tick,alpha) {
   return {x:e.shake?Math.sin(tick*1.7+i*1.31)*1.15:0,y:(e.wave?Math.sin((tick+i*6*.55)*.24)*1.75:0)-(e.jump?Math.abs(Math.sin(tick*.28-i*.55))*2.4:0),tint,alpha};
 }
 function validate(cfg) {
-  for(const field of ['text','subtitle']) if(typeof cfg[field]!=='string') throw new Error(field+' must be a string in this preview. Minecraft text components are not supported. Your JSON has been kept.');
+  for(const field of ['text','subtitle'])validateComponent(cfg[field]);
   for(const key of ['title','outline','blip','cinematic_bars','hide_hud_during_bars']) if(typeof cfg[key]!=='boolean') throw new Error(key+' must be true or false.');
-  if(!cfg.text.trim()) throw new Error('Enter some main text.');
+  if(!componentText(cfg.text).trim()) throw new Error('Enter some main text.');
   if(JSON.stringify({text:cfg.text}).length+JSON.stringify({text:cfg.subtitle}).length>16384) throw new Error('Text and subtitle exceed the 16,384-character limit.');
   for(const field of ['black_hold_ticks','fade_from_black_ticks','reveal_ticks','hold_ticks','fade_out_ticks','bar_transition_ticks']) {
     const min=field==='black_hold_ticks'?0:1;
-    if(!Number.isInteger(cfg[field])||cfg[field]<min||cfg[field]>1200) throw new Error(field+' must be a whole number from '+min+' to 1200.');
+    if(!Number.isInteger(cfg[field])||cfg[field]<min||cfg[field]>1200) throw Object.assign(new Error(({black_hold_ticks:'Black screen',fade_from_black_ticks:'World fade',reveal_ticks:'Text reveal',hold_ticks:'Text hold',fade_out_ticks:'Text fade out',bar_transition_ticks:'Bar movement'})[field]+' must be a whole number from '+min+' to 1200.'),{field});
   }
   for(const key of ['title_position','subtitle_position']) if(!Object.hasOwn(positions,cfg[key])) throw new Error('Unknown text position.');
   if(!['fade_in','word_by_word','letter_by_letter','immediate'].includes(cfg.animation)) throw new Error('Unknown reveal mode.');
@@ -207,7 +255,7 @@ function validate(cfg) {
   if(!['random','straight'].includes(cfg.bar_style)) throw new Error('Unknown bar style.');
   return cfg;
 }
-const api={colors,positions,defaults,packDefaults,readJson,updateJson,parse,wrap,padding,layout,presentation,duration,wordEnds,visible,glyphFrame,validate,clamp,active};
+const api={componentText,validateComponent,colors,positions,defaults,packDefaults,readJson,updateJson,parse,wrap,padding,layout,presentation,duration,wordEnds,visible,glyphFrame,validate,clamp,active};
 if(typeof module!=='undefined') module.exports=api;
 else globalThis.HeritagePreview=api;
 })();

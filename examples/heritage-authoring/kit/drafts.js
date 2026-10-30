@@ -5,6 +5,7 @@ class Drafts {
   constructor(saved,initial,createId=()=>crypto.randomUUID(),collection='kits') {
     this.collection=collection;this.createId=createId;this.entries=new Map();
     if(saved?.version===2&&Array.isArray(saved[collection])){
+      if(!saved[collection].length){this.active=this.add(initial);return;}
       for(const entry of saved[collection]){
         if(typeof entry.id!=='string'||this.entries.has(entry.id)||typeof entry.state?.source!=='string'||!entry.state.document)throw new Error('Saved drafts are invalid.');
         this.entries.set(entry.id,{state:copy(entry.state),history:[copy(entry.state)],historyIndex:0});

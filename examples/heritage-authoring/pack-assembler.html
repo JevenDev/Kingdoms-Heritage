@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="Assemble saved Heritage kits and intros into Minecraft 1.21.1 starting locations and export a datapack."><title>Heritage pack assembler</title><link rel="stylesheet" href="editor/editor.css?v=4"><link rel="stylesheet" href="pack/assembler.css?v=3"><link rel="stylesheet" href="editor/workflow.css?v=2"></head>
+<body class="assembler">
+<a class="skip-link" href="#location-editor">Skip to starting location</a>
+<header><h1><a class="home-link" href="index.html" aria-label="Heritage home">Heritage</a><span>Pack assembler</span></h1><nav aria-label="Tools"><a href="kit-editor.html" data-icon="braces">Kit creator</a><a href="gallery.html" data-icon="sliders-horizontal">Intro editor</a><a href="docs.html" data-icon="book-open">Documentation</a></nav></header>
+<main>
+<nav class="workflow-nav" aria-label="Create a datapack"><a href="gallery.html">1. Create intros</a><a href="kit-editor.html">2. Create kits</a><a href="pack-assembler.html" aria-current="page">3. Assemble pack</a></nav>
+<div class="document-toolbar"><div class="document-name"><label class="stack">Saved pack<select id="pack-projects" aria-label="Open saved pack"></select></label><span id="save-status" class="draft-status" role="status">Pack ready</span></div><div class="document-file-actions"><button id="save-project" type="button">Save project</button><label class="file-button">Open project<input id="open-project" class="sr-only" type="file" accept=".json,application/json"></label><button id="refresh-drafts" type="button">Refresh saved kits &amp; intros</button><button id="new-pack" type="button" class="primary">New pack</button></div></div>
+<p id="project-status" class="hint" role="status"></p><p class="hint">Packs save in this browser. Use Save project to back up your packs, kits and intros, or move them to another browser.</p>
+<section class="pack-settings" aria-label="Pack settings">
+<label class="stack">Pack name<input id="pack-name" maxlength="120" autocomplete="off"></label>
+<label class="stack pack-description">Description shown in Minecraft<input id="pack-description" maxlength="4000"></label>
+<details class="pack-options"><summary>Pack options</summary><div class="pack-options-content">
+<label class="stack">Pack ID<input id="namespace" autocomplete="off" spellcheck="false" aria-describedby="namespace-help"></label>
+<p id="namespace-help" class="hint">A unique ID is generated for each new pack. Keep it when updating this pack. Use a different ID for a separate pack installed in the same world.</p>
+<div class="bundled-options"><label class="check"><input id="allow-custom-targets" type="checkbox"> Allow custom Minecraft IDs defined by another datapack</label><label class="check"><input id="keep-locations" type="checkbox"> Also include Heritage’s default starting locations</label><label class="check"><input id="keep-kits" type="checkbox"> Also include Heritage’s default Empty-handed kit</label></div>
+</div></details>
+</section>
+<div class="assembly-workspace">
+<aside class="draft-library" aria-label="Saved kits and intros">
+<div class="section-heading"><h2>1. Choose kits</h2><a href="kit-editor.html">Edit kits</a></div>
+<p class="hint section-help">Tick the saved kits you want in this pack.</p>
+<div id="kit-library"></div>
+<details class="saved-intros" open><summary>Saved intros</summary><p class="hint">Pick an intro for each location in step 2.</p><ul id="intro-library" class="intro-library"></ul><a class="editor-link" href="gallery.html">Edit intros</a></details>
+<p id="library-status" class="hint" role="status"></p>
+</aside>
+<section id="location-editor" class="location-editor" aria-label="Starting location" tabindex="-1">
+<div class="section-heading"><h2>2. Set starting locations</h2></div>
+<p class="hint section-help">Choose where players begin, then add an intro and kit choices.</p>
+<div class="location-toolbar"><label class="stack location-picker">Editing location<select id="locations" class="document-select" aria-label="Open starting location"></select></label><button id="new-location" class="primary" type="button">New location</button><button id="delete-location" type="button">Delete</button></div>
+<div id="location-empty" hidden><p>Add a starting location to connect your kits and intros.</p></div>
+<form id="location-form" novalidate>
+<div class="location-basics"><label class="stack">Location name<input data-location-field="title" maxlength="120"></label><label class="stack">Description (optional)<textarea data-location-field="description" rows="2" maxlength="4000"></textarea></label></div>
+<fieldset class="destination-settings"><legend>Where players start</legend>
+<label class="stack">Start at<select data-location-field="type" aria-label="Start at"><option value="default">The world spawn</option><option value="random">A random place</option><option value="biome">A biome</option><option value="structure">A structure</option><option value="fixed">Exact coordinates</option><option value="pool">A random choice from a list</option></select></label>
+<div data-location-types="biome structure"><label class="stack"><span id="target-label">Biome or structure</span><input data-location-field="target" spellcheck="false" placeholder="minecraft:forest" aria-describedby="target-help"></label><p id="target-help" class="hint"></p></div>
+<div class="coordinates" data-location-types="fixed"><label class="stack">X<input data-location-field="x" type="number" step="1" min="-29999984" max="29999984"></label><label class="stack">Y<input data-location-field="y" type="number" step="1" min="-2147483648" max="2147483647"></label><label class="stack">Z<input data-location-field="z" type="number" step="1" min="-29999984" max="29999984"></label></div>
+<details class="destination-options"><summary>More spawn options</summary><div class="form-grid"><label class="stack">Dimension<input data-location-field="dimension" placeholder="minecraft:overworld" spellcheck="false"></label><label class="stack">Search distance (blocks)<input data-location-field="search_radius" type="number" min="16" max="30000" step="1" placeholder="Use server setting"></label><label class="stack">Random spawn distance (blocks)<input data-location-field="random_radius" type="number" min="16" max="30000" step="1" placeholder="Use server setting"></label><div data-location-types="structure"><label class="stack">Preferred building piece (optional)<input data-location-field="piece" spellcheck="false" placeholder="minecraft:village/plains/town_centers/plains_meeting_point_1"></label></div></div></details>
+<div data-location-types="pool"><div id="pool-destinations"></div><button id="add-destination" type="button">Add another place</button><p class="hint">Players start at one randomly chosen place. Leave optional settings blank to use the location’s settings.</p></div>
+</fieldset>
+<fieldset><legend>Intro on arrival</legend><label class="stack">Play this intro<select id="location-intro" aria-label="Play this intro"></select></label><p id="intro-status" class="intro-excerpt hint"></p><button id="use-spawn-settings" type="button" hidden>Use this intro’s saved location</button><p id="spawn-settings-help" class="hint" hidden>Also fills in where players start, using the location saved with this intro.</p></fieldset>
+<fieldset><legend>Starting kit choices</legend><label class="stack">Players can choose from<select id="kit-mode" aria-label="Players can choose from"><option value="all">All the kits ticked in step 1</option><option value="selected">Only the kits I choose here</option></select></label><div id="location-kits"></div></fieldset>
+<details class="extra-settings"><summary>Advanced location settings</summary><div class="form-grid"><label class="stack">Location file name<input id="location-id" spellcheck="false" aria-describedby="location-id-help"></label><label class="stack">Position in the menu<input data-location-field="order" type="number" min="-2147483648" max="2147483647" step="1"></label><label class="stack">Picture file (optional)<input data-location-field="image" spellcheck="false"></label><label class="stack">Title translation key (optional)<input data-location-field="title_key" maxlength="256"></label><label class="stack">Description translation key (optional)<input data-location-field="description_key" maxlength="256"></label></div><p id="location-id-help" class="hint">File names use lowercase letters, numbers, underscores and hyphens. Add / for a folder.</p><p class="hint">Custom pictures and translations need a separate resource pack.</p></details>
+</form>
+</section>
+<section class="pack-output" aria-label="Download your pack">
+<div class="section-heading"><h2>3. Review &amp; download</h2></div>
+<p id="pack-summary" class="pack-summary"></p>
+<p id="export-readiness" class="hint"></p>
+<div id="export-errors" role="status" aria-live="polite"></div>
+<ul id="export-warnings" class="warnings"></ul>
+<button id="export-pack" type="button" class="primary">Download datapack</button>
+<p id="export-status" role="status"></p>
+<section id="file-preview" class="export" aria-label="JSON preview"><div class="pane-toolbar"><h3>JSON preview</h3><button id="copy" type="button" class="primary" disabled>Copy JSON</button></div><label class="stack file-picker">File<select id="export-file" aria-label="Preview exported file"></select></label><div class="code-editor"><pre class="code-line-numbers" aria-hidden="true"></pre><pre class="code-highlight" aria-hidden="true"></pre><textarea id="export-json" class="code-input" readonly spellcheck="false" aria-label="Exported file JSON" wrap="soft" placeholder="Fix the issues above to generate a JSON preview."></textarea></div><div class="code-status"><span id="preview-state">Read-only preview</span><span id="line-count"></span></div><div class="editor-feedback"><p id="copy-status" role="status"></p></div></section>
+<div class="review-heading"><h3>Starting locations in this pack</h3><p class="hint">Select one to edit it.</p></div>
+<ul id="location-summary" class="location-summary"></ul>
+<details class="install-help"><summary>How to use your pack</summary><p>Put the downloaded ZIP in your world’s <code>datapacks</code> folder, then run <code>/reload</code>. Heritage must be installed. Run <code>/heritage validate @s</code> as an operator to check installed items, locations and equipment slots.</p><p>Use a fresh player to test kit grants. <code>/heritage reset @s</code> reopens selection without granting another kit. Visit each destination to check that it can be found in your world.</p><p>Made for Minecraft 1.21.1. If you use items or locations from other mods, install those mods too.</p><p>Your pack replaces Heritage’s default starting locations and Empty-handed kit. To keep them as well, tick the options under Pack options. Other installed datapacks can still add their own choices.</p></details>
+</section>
+</div>
+<datalist id="biome-choices"></datalist><datalist id="structure-choices"></datalist><datalist id="dimension-choices"></datalist>
+</main>
+<footer class="site-footer">Not affiliated with Mojang or Microsoft.</footer>
+<dialog id="new-pack-dialog" aria-labelledby="new-pack-heading" aria-describedby="new-pack-message"><form method="dialog"><h2 id="new-pack-heading">Start a new pack?</h2><p id="new-pack-message">Your current pack stays in the Saved pack menu. Your kits and intros stay available. The new pack starts with no kits selected.</p><p>Use Save project for a backup that you can reopen later.</p><div class="dialog-actions"><button value="cancel" autofocus>Cancel</button><button id="confirm-new-pack" type="button" class="primary">Start new pack</button></div></form></dialog>
+<dialog id="delete-location-dialog" aria-labelledby="delete-location-heading"><form method="dialog"><h2 id="delete-location-heading">Delete this location?</h2><p id="delete-location-message"></p><div class="dialog-actions"><button value="cancel" autofocus>Cancel</button><button id="confirm-delete-location" type="button">Delete location</button></div></form></dialog>
+<script src="editor/session.js?v=3"></script><script src="editor/icons.js"></script><script src="kit/catalog.js"></script><script src="kit/engine.js"></script><script src="editor/engine.js?v=4"></script><script src="editor/json-editor.js"></script><script src="pack/locations.js"></script><script src="pack/project.js?v=2"></script><script src="pack/engine.js?v=3"></script><script src="pack/zip.js"></script><script src="pack/assembler.js?v=6"></script>
+</body></html>

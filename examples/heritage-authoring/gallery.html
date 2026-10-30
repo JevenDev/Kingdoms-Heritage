@@ -1,10 +1,11 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Heritage intro editor</title><link rel="stylesheet" href="editor/editor.css?v=4"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Heritage intro editor</title><link rel="stylesheet" href="editor/editor.css?v=4"><link rel="stylesheet" href="editor/workflow.css?v=2"></head>
 <body>
-<header><h1><a class="home-link" href="index.html" aria-label="Heritage home">Heritage</a><span>Intro editor</span></h1><nav aria-label="Documentation"><a href="kit-editor.html" data-icon="braces">Kit creator</a><a href="docs.html" data-icon="book-open">Documentation</a><a href="docs.html#/text-styles" data-icon="images">Style examples</a></nav></header>
+<header><h1><a class="home-link" href="index.html" aria-label="Heritage home">Heritage</a><span>Intro editor</span></h1><nav aria-label="Documentation"><a href="kit-editor.html" data-icon="braces">Kit creator</a><a href="docs.html" data-icon="book-open">Documentation</a><a href="docs.html#/text-styles" data-icon="images">Style examples</a><a href="pack-assembler.html" data-icon="map-pin">Pack assembler</a></nav></header>
 <main>
-<div class="document-toolbar"><div class="document-name"><select id="intro-drafts" class="document-select" aria-label="Open intro"></select><span id="intro-draft-status" class="draft-status" role="status">Draft ready</span></div><div class="document-file-actions"><label class="intro-name-control">Name<input id="intro-name" value="Location intro" maxlength="120" autocomplete="off" aria-label="Intro name"></label><button id="new-intro" class="primary" type="button">New intro</button><select id="preset" aria-label="Load example intro"><option value="custom" selected>Examples…</option><option value="default">Location intro</option><option value="wave">Wave</option><option value="rainbow">Rainbow</option><option value="gradient">Gradient</option><option value="letter">Letter reveal</option><option value="word">Word reveal</option></select></div></div>
+<nav class="workflow-nav" aria-label="Create a datapack"><a href="gallery.html" aria-current="page">1. Create intros</a><a href="kit-editor.html">2. Create kits</a><a href="pack-assembler.html">3. Assemble pack</a></nav>
+<div class="document-toolbar"><div class="document-name"><select id="intro-drafts" class="document-select" aria-label="Open intro"></select><span id="intro-draft-status" class="draft-status" role="status">Draft ready</span></div><div class="document-file-actions"><label class="intro-name-control">Name<input id="intro-name" value="Location intro" maxlength="120" autocomplete="off" aria-label="Intro name"></label><button id="duplicate-intro" type="button">Duplicate</button><button id="delete-intro" type="button">Delete</button><label class="file-button">Import JSON<input id="import-intro" type="file" accept=".json,application/json" class="sr-only"></label><button id="download-intro" type="button">Download</button><a id="use-in-pack" class="handoff" href="pack-assembler.html">Use in pack</a><button id="new-intro" class="primary" type="button">New intro</button><select id="preset" aria-label="Load example intro"><option value="custom" selected>Examples…</option><option value="default">Location intro</option><option value="wave">Wave</option><option value="rainbow">Rainbow</option><option value="gradient">Gradient</option><option value="letter">Letter reveal</option><option value="word">Word reveal</option></select></div></div>
 <div class="workspace">
 <div class="authoring">
 <div class="pane-toolbar">
@@ -18,7 +19,7 @@
 <div class="code-status"><span id="json-state">JSON ready</span><span id="line-count"></span></div>
 </section>
 <section class="text-editor" id="text-panel" role="tabpanel" aria-labelledby="text-tab" hidden>
-<div class="section-heading"><h2 id="text-heading">Text</h2></div>
+<div class="section-heading"><h2 id="text-heading">Text</h2></div><p id="component-notice" class="component-notice" hidden>Structured Minecraft text is preserved. Edit those text fields in JSON. Dynamic translations, selectors and scores are approximate in this preview.</p>
 <div class="toolbar" role="group" aria-label="Text formatting"><button type="button" data-wrap="bold"><strong>Bold</strong></button><button type="button" data-wrap="italic"><em>Italic</em></button><button type="button" data-wrap="underline">Underline</button><select id="effect" aria-label="Text effect"><option value="wave">Wave</option><option value="shake">Shake</option><option value="pulse">Pulse</option><option value="jump">Jump</option><option value="rainbow">Rainbow</option><option value="strike">Strikethrough</option><option value="obfuscated">Obfuscated</option></select><button type="button" id="apply-effect">Apply effect</button></div>
 <div class="toolbar" role="group" aria-label="Text color"><select id="named-color" aria-label="Named color"></select><input id="color" type="color" value="#ffaa00" aria-label="Text color"><button type="button" id="apply-color">Apply color</button><input id="gradient-end" type="color" value="#55aaff" aria-label="Gradient end color"><button type="button" id="apply-gradient">Apply gradient</button></div>
 <p class="hint">Select text to style, or leave it unselected to style the whole field. You can also type tags directly.</p>
@@ -27,7 +28,7 @@
 <div class="toolbar"><span>Insert location:</span><button type="button" data-token="biome">Biome</button><button type="button" data-token="structure">Structure</button><button type="button" data-token="dimension">Dimension</button></div>
 </section>
 <div class="editor-feedback"><p id="error" role="alert" hidden></p><button id="restore-json" type="button" hidden>Restore valid JSON</button><p id="copy-status" role="status"></p></div>
-<details class="editor-help"><summary>JSON help</summary><p>Paste an intro object, an <code>"intro": { … }</code> section, or a full spawn file. Copy keeps your JSON structure and extra fields.</p><p>Use text with styling tags for the preview. Check Minecraft text component objects in-game. Sample names, background, GUI size, and mute only affect the preview.</p></details>
+<details class="editor-help"><summary>JSON help</summary><p>Paste an intro object, an <code>"intro": { … }</code> section, or a full spawn file. Copy keeps your JSON structure and extra fields.</p><p>Use text with styling tags or Minecraft text components. Component objects and arrays are kept intact. Dynamic components have an approximate preview and need an in-game check. Sample names, background, GUI size, and mute only affect the preview.</p></details>
 
 </div>
 <div class="preview-column">
@@ -60,6 +61,7 @@
 </div>
 
 </main>
+<dialog id="delete-draft-dialog" aria-labelledby="delete-draft-heading"><form method="dialog"><h2 id="delete-draft-heading">Delete this saved draft?</h2><p>Save a JSON copy first if you want to keep it. Packs that use this draft will need a replacement.</p><div class="dialog-actions"><button value="cancel" autofocus>Cancel</button><button id="confirm-delete-draft" type="button">Delete draft</button></div></form></dialog>
 <footer class="site-footer">Not affiliated with Mojang or Microsoft.</footer>
-<script src="editor/icons.js"></script><script src="editor/assets.js"></script><script src="editor/engine.js"></script><script src="editor/tooltips.js?v=3"></script><script src="editor/json-editor.js"></script><script src="kit/drafts.js?v=2"></script><script src="editor/editor.js?v=5"></script>
+<script src="editor/session.js?v=3"></script><script src="editor/icons.js"></script><script src="editor/assets.js"></script><script src="editor/engine.js?v=4"></script><script src="editor/tooltips.js?v=3"></script><script src="editor/json-editor.js"></script><script src="kit/drafts.js?v=3"></script><script src="editor/editor.js?v=7"></script>
 </body></html>
