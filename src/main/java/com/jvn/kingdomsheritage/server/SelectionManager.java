@@ -182,7 +182,8 @@ public final class SelectionManager {
             sendProgress(player, "applying");
             KingdomsHeritage.LOGGER.debug("Prepared Heritage location {} in {} ms of server work",
                     spawn.id(), preparation.search().workMillis());
-            JsonObject intro = SpawnIntro.prepare(preparation.search().definition(), destination);
+            var arrival = preparation.search().definition();
+            JsonObject intro = SpawnIntro.prepare(arrival, destination);
             KitService.apply(player, kit, stacks, inventoryPolicy(player));
             CompoundTag state = state(player);
             player.teleportTo(destination.level(), destination.position().getX() + 0.5,
@@ -204,7 +205,7 @@ public final class SelectionManager {
             player.closeContainer();
             player.fallDistance = 0;
             player.invulnerableTime = 100;
-            SpawnIntro.begin(player, spawn.intro(), intro);
+            SpawnIntro.begin(player, arrival.intro(), intro);
             player.inventoryMenu.sendAllDataToRemote();
         } catch (IllegalArgumentException error) {
             sendChoices(player, HeritageException.component(error));

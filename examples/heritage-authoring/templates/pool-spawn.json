@@ -9,11 +9,24 @@
     },
     {
       "type": "biome",
-      "target": "minecraft:forest"
+      "target": "minecraft:forest",
+      "intro": {
+        "text": "You wake beneath the trees.",
+        "subtitle": "Find your way through <gold><biome></gold>."
+      }
     },
     {
       "type": "structure",
-      "target": "#minecraft:village"
+      "target": "#minecraft:village",
+      "intro": {
+        "text": "Welcome to <gold><structure></gold>.",
+        "control": "during_title",
+        "hold_ticks": 100
+      }
+    },
+    {
+      "type": "random",
+      "intro": null
     }
   ],
   "intro": {

@@ -91,7 +91,7 @@ public record SpawnDefinition(ResourceLocation id, String title, String descript
             throw new IllegalArgumentException("pool must contain between 1 and 128 destinations");
         }
         var destinations = new ArrayList<SpawnDefinition>();
-        var fields = List.of("type", "dimension", "target", "piece", "x", "y", "z", "search_radius", "random_radius");
+        var fields = List.of("type", "dimension", "target", "piece", "x", "y", "z", "search_radius", "random_radius", "intro");
         for (int index = 0; index < entries.size(); index++) {
             try {
                 if (!entries.get(index).isJsonObject()) throw new IllegalArgumentException("Destinations must be JSON objects");
@@ -109,6 +109,7 @@ public record SpawnDefinition(ResourceLocation id, String title, String descript
                 var destination = json.deepCopy();
                 destination.remove("pool");
                 entry.entrySet().forEach(field -> destination.add(field.getKey(), field.getValue()));
+                if (destination.has("intro") && destination.get("intro").isJsonNull()) destination.remove("intro");
                 destinations.add(parse(id, destination));
             } catch (IllegalArgumentException error) {
                 throw new IllegalArgumentException("pool[" + index + "]: " + error.getMessage(), error);

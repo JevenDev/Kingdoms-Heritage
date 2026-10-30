@@ -44,6 +44,7 @@ function merge(input,current,createId=()=>crypto.randomUUID()) {
   for(const kit of result.pack.kits)kit.id=maps.kits.get(kit.id)??kit.id;
   for(const location of result.pack.locations) {
     location.intro=maps.intros.get(location.intro)??location.intro;
+    for(const destination of location.destinations)if(typeof destination.intro==='string')destination.intro=maps.intros.get(destination.intro)??destination.intro;
     location.kits=location.kits.map(id=>maps.kits.get(id)??id);
   }
   return result;

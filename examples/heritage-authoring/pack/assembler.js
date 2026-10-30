@@ -30,7 +30,8 @@ function renderOverview() {
     const row=element('li'),button=element('button',{type:'button','data-review-location':entry.id,'aria-current':String(entry.id===state.active)});
     button.append(element('strong',{},entry.fields.title||'Unnamed location'),element('span',{class:'summary-detail'},locationDescription(entry)));
     const intro=catalog.intros.find(draft=>draft.id===entry.intro);
-    button.append(element('span',{class:'summary-detail'},'Intro: '+(intro?.name||(entry.intro?'Missing intro':'None'))));
+    const overrides=entry.fields.type==='pool'?entry.destinations.filter(destination=>Object.hasOwn(destination,'intro')&&destination.intro!=='').length:0;
+    button.append(element('span',{class:'summary-detail'},(entry.fields.type==='pool'?'Default intro: ':'Intro: ')+(intro?.name||(entry.intro?'Missing intro':'None'))+(overrides?' · '+overrides+' place override'+(overrides===1?'':'s'):'')));
     const ids=entry.kitMode==='selected'?entry.kits:state.kits.filter(kit=>kit.included).map(kit=>kit.id);
     const names=ids.map(id=>id==='bundled-empty'?'Heritage Empty-handed':catalog.kits.find(draft=>draft.id===id)?.name||'Missing kit');
     if(entry.kitMode!=='selected'&&state.keepKits)names.push('Heritage Empty-handed');
@@ -133,11 +134,12 @@ function showType() {
 }
 function introOptions() {
   const entry=active();if(!entry)return;
+  $('location-intro-label').textContent=entry.fields.type==='pool'?'Default intro for this pool':'Play this intro';
   const field=$('location-intro');field.replaceChildren(option('','No intro'),...catalog.intros.map(draft=>option(draft.id,draft.name+(draft.error?' (needs fixing)':''))));
   if(entry.intro&&!catalog.intros.some(draft=>draft.id===entry.intro))field.append(option(entry.intro,'Missing saved intro'));
   field.value=entry.intro;
   const draft=catalog.intros.find(draft=>draft.id===entry.intro);
-  $('intro-status').textContent=draft?.error||(draft?.document?plainText(draft.document.text):entry.intro?'This intro is missing. Choose another or select No intro.':'Players will start without an intro.');
+  $('intro-status').textContent=draft?.error||(draft?.document?plainText(draft.document.text):entry.intro?'This intro is missing. Choose another or select No intro.':entry.fields.type==='pool'?'Places using the pool’s default will start without an intro.':'Players will start without an intro.');
   $('intro-status').classList.toggle('error',!!draft?.error||!!entry.intro&&!draft);
   $('use-spawn-settings').hidden=!draft?.spawn||!!draft.error;
   $('spawn-settings-help').hidden=$('use-spawn-settings').hidden;
@@ -184,7 +186,20 @@ function renderPool() {
     grid.append(inputField('Dimension (optional)','dimension',destination.dimension,index,false,'Same as this location'));
     for(const [key,name] of [['search_radius','Search distance (blocks)'],['random_radius','Random spawn distance (blocks)']])grid.append(inputField(name,key,destination[key],index,true,'Use location setting'));
     const piece=inputField('Preferred building piece (optional)','piece',destination.piece,index);piece.dataset.poolTypes='structure';grid.append(piece);
-    options.append(grid);row.append(options);container.append(row);destinationType(row,index,destination.type);
+    options.append(grid);row.append(options);
+    const introLabel=element('label',{class:'stack'},'Intro for place '+(index+1));
+    const intro=element('select',{'data-destination':String(index),'data-destination-field':'intro'});
+    intro.append(option('','Use the pool’s default intro'),option(':none','No intro'),...catalog.intros.map(draft=>option(draft.id,draft.name+(draft.error?' (needs fixing)':''))));
+    const value=destination.intro;
+    if(value&&typeof value==='object')intro.append(option(':imported','Imported intro'));
+    else if(value&&!catalog.intros.some(draft=>draft.id===value))intro.append(option(value,'Missing saved intro'));
+    intro.value=value===null?':none':typeof value==='object'?':imported':value??'';
+    introLabel.append(intro);row.append(introLabel);
+    const draft=catalog.intros.find(draft=>draft.id===(value||entry.intro));
+    const text=value===null?'Players will start here without an intro.':value&&typeof value==='object'?plainText(value.text??''):draft?.error||plainText(draft?.document?.text??'');
+    const status=element('p',{class:'intro-excerpt hint'},text||(value?'This intro is missing. Choose another intro.':entry.intro?'The pool’s default intro is missing.':'The pool has no default intro.'));
+    status.classList.toggle('error',value!==null&&typeof value!=='object'&&(!!draft?.error||!!(value||entry.intro)&&!draft));
+    row.append(status);container.append(row);destinationType(row,index,destination.type);
   });
 }
 function renderLocation() {
@@ -240,7 +255,7 @@ function render() {
   $('keep-locations').checked=state.keepLocations;$('keep-kits').checked=state.keepKits;
   projectOptions();renderKits();renderIntros();renderLocation();renderOutput();
 }
-function refresh() {loadCatalog();discoverKits();renderKits();renderIntros();introOptions();kitChoices();changed();}
+function refresh() {loadCatalog();discoverKits();renderKits();renderIntros();introOptions();kitChoices();renderPool();changed();}
 $('refresh-drafts').addEventListener('click',()=>{refresh();$('export-status').textContent='Your latest saved kits and intros are ready.';});
 $('new-pack').addEventListener('click',()=>$('new-pack-dialog').showModal());
 $('confirm-new-pack').addEventListener('click',()=>{
@@ -294,7 +309,11 @@ $('location-form').addEventListener('input',event=>{
   } else if(field.id==='location-id')entry.path=field.value;
   else if(field.hasAttribute('data-destination-field')) {
     const destination=entry.destinations[Number(field.dataset.destination)],key=field.dataset.destinationField;
-    destination[key]=field.validity.badInput?'invalid':field.value;
+    if(key==='intro') {
+      if(field.value==='')delete destination.intro;
+      else if(field.value!==':imported')destination.intro=field.value===':none'?null:field.value;
+      renderPool();
+    } else destination[key]=field.validity.badInput?'invalid':field.value;
     if(key==='type') {
       for(const name of ['target','piece','x','y','z'])delete destination[name];
       if(field.value==='fixed')Object.assign(destination,{x:'0',y:'64',z:'0'});
@@ -303,7 +322,7 @@ $('location-form').addEventListener('input',event=>{
   } else return;
   changed();
 });
-$('location-intro').addEventListener('change',event=>{active().intro=event.target.value;introOptions();changed();});
+$('location-intro').addEventListener('change',event=>{active().intro=event.target.value;introOptions();renderPool();changed();});
 $('use-spawn-settings').addEventListener('click',()=>{
   const entry=active(),draft=catalog.intros.find(draft=>draft.id===entry.intro);
   if(!draft?.spawn||draft.error)return;

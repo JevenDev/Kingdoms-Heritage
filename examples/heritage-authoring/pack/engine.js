@@ -1,6 +1,7 @@
 (() => {
 'use strict';
 const registry=typeof module!=='undefined'?require('./locations.js'):HeritageLocations;
+const preview=typeof module!=='undefined'?require('../editor/engine.js'):HeritagePreview;
 const fieldError=(field,message)=>Object.assign(new Error(message),{field});
 const labels={search_radius:'Search distance',random_radius:'Random spawn distance',order:'Position in the menu',title:'Location name'};
 const object=value=>value!==null&&typeof value==='object'&&!Array.isArray(value);
@@ -10,7 +11,7 @@ const bundledSpawns=['default','random','plains','village'];
 const emptyKit={id:'builtin-empty',name:'Empty-handed',document:{title:'Empty-handed',description:'Begin with an empty inventory.',items:[]},error:'',warnings:[]};
 const numericFields=['x','y','z','order','search_radius','random_radius'];
 const fields=['title','description','title_key','description_key','type','dimension','target','piece','x','y','z','order','search_radius','random_radius','image'];
-const destinationFields=['type','dimension','target','piece','x','y','z','search_radius','random_radius'];
+const destinationFields=['type','dimension','target','piece','x','y','z','search_radius','random_radius','intro'];
 const slug=value=>String(value).toLowerCase().replace(/[^a-z0-9_-]+/g,'_').replace(/^_+|_+$/g,'')||'untitled';
 function fileId(value,label) {
   if(typeof value!=='string'||!value||!/^[a-z0-9/._-]+$/.test(value)||value.split('/').some(part=>!part||/^\.+$/.test(part)))throw new Error(label+' must use lowercase letters, numbers, _, - or /, without empty or dot-only path segments.');
@@ -96,6 +97,10 @@ function validateSpawn(document,allowUnknown=false) {
   const type=typeof document.type==='string'?document.type.toLowerCase():'';
   if(!types.includes(type))throw new Error('Choose a location type.');
   if(document.enabled===false)throw new Error('This location is disabled.');
+  if(document.intro!==undefined) {
+    try{preview.readJson(JSON.stringify({intro:document.intro}));}
+    catch(error){throw fieldError('intro',error.message);}
+  }
   if(document.dimension!==undefined)knownResource(document.dimension,'dimension',allowUnknown);
   if(document.image!==undefined)resource(document.image,'Image');
   if(document.order!==undefined)integer(document.order,-2147483648,2147483647,'Order');
@@ -114,11 +119,19 @@ function validateSpawn(document,allowUnknown=false) {
       try {
         if(!object(entry)||Object.keys(entry).some(key=>!destinationFields.includes(key)))throw new Error('Unsupported destination field.');
         if(typeof entry.type!=='string'||entry.type.toLowerCase()==='pool')throw new Error('Choose a destination type other than pool.');
-        const inherited={...document,...entry};delete inherited.pool;validateSpawn(inherited,allowUnknown);
+        const inherited={...document,...entry};delete inherited.pool;
+        if(entry.intro===null)delete inherited.intro;
+        validateSpawn(inherited,allowUnknown);
       }catch(error){throw Object.assign(new Error('Place '+(index+1)+': '+error.message),{field:error.field,destination:index});}
     });
   } else if(document.pool!==undefined)throw new Error('Only pools support destinations.');
   return document;
+}
+function linkedIntro(id,catalog) {
+  const intro=catalog.intros.find(draft=>draft.id===id);
+  if(!intro)throw fieldError('intro','The linked intro is missing. Restore it or choose another intro.');
+  if(intro.error)throw fieldError('intro','Intro '+intro.name+': '+intro.error);
+  return copy(intro.document);
 }
 function build(state,catalog) {
   const errors=[],warnings=[],files=[],issues=[];
@@ -159,13 +172,14 @@ function build(state,catalog) {
     const relevant=fields.filter(key=>key!=='piece'||type==='structure').filter(key=>key!=='target'||['biome','structure'].includes(type)).filter(key=>!['x','y','z'].includes(key)||type==='fixed');
     const values=settings(entry.fields??{},relevant);
     Object.assign(document,values);
-    if(type==='pool')document.pool=(entry.destinations??[]).map(destination=>settings(destination,destinationFields));
-    if(entry.intro) {
-      const intro=catalog.intros.find(draft=>draft.id===entry.intro);
-      if(!intro)throw new Error('The linked intro is missing. Restore it or choose another intro.');
-      if(intro.error)throw new Error('Intro '+intro.name+': '+intro.error);
-      document.intro=copy(intro.document);
-    }
+    if(type==='pool')document.pool=(entry.destinations??[]).map((destination,index)=>{
+      try {
+        const values=settings(destination,destinationFields);
+        if(typeof values.intro==='string')values.intro=linkedIntro(values.intro,catalog);
+        return values;
+      }catch(error){throw Object.assign(new Error('Place '+(index+1)+': '+error.message),{field:error.field,destination:index});}
+    });
+    if(entry.intro)document.intro=linkedIntro(entry.intro,catalog);
     const ids=entry.kitMode==='selected'?entry.kits:[...kitIds.keys()];
     if(!Array.isArray(ids))throw new Error('Choose allowed kits.');
     const allowed=ids.map(id=>{
