@@ -1,0 +1,29 @@
+{
+  "title": "Home",
+  "description": "Return to your original world spawn.",
+  "type": "default",
+  "order": 10,
+  "intro": {
+    "text": "<gold>Welcome home.</gold>",
+    "subtitle": "Your story starts in <biome>.",
+    "title_position": "left_center",
+    "subtitle_position": "left_center",
+    "cinematic_bars": true,
+    "bar_style": "random",
+    "hide_hud_during_bars": true,
+    "outline": true,
+    "black_hold_ticks": 60,
+    "fade_from_black_ticks": 60,
+    "animation": "fade_in",
+    "reveal_ticks": 40,
+    "hold_ticks": 60,
+    "fade_out_ticks": 20,
+    "control": "after_title",
+    "blip": false
+  },
+  "title_key": "heritage_example.spawn.home.title",
+  "image": "heritage_example:textures/gui/locations/home.png",
+  "kits": [
+    "#heritage_example:starter"
+  ]
+}

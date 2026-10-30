@@ -1,0 +1,35 @@
+@font-face { font-family: 'Archivo'; src: url('fonts/Archivo.ttf') format('truetype'); font-weight: 100 900; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Monocraft'; src: url('fonts/Monocraft.ttf') format('truetype'); font-weight: 400; font-style: normal; font-display: swap; }
+:root { font-family: 'Archivo', sans-serif; color: #e5e5e5; background: #000; color-scheme: dark; --control-height: 34px; --compact-height: 30px; --muted: #aaa; --border: #333; --reading-increase: 1px; --body-font-size: 15px; --json-font-size: 15px; }
+* { box-sizing: border-box; scrollbar-width: thin; scrollbar-color: #454545 transparent; }
+body { margin: 0; font-size: var(--body-font-size); line-height: 1.5; }
+button, select, input, textarea { font: inherit; color: inherit; }
+button, select, :where(input:not([type=checkbox]):not([type=range])), textarea { border: 1px solid #3c3c3c; background: #000; border-radius: 6px; padding: 7px 11px; }
+button { border-color: transparent; display: inline-flex; align-items: center; justify-content: center; gap: 7px; cursor: pointer; white-space: nowrap; font-size: 13px; line-height: 1.5; min-height: var(--control-height); transition: background-color .12s, border-color .12s, color .12s; }
+button:where(:not(:disabled)):hover { background: #141414; color: #eee; }
+button:where(:not(:disabled)):active { background: #202020; }
+button:disabled { opacity: .4; cursor: default; }
+button.primary { background: #eee; border-color: #eee; color: #000; font-weight: 600; }
+button.primary:hover:not(:disabled) { background: #fff; color: #000; }
+button.primary:active:not(:disabled) { background: #ddd; }
+button.quiet { border-color: transparent; background: transparent; color: #aaa; }
+button.quiet:hover:not(:disabled) { color: #eee; background: #141414; }
+button.copy-success, button.copy-success:hover { color: #8fc98f; background: transparent; border-color: transparent; }
+:focus-visible { outline: 2px solid #ddd; outline-offset: 2px; }
+input[type=checkbox], input[type=range] { accent-color: #ddd; }
+header { position: sticky; top: 0; z-index: 10; height: 64px; padding: 0 24px; border-bottom: 1px solid #242424; background: #000; display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+header :is(h1,.brand) { display: flex; align-items: center; gap: 18px; color: #eee; font-size: 23px; font-weight: 600; letter-spacing: -.6px; margin: 0; text-decoration: none; line-height: 1.5; }
+header :is(h1,.brand) span { border-left: 1px solid #333; padding-left: 18px; font-size: 15px; font-weight: 400; letter-spacing: 0; color: #aaa; }
+header .home-link { color: inherit; text-decoration: none; }
+header .home-link:hover { color: #fff; }
+header nav { display: flex; align-items: center; gap: 24px; font-size: var(--body-font-size); }
+header nav a { display: inline-flex; align-items: center; gap: 7px; color: #aaa; text-decoration: none; padding: 5px 0; line-height: 1.5; transition: color .12s; }
+header nav a:hover, header nav a:focus-visible { color: #eee; }
+header nav a:active, header nav a[aria-current=page] { color: #fff; }
+.lucide { display: inline-block; width: 16px; height: 16px; flex: 0 0 16px; vertical-align: middle; }
+header nav .lucide, .quiet .lucide { width: 14px; height: 14px; flex-basis: 14px; }
+@media(max-width:1100px) { header nav { gap: 16px; } }
+@media(max-width:850px) { header { height: auto; min-height: 64px; flex-wrap: wrap; padding: 16px 20px; gap: 12px; } header :is(h1,.brand) { font-size: 21px; } header nav { flex-wrap: wrap; } }
+@media(max-width:480px) { header nav { gap: 14px; } }
+.site-footer { min-height: 40px; padding: 8px 20px; color: #999; font-size: calc(11px + var(--reading-increase)); line-height: 1.6; }
+@media(prefers-reduced-motion:reduce) { button, header nav a { transition: none; } }

@@ -1,0 +1,75 @@
+{
+  "version": "1.21.1",
+  "textures": {
+    "texture-0.png": {
+      "source": "minecraft:textures/atlas/blocks.png",
+      "sha256": "cd4b8e4657571c4ad2bcc1efafe69f97d8f4889db540d7cfcc7674b1ab1e8b9a"
+    },
+    "texture-1.png": {
+      "source": "minecraft:textures/atlas/decorated_pot.png",
+      "sha256": "f3de0243a3cf9d651cbd52e256f2d37725f650b0134a3a74e0b200a86a6c5eea"
+    },
+    "texture-2.png": {
+      "source": "minecraft:textures/atlas/chest.png",
+      "sha256": "5d64793f05f4355def2359986262cc456f35c524fa8848c00ecd06b5e2c6a313"
+    },
+    "texture-3.png": {
+      "source": "minecraft:textures/atlas/shulker_boxes.png",
+      "sha256": "9a7b34318ce6b66bab8526bf42c4326501648538b1cb8c7e91c6e5ba2c24f3f5"
+    },
+    "texture-4.png": {
+      "source": "minecraft:textures/atlas/beds.png",
+      "sha256": "28876e4a09c4529877352d79fe7ed8dfd4c46c43439473cfa6e57d94f34ede43"
+    },
+    "texture-5.png": {
+      "source": "minecraft:textures/entity/skeleton/skeleton.png",
+      "sha256": "7d4f7452976446867c46fba64fa89d84e0f159d5a9cdfdbb560115c7b557f461"
+    },
+    "texture-6.png": {
+      "source": "minecraft:textures/entity/skeleton/wither_skeleton.png",
+      "sha256": "15f1b382b4727323b53fa7cd204e3a1c06ee597a1155d4f3fc6248d0e731bb77"
+    },
+    "texture-7.png": {
+      "source": "minecraft:textures/entity/player/slim/steve.png",
+      "sha256": "7f6221ed66b97d4574dc0461f2eb83f0f823060f0cab8be4caa65ab860f1418d"
+    },
+    "texture-8.png": {
+      "source": "minecraft:textures/entity/zombie/zombie.png",
+      "sha256": "243902c9a3e95c226420f1cd831492da051d8d7ebd8886f86ce2746e45c4047d"
+    },
+    "texture-9.png": {
+      "source": "minecraft:textures/entity/creeper/creeper.png",
+      "sha256": "17065304bbbb9760a4da83bb81e531b51d3590529d14dcd76f4b5e5e5958c6f8"
+    },
+    "texture-10.png": {
+      "source": "minecraft:textures/entity/enderdragon/dragon.png",
+      "sha256": "f188628f9cdef486cc34b3a6416aae6eba5f1cefd4581ec6c7ada66f02470b83"
+    },
+    "texture-11.png": {
+      "source": "minecraft:textures/entity/piglin/piglin.png",
+      "sha256": "0f79af6b59a225994dc6a2a5c0dab8ed915cae7ec67b0c3e05336ed865d60882"
+    },
+    "texture-12.png": {
+      "source": "minecraft:textures/atlas/banner_patterns.png",
+      "sha256": "37d052bc0efdf8cdc9c0985ecc1e227f409a409b43396df247afbfedcddf6865"
+    },
+    "texture-13.png": {
+      "source": "minecraft:textures/atlas/shield_patterns.png",
+      "sha256": "51453441a34cbe0f1808177cc7fd0d63af62a2f611f1a332e9b07af1e794b352"
+    },
+    "texture-14.png": {
+      "source": "minecraft:textures/entity/trident.png",
+      "sha256": "2fc24391762858f444e01a12efd9406c3ced528e994e8e3fde35309a28ab1a18"
+    },
+    "texture-15.png": {
+      "source": "minecraft:textures/entity/elytra.png",
+      "sha256": "dd449d8b87db10dd97903528ce3eecbc610c094cd7ce97d906cb187029a2f269"
+    }
+  },
+  "geometry": {
+    "file": "models.bin",
+    "sha256": "522ad8e6b03183dbb05d9997621a8d3502bbc34b1fbca0d5480a7cb5fd16cc99",
+    "quads": 27092,
+    "items": 1332
+  }
+}

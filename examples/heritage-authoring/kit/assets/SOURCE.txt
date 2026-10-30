@@ -1,0 +1,15 @@
+Minecraft 1.21.1 preview assets
+
+inventory.png, steve.png, empty_armor_slot_*.png and armor/*.png were extracted from the official Minecraft 1.21.1 client JAR.
+Their original paths are assets/minecraft/textures/gui/container/inventory.png, assets/minecraft/textures/entity/player/wide/steve.png, assets/minecraft/textures/item/empty_armor_slot_*.png and assets/minecraft/textures/models/armor/*.png.
+widget/button.png, widget/button_highlighted.png and their scaling metadata come from assets/minecraft/textures/gui/sprites/widget/ in that same client JAR. The Accessories cosmetics toggle uses these vanilla button sprites.
+
+items-0.png and items-1.png contain native Minecraft renders of all 1,332 non-air vanilla registry items. Each cell is 32 x 32 pixels, rendered at GUI scale 2 with the game's item renderer, default item components, model lighting and transparent background.
+catalog.json records English item names, resource IDs, maximum stack counts, block flags, equipment types and atlas coordinates from that same running client. ../catalog.js adds armor material names for the browser player model.
+
+text.json includes the official client JAR's assets/minecraft/lang/en_us.json translations and the default rarity overrides from Minecraft 1.21.1's Items registrations. Item names and lore use Minecraft's component style inheritance, ItemLore defaults, and Font glyph styling.
+
+Minecraft textures and artwork belong to Mojang and Microsoft. These preview assets do not change the repository's license or grant rights to Minecraft artwork.
+The browser player renderer uses the vanilla wide model's part dimensions, texture coordinates, arm pivots, and item-holding pose. Player item geometry, UVs, default colors, and right-hand, left-hand, and head display matrices were captured from Minecraft 1.21.1's item renderer for all 1,332 vanilla items. The captured entity models include shields, tridents, skulls, and standing elytra wings. player/SOURCE.json records texture resource locations and SHA-256 hashes. ../player-data.js indexes the packed quads in player/models.bin.
+
+Held items follow ItemInHandLayer's hand transforms. Head equipment follows CustomHeadLayer, including the separate skull scale. Armor and skin sleeves share the same arm transforms, and all parts share model depth sorting. This static browser renderer does not run item component visuals, armor trims, resource-pack overrides, modded render code, or item-use animations.

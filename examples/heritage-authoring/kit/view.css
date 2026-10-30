@@ -1,0 +1,21 @@
+.mc-inventory { position: relative; flex-shrink: 0; image-rendering: pixelated; margin-inline: auto; }
+.mc-inventory canvas { display: block; position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; background: transparent; }
+.mc-inventory .mc-slot { position: absolute; min-height: 0; border: 0; border-radius: 0; padding: 0; margin: 0; background: transparent; cursor: pointer; }
+.mc-inventory .mc-slot:hover { background: transparent; }
+.mc-inventory .mc-slot:focus-visible { outline: 2px solid #fff; outline-offset: -3px; }
+.mc-inventory .mc-control { position: absolute; min-width: 0; min-height: 0; border: 0; border-radius: 0; margin: 0; padding: 0; background: transparent; cursor: pointer; }
+.mc-inventory .mc-control:hover { background: transparent; }
+.mc-inventory .mc-control:disabled { opacity: 1; cursor: default; }
+.mc-inventory .mc-control:focus-visible { outline: 1px solid #fff; outline-offset: -2px; }
+.mc-inventory .mc-native-scroll { writing-mode: vertical-lr; direction: ltr; opacity: 0; cursor: ns-resize; }
+.mc-inventory .mc-native-scroll:focus-visible { opacity: .35; }
+.mc-inventory .mc-slot { touch-action: none; }
+.mc-drag-stack { position: fixed; z-index: 10002; pointer-events: none; width: 32px; height: 32px; }
+.mc-drag-stack > span:last-child:not(.mc-item) { position: absolute; bottom: -1px; right: -1px; color: #fff; font: 13px Monocraft,monospace; text-shadow: 1px 1px #222,-1px -1px #222; }
+.mc-dragging { user-select: none; cursor: grabbing; }
+.mc-dragging .mc-tooltip, .mc-carrying .mc-tooltip, .mc-dragging .mc-carried-stack { display: none; }
+.mc-inventory .mc-slot.mc-drop-target { background: #ffffff80; outline: 1px solid #fff; outline-offset: -1px; }
+.mc-dragging .mc-slot, .mc-dragging .item-choice { cursor: grabbing; }
+.mc-item { display: inline-block; width: 32px; height: 32px; flex-shrink: 0; background-repeat: no-repeat; background-size: 1280px 720px; image-rendering: pixelated; }
+.mc-item.mc-missing { background: conic-gradient(#000 25%,#f0f 0 50%,#000 0 75%,#f0f 0); background-size: 16px 16px; }
+.mc-tooltip { aspect-ratio: auto; position: fixed; z-index: 10000; pointer-events: none; width: auto; height: auto; background: transparent; image-rendering: pixelated; }

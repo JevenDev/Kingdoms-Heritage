@@ -1,0 +1,284 @@
+[
+  {
+    "file": "curios/gui/curios/cosmetic_off.png",
+    "source": "assets/curios/textures/gui/curios/cosmetic_off.png",
+    "artifact": "curios-neoforge-9.5.1+1.21.1.jar",
+    "sha256": "3dfed6e23b4513f2bd731fc42d4ba710806c38b382d185ccb63727d176599c10"
+  },
+  {
+    "file": "curios/gui/curios/cosmetic_off_highlighted.png",
+    "source": "assets/curios/textures/gui/curios/cosmetic_off_highlighted.png",
+    "artifact": "curios-neoforge-9.5.1+1.21.1.jar",
+    "sha256": "fcfdaff95c719dc4b2a4d538a49c950518383b1dc67e7116e9fefccb91d8fd58"
+  },
+  {
+    "file": "curios/gui/curios/cosmetic_on.png",
+    "source": "assets/curios/textures/gui/curios/cosmetic_on.png",
+    "artifact": "curios-neoforge-9.5.1+1.21.1.jar",
+    "sha256": "3f1d321dc6cda30cfb77ca1172bd3c1d153d86e4185c064014bd40ddcca740d6"
+  },
+  {
+    "file": "curios/gui/curios/cosmetic_on_highlighted.png",
+    "source": "assets/curios/textures/gui/curios/cosmetic_on_highlighted.png",
+    "artifact": "curios-neoforge-9.5.1+1.21.1.jar",
+    "sha256": "c9feaa54563530b64077434ce794e36732ecd2675013d3f6e275755c378529e2"
+  },
+  {
+    "file": "curios/gui/curios/inventory.png",
+    "source": "assets/curios/textures/gui/curios/inventory.png",
+    "artifact": "curios-neoforge-9.5.1+1.21.1.jar",
+    "sha256": "0c81cd9620dc29121afa8a5f961fe9425d868af2333286009e3ea312d8dacd23"
+  },
+  {
+    "file": "curios/slot/empty_back_slot.png",
+    "source": "assets/curios/textures/slot/empty_back_slot.png",
+    "artifact": "curios-neoforge-9.5.1+1.21.1.jar",
+    "sha256": "889cbed451d61d7aa1cb2871d55e9d54302f78c16d57d3cbf835bf54cbbc30f0"
+  },
+  {
+    "file": "curios/slot/empty_belt_slot.png",
+    "source": "assets/curios/textures/slot/empty_belt_slot.png",
+    "artifact": "curios-neoforge-9.5.1+1.21.1.jar",
+    "sha256": "6c738a3441a2706110a91bc1b9aec848958665dd9e1633fc524823383fb76811"
+  },
+  {
+    "file": "curios/slot/empty_body_slot.png",
+    "source": "assets/curios/textures/slot/empty_body_slot.png",
+    "artifact": "curios-neoforge-9.5.1+1.21.1.jar",
+    "sha256": "c05e12cec673e1b2319afa2533e2c27356c6a9870c5dba560fb1236565118f32"
+  },
+  {
+    "file": "curios/slot/empty_bracelet_slot.png",
+    "source": "assets/curios/textures/slot/empty_bracelet_slot.png",
+    "artifact": "curios-neoforge-9.5.1+1.21.1.jar",
+    "sha256": "eab8b7419148bd08bfffe26997063e23781289fd1348311ac41284a4886ac7fb"
+  },
+  {
+    "file": "curios/slot/empty_charm_slot.png",
+    "source": "assets/curios/textures/slot/empty_charm_slot.png",
+    "artifact": "curios-neoforge-9.5.1+1.21.1.jar",
+    "sha256": "9862b3a181dff7ae5cb791bf093239613a7cfe9e30d729c5ec9ac80185a9fd72"
+  },
+  {
+    "file": "curios/slot/empty_cosmetic_slot.png",
+    "source": "assets/curios/textures/slot/empty_cosmetic_slot.png",
+    "artifact": "curios-neoforge-9.5.1+1.21.1.jar",
+    "sha256": "91dd009e11b78625ba8e581d8367908f0fe3908b243f236a838287e6c20dfdb5"
+  },
+  {
+    "file": "curios/slot/empty_curio_slot.png",
+    "source": "assets/curios/textures/slot/empty_curio_slot.png",
+    "artifact": "curios-neoforge-9.5.1+1.21.1.jar",
+    "sha256": "90485c268d8287456a9dc7a5dedcbc7f42f38c4964b5d1b2c62cbf32ee7b1ddc"
+  },
+  {
+    "file": "curios/slot/empty_hands_slot.png",
+    "source": "assets/curios/textures/slot/empty_hands_slot.png",
+    "artifact": "curios-neoforge-9.5.1+1.21.1.jar",
+    "sha256": "16987680b46b5915645465b86386d73f30ef43849ccddbd4eadd088f5da8a538"
+  },
+  {
+    "file": "curios/slot/empty_head_slot.png",
+    "source": "assets/curios/textures/slot/empty_head_slot.png",
+    "artifact": "curios-neoforge-9.5.1+1.21.1.jar",
+    "sha256": "1055bdfee57bc8f038b6261a4f1e9a07e17bc9b009ebb2fa1d30b0ccbb3699fb"
+  },
+  {
+    "file": "curios/slot/empty_necklace_slot.png",
+    "source": "assets/curios/textures/slot/empty_necklace_slot.png",
+    "artifact": "curios-neoforge-9.5.1+1.21.1.jar",
+    "sha256": "b4ab29cc0f91c8a8223f18a51ab51718e47c93c8f98d7b2114122f57d8e1b556"
+  },
+  {
+    "file": "curios/slot/empty_ring_slot.png",
+    "source": "assets/curios/textures/slot/empty_ring_slot.png",
+    "artifact": "curios-neoforge-9.5.1+1.21.1.jar",
+    "sha256": "f22fe16dfc10721d11aa467269bbfb0b9171c958cbfb803b67264fd6592b3f0f"
+  },
+  {
+    "file": "accessories/gui/container/accessories_inventory.png",
+    "source": "assets/accessories/textures/gui/container/accessories_inventory.png",
+    "artifact": "accessories-neoforge-1.1.0-beta.51+1.21.1.jar",
+    "sha256": "d32fab8d5f4ee0c3273092f88a1d8e341e5a8fe9f1068ea5c28764abf65257f4"
+  },
+  {
+    "file": "accessories/gui/container/horizontal_tabs_small.png",
+    "source": "assets/accessories/textures/gui/container/horizontal_tabs_small.png",
+    "artifact": "accessories-neoforge-1.1.0-beta.51+1.21.1.jar",
+    "sha256": "793e13fd7004fa64b31e8188739c0c4b78650718b28b1317857d80b71c0cfe3b"
+  },
+  {
+    "file": "accessories/gui/group/arm.png",
+    "source": "assets/accessories/textures/gui/group/arm.png",
+    "artifact": "accessories-neoforge-1.1.0-beta.51+1.21.1.jar",
+    "sha256": "3cc8111177d59a30e5e9245991c00b11499037195a917607e0dbadb4ab9dc93e"
+  },
+  {
+    "file": "accessories/gui/group/chest.png",
+    "source": "assets/accessories/textures/gui/group/chest.png",
+    "artifact": "accessories-neoforge-1.1.0-beta.51+1.21.1.jar",
+    "sha256": "92b9976e4d4e491d01d426279714df4f879792f4803324b9754dac52a91f4b52"
+  },
+  {
+    "file": "accessories/gui/group/feet.png",
+    "source": "assets/accessories/textures/gui/group/feet.png",
+    "artifact": "accessories-neoforge-1.1.0-beta.51+1.21.1.jar",
+    "sha256": "04124f7b6fcb3568a5669d6caef996cc6b519f9831dd0f3d420b8d798c17339c"
+  },
+  {
+    "file": "accessories/gui/group/head.png",
+    "source": "assets/accessories/textures/gui/group/head.png",
+    "artifact": "accessories-neoforge-1.1.0-beta.51+1.21.1.jar",
+    "sha256": "9e67268cd19cb49ede2956fae666a2f5f3dea98bf60dd37a1c44b295ede215ca"
+  },
+  {
+    "file": "accessories/gui/group/leg.png",
+    "source": "assets/accessories/textures/gui/group/leg.png",
+    "artifact": "accessories-neoforge-1.1.0-beta.51+1.21.1.jar",
+    "sha256": "39315d64553983b00659467fb7db5720a7cf00984b7351bca4f83f056b191f8b"
+  },
+  {
+    "file": "accessories/gui/group/misc.png",
+    "source": "assets/accessories/textures/gui/group/misc.png",
+    "artifact": "accessories-neoforge-1.1.0-beta.51+1.21.1.jar",
+    "sha256": "f974a9de1af017c297b5ce6b8437ef1ba5982a13a4972ba35e7560b080fddbaa"
+  },
+  {
+    "file": "accessories/gui/group/unknown.png",
+    "source": "assets/accessories/textures/gui/group/unknown.png",
+    "artifact": "accessories-neoforge-1.1.0-beta.51+1.21.1.jar",
+    "sha256": "963e8064e5609831d69d5725c77706a3083ddd192b097ca4d6fba408288382ed"
+  },
+  {
+    "file": "accessories/gui/slot/anklet.png",
+    "source": "assets/accessories/textures/gui/slot/anklet.png",
+    "artifact": "accessories-neoforge-1.1.0-beta.51+1.21.1.jar",
+    "sha256": "35fde342923611fb97e8c663f848942e9f2a88e0b429288d6b00816b5acbe2b6"
+  },
+  {
+    "file": "accessories/gui/slot/back.png",
+    "source": "assets/accessories/textures/gui/slot/back.png",
+    "artifact": "accessories-neoforge-1.1.0-beta.51+1.21.1.jar",
+    "sha256": "594f8795d05872b667d366b66955817837e1a15770a8f8eef84b6fa3e8e01961"
+  },
+  {
+    "file": "accessories/gui/slot/belt.png",
+    "source": "assets/accessories/textures/gui/slot/belt.png",
+    "artifact": "accessories-neoforge-1.1.0-beta.51+1.21.1.jar",
+    "sha256": "6a3d358cf42e4a6333214f95624ae42dd8cce69b1d93a799daad8a3642de9b3b"
+  },
+  {
+    "file": "accessories/gui/slot/cape.png",
+    "source": "assets/accessories/textures/gui/slot/cape.png",
+    "artifact": "accessories-neoforge-1.1.0-beta.51+1.21.1.jar",
+    "sha256": "3dedc300765a7b82d78adc14f93f6e36ea90e2edc754dbd022a5dab62e367e1c"
+  },
+  {
+    "file": "accessories/gui/slot/charm.png",
+    "source": "assets/accessories/textures/gui/slot/charm.png",
+    "artifact": "accessories-neoforge-1.1.0-beta.51+1.21.1.jar",
+    "sha256": "aaf949b42198f267ee7e117c662ae1af2bad4206df9634b01925da2a33ce8040"
+  },
+  {
+    "file": "accessories/gui/slot/cosmetic.png",
+    "source": "assets/accessories/textures/gui/slot/cosmetic.png",
+    "artifact": "accessories-neoforge-1.1.0-beta.51+1.21.1.jar",
+    "sha256": "f0c12016c4963fc55875a705eb390475bc894d4f6b89dc5351752d1c1778e58e"
+  },
+  {
+    "file": "accessories/gui/slot/empty.png",
+    "source": "assets/accessories/textures/gui/slot/empty.png",
+    "artifact": "accessories-neoforge-1.1.0-beta.51+1.21.1.jar",
+    "sha256": "38be5a9fb712cb81d81245d38f669df298b6e8490018f0617986489249ce0494"
+  },
+  {
+    "file": "accessories/gui/slot/face.png",
+    "source": "assets/accessories/textures/gui/slot/face.png",
+    "artifact": "accessories-neoforge-1.1.0-beta.51+1.21.1.jar",
+    "sha256": "f1daf6277962f1fd2e87e1529ffad93b17928f6fb9fff872914453690025b7f8"
+  },
+  {
+    "file": "accessories/gui/slot/hand.png",
+    "source": "assets/accessories/textures/gui/slot/hand.png",
+    "artifact": "accessories-neoforge-1.1.0-beta.51+1.21.1.jar",
+    "sha256": "367d02c9af8e373d26fbc5a1e635a9f3ff331bfc2c23b12e60a8d3fb3291ec1f"
+  },
+  {
+    "file": "accessories/gui/slot/hat.png",
+    "source": "assets/accessories/textures/gui/slot/hat.png",
+    "artifact": "accessories-neoforge-1.1.0-beta.51+1.21.1.jar",
+    "sha256": "d7df3e34f0ffc6f8552bc59581b06194dfa844b645206378b6238273dddd551f"
+  },
+  {
+    "file": "accessories/gui/slot/necklace.png",
+    "source": "assets/accessories/textures/gui/slot/necklace.png",
+    "artifact": "accessories-neoforge-1.1.0-beta.51+1.21.1.jar",
+    "sha256": "65c950e730cad03c710d22996645aeea36202265a4beeb4af3257d36232af57a"
+  },
+  {
+    "file": "accessories/gui/slot/ring.png",
+    "source": "assets/accessories/textures/gui/slot/ring.png",
+    "artifact": "accessories-neoforge-1.1.0-beta.51+1.21.1.jar",
+    "sha256": "fca3307c4f86a29e3a155a6fefa82587e5a1e3901230e112d3120332951be4c6"
+  },
+  {
+    "file": "accessories/gui/slot/shoes.png",
+    "source": "assets/accessories/textures/gui/slot/shoes.png",
+    "artifact": "accessories-neoforge-1.1.0-beta.51+1.21.1.jar",
+    "sha256": "0093b173da26b7a3c2eaed3b40630af1246636b4c025fec371b50ab7ada8ab0d"
+  },
+  {
+    "file": "accessories/gui/slot/socks.png",
+    "source": "assets/accessories/textures/gui/slot/socks.png",
+    "artifact": "accessories-neoforge-1.1.0-beta.51+1.21.1.jar",
+    "sha256": "c48f01de17a84283a9341ade5f6bf844d66bd942247ebe29c115daf8a0528eee"
+  },
+  {
+    "file": "accessories/gui/slot/wrist.png",
+    "source": "assets/accessories/textures/gui/slot/wrist.png",
+    "artifact": "accessories-neoforge-1.1.0-beta.51+1.21.1.jar",
+    "sha256": "6842be2fef09cc46bbba07351cc9ed54dc3c18bc2cc63242fd3ab93a4431af3f"
+  },
+  {
+    "file": "accessories/gui/sprites/background_patch.png",
+    "source": "assets/accessories/textures/gui/sprites/background_patch.png",
+    "artifact": "accessories-neoforge-1.1.0-beta.51+1.21.1.jar",
+    "sha256": "835054476987a840918eb430fc7fe4d5b3e37c04cb56d9f9a90f94f749992e81"
+  },
+  {
+    "file": "accessories/gui/sprites/scroll_bar.png",
+    "source": "assets/accessories/textures/gui/sprites/scroll_bar.png",
+    "artifact": "accessories-neoforge-1.1.0-beta.51+1.21.1.jar",
+    "sha256": "bcb54e04bc69170f5a06acf7a86be5fc3c92c9d6f79a0aa3119ae5534edcbba6"
+  },
+  {
+    "file": "accessories/gui/sprites/scroll_bar_patch.png",
+    "source": "assets/accessories/textures/gui/sprites/scroll_bar_patch.png",
+    "artifact": "accessories-neoforge-1.1.0-beta.51+1.21.1.jar",
+    "sha256": "c7451b18716d204b2b75813ba63d516197479f0f307533ffe7d90008a4780eba"
+  },
+  {
+    "file": "accessories/gui/sprites/widget/8x8/button.png",
+    "source": "assets/accessories/textures/gui/sprites/widget/8x8/button.png",
+    "artifact": "accessories-neoforge-1.1.0-beta.51+1.21.1.jar",
+    "sha256": "658b70733e18ed848d5f2f0d4ef69dd041e6258d38e62a534fe658b46c837822"
+  },
+  {
+    "file": "accessories/gui/sprites/widget/8x8/button_disabled.png",
+    "source": "assets/accessories/textures/gui/sprites/widget/8x8/button_disabled.png",
+    "artifact": "accessories-neoforge-1.1.0-beta.51+1.21.1.jar",
+    "sha256": "d13a39400b58557064d411cd95b4807002f63831dced1b99cbbbbb67c7501942"
+  },
+  {
+    "file": "accessories/gui/sprites/widget/8x8/button_highlighted.png",
+    "source": "assets/accessories/textures/gui/sprites/widget/8x8/button_highlighted.png",
+    "artifact": "accessories-neoforge-1.1.0-beta.51+1.21.1.jar",
+    "sha256": "2bfa62f80a051df7ea59afe43770c1c17bb76192e013b5c00130f6aaac8d31c3"
+  },
+  {
+    "file": "accessories/gui/theme/light/slot.png",
+    "source": "assets/accessories/textures/gui/theme/light/slot.png",
+    "artifact": "accessories-neoforge-1.1.0-beta.51+1.21.1.jar",
+    "sha256": "3b291d8f4799a52352074d4503619ba86a1f8bd0c5b46c7220eb293e1cdb3f5c"
+  }
+]

@@ -1,0 +1,22 @@
+Equipment preview assets
+
+Curios API 9.5.1+1.21.1
+Copyright (C) 2018-2024 C4
+Project: https://github.com/TheIllusiveC4/Curios
+License: LGPL-3.0-or-later
+Original copyright notice: curios/LICENSE.txt
+Full license texts: curios/COPYING.LESSER.txt and curios/COPYING.txt
+Preferred source form of the textures: the unmodified PNG files under curios/.
+Original sources and resources: https://maven.theillusivec4.top/top/theillusivec4/curios/curios-neoforge/9.5.1+1.21.1/curios-neoforge-9.5.1+1.21.1-sources.jar
+
+Accessories 1.1.0-beta.51+1.21.1
+Copyright (c) 2024 Wisp Forest
+Project authors: Blodhgarm, chyzman, Dr.Zeal
+Project: https://github.com/wisp-forest/accessories
+License: MIT
+Full license and copyright notice: accessories/LICENSE.txt
+Original sources: https://github.com/wisp-forest/accessories/tree/1.21.x
+
+The PNG files and GUI scaling metadata were copied without modification from the local dependency artifacts used by Heritage. equipment-sources.json records every source path, artifact filename and SHA-256 hash.
+Slot definitions and layout coordinates were read from the same versions' data resources and source archives. The browser implementation is a preview and does not execute either mod.
+The project notices and licenses for these assets remain separate from the Heritage mod and Minecraft asset notices.

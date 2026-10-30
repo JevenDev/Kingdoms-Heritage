@@ -1,0 +1,30 @@
+{
+  "title": "Wanderer",
+  "description": "Find a safe random destination within 2,000 blocks of world spawn.",
+  "type": "random",
+  "random_radius": 2000,
+  "order": 20,
+  "intro": {
+    "text": "You woke up in a <wave><gold><biome></gold></wave>...",
+    "subtitle": "<italic>A new journey begins.</italic>",
+    "title_position": "left_center",
+    "subtitle_position": "left_center",
+    "cinematic_bars": true,
+    "bar_style": "random",
+    "hide_hud_during_bars": true,
+    "outline": true,
+    "black_hold_ticks": 60,
+    "fade_from_black_ticks": 60,
+    "animation": "word_by_word",
+    "reveal_ticks": 40,
+    "hold_ticks": 60,
+    "fade_out_ticks": 20,
+    "control": "after_title",
+    "blip": true
+  },
+  "title_key": "heritage_example.spawn.wanderer.title",
+  "image": "heritage_example:textures/gui/locations/wanderer.png",
+  "kits": [
+    "#heritage_example:starter"
+  ]
+}

@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Heritage intro editor</title><link rel="stylesheet" href="editor/editor.css"></head>
+<body>
+<header><h1><a class="home-link" href="index.html" aria-label="Heritage home">Heritage</a><span>Intro editor</span></h1><nav aria-label="Documentation"><a href="kit-editor.html" data-icon="braces">Kit creator</a><a href="docs.html" data-icon="book-open">Documentation</a><a href="docs.html#/text-styles" data-icon="images">Style examples</a></nav></header>
+<main>
+<div class="workspace">
+<div class="authoring">
+<div class="pane-toolbar">
+<div class="tabs" role="tablist" aria-label="Editing mode"><button id="json-tab" type="button" role="tab" aria-selected="true" aria-controls="json-panel" data-editor-tab="json">JSON</button><button id="text-tab" type="button" role="tab" aria-selected="false" aria-controls="text-panel" data-editor-tab="text" tabindex="-1">Text &amp; styling</button></div>
+<button id="copy" class="primary" type="button">Copy JSON</button>
+</div>
+<section class="export" id="json-panel" role="tabpanel" aria-labelledby="json-tab">
+<div class="code-heading"><span>intro.json</span><div class="code-actions" role="group" aria-label="JSON actions"><button id="undo" class="quiet" type="button" title="Undo (Ctrl+Z)" disabled>Undo</button><button id="redo" class="quiet" type="button" title="Redo (Ctrl+Y)" disabled>Redo</button><button id="format-json" class="quiet" type="button">Format JSON</button></div></div>
+<p id="json-help" class="hint">Paste intro JSON or a full spawn file.</p>
+<div class="code-editor"><pre id="line-numbers" aria-hidden="true"></pre><pre id="highlighted-json" aria-hidden="true"></pre><textarea id="json" spellcheck="false" autocomplete="off" autocapitalize="off" aria-label="Intro JSON" aria-describedby="json-help error" wrap="soft"></textarea></div>
+<div class="code-status"><span id="json-state">JSON ready</span><span id="line-count"></span></div>
+</section>
+<section class="text-editor" id="text-panel" role="tabpanel" aria-labelledby="text-tab" hidden>
+<div class="section-heading"><h2 id="text-heading">Text</h2><label>Example <select id="preset"><option value="custom">Custom</option><option value="default" selected>Location intro</option><option value="wave">Wave</option><option value="rainbow">Rainbow</option><option value="gradient">Gradient</option><option value="letter">Letter reveal</option><option value="word">Word reveal</option></select></label></div>
+<div class="toolbar" role="group" aria-label="Text formatting"><button type="button" data-wrap="bold"><strong>Bold</strong></button><button type="button" data-wrap="italic"><em>Italic</em></button><button type="button" data-wrap="underline">Underline</button><select id="effect" aria-label="Text effect"><option value="wave">Wave</option><option value="shake">Shake</option><option value="pulse">Pulse</option><option value="jump">Jump</option><option value="rainbow">Rainbow</option><option value="strike">Strikethrough</option><option value="obfuscated">Obfuscated</option></select><button type="button" id="apply-effect">Apply effect</button></div>
+<div class="toolbar" role="group" aria-label="Text color"><select id="named-color" aria-label="Named color"></select><input id="color" type="color" value="#ffaa00" aria-label="Text color"><button type="button" id="apply-color">Apply color</button><input id="gradient-end" type="color" value="#55aaff" aria-label="Gradient end color"><button type="button" id="apply-gradient">Apply gradient</button></div>
+<p class="hint">Select text to style, or leave it unselected to style the whole field. You can also type tags directly.</p>
+<label class="stack" for="text">Main text<textarea id="text" rows="3" spellcheck="false" data-field="text"></textarea></label>
+<label class="stack" for="subtitle">Subtitle<textarea id="subtitle" rows="2" spellcheck="false" data-field="subtitle"></textarea></label>
+<div class="toolbar"><span>Insert location:</span><button type="button" data-token="biome">Biome</button><button type="button" data-token="structure">Structure</button><button type="button" data-token="dimension">Dimension</button></div>
+</section>
+<div class="editor-feedback"><p id="error" role="alert" hidden></p><button id="restore-json" type="button" hidden>Restore valid JSON</button><p id="copy-status" role="status"></p></div>
+<details class="editor-help"><summary>JSON help</summary><p>Paste an intro object, an <code>"intro": { … }</code> section, or a full spawn file. Copy keeps your JSON structure and extra fields.</p><p>Use text with styling tags for the preview. Check Minecraft text component objects in-game. Sample names, background, GUI size, and mute only affect the preview.</p></details>
+
+</div>
+<div class="preview-column">
+<section class="preview-pane" aria-label="Live preview">
+<div class="section-heading"><h2>Preview</h2><label class="preview-size">GUI size <select id="viewport"><option value="320">320 × 180</option><option value="480" selected>480 × 270</option><option value="640">640 × 360</option></select></label><label class="background-control"><span class="sr-only">Background</span><input id="background" type="color" value="#252525"></label></div>
+<canvas id="preview" width="960" height="540" role="img" aria-label="Live Minecraft intro preview"></canvas>
+<div class="playback"><button id="play" class="primary" type="button" disabled>Play</button><button id="restart" type="button" disabled>Restart</button><input id="timeline" type="range" min="0" max="180" step="1" value="110" aria-label="Intro timeline" disabled><output id="clock">5.5 / 9.0 s</output><button id="mute" type="button" aria-label="Mute preview sound">Mute</button></div>
+<div class="preview-footer"><span id="phase">Loading Minecraft font…</span><label class="check"><input id="loop" type="checkbox"> Loop</label></div>
+<p id="font-warning" class="notice" hidden></p><p id="audio-status" class="notice" role="status"></p>
+</section>
+<div class="options">
+<div class="tabs option-tabs" role="tablist" aria-label="Preview options"><button id="appearance-tab" type="button" role="tab" aria-selected="true" aria-controls="appearance-panel" data-options-tab="appearance">Appearance</button><button id="timing-tab" type="button" role="tab" aria-selected="false" aria-controls="timing-panel" data-options-tab="timing" tabindex="-1">Timing</button><button id="bars-tab" type="button" role="tab" aria-selected="false" aria-controls="bars-panel" data-options-tab="bars" tabindex="-1">Bars</button><button id="locations-tab" type="button" role="tab" aria-selected="false" aria-controls="locations-panel" data-options-tab="locations" tabindex="-1">Locations</button></div>
+<form class="settings" id="settings">
+<div class="settings-panel appearance-settings" id="appearance-panel" role="tabpanel" aria-labelledby="appearance-tab">
+<fieldset><legend>Appearance</legend><label class="check"><input type="checkbox" data-field="title"> Larger title</label><label class="check"><input type="checkbox" data-field="outline"> Text outline</label><label class="stack">Title position<select data-field="title_position"><option value="mid_center">Middle center</option><option value="top_center">Top center</option><option value="bottom_center">Bottom center</option><option value="left_center">Middle left</option><option value="right_center">Middle right</option><option value="top_left">Top left</option><option value="top_right">Top right</option><option value="bottom_left">Bottom left</option><option value="bottom_right">Bottom right</option></select></label><label class="stack">Subtitle position<select data-field="subtitle_position"><option value="mid_center">Middle center</option><option value="top_center">Top center</option><option value="bottom_center">Bottom center</option><option value="left_center">Middle left</option><option value="right_center">Middle right</option><option value="top_left">Top left</option><option value="top_right">Top right</option><option value="bottom_left">Bottom left</option><option value="bottom_right">Bottom right</option></select></label></fieldset>
+<fieldset><legend>Playback</legend><label class="stack">Text reveal<select data-field="animation"><option value="fade_in">Fade in</option><option value="word_by_word">Word by word</option><option value="letter_by_letter">Letter by letter</option><option value="immediate">Immediate</option></select></label><label class="stack">Player control<select data-field="control"><option value="after_title">After the intro</option><option value="during_title">During the intro</option></select></label><label class="check"><input type="checkbox" data-field="blip"> Dialogue blips</label><p class="hint">Mute only affects the preview.</p></fieldset>
+</div>
+<div class="settings-panel" id="bars-panel" role="tabpanel" aria-labelledby="bars-tab" hidden>
+<fieldset><legend>Cinematic bars</legend><label class="check"><input type="checkbox" data-field="cinematic_bars"> Enable bars</label><label class="stack">Bar edges<select data-field="bar_style"><option value="random">Random angle</option><option value="straight">Straight</option></select></label><label class="check"><input type="checkbox" data-field="hide_hud_during_bars"> Hide HUD during bars</label><button type="button" id="new-angle">New angle</button></fieldset>
+</div>
+<div class="settings-panel" id="timing-panel" role="tabpanel" aria-labelledby="timing-tab" hidden>
+<fieldset><legend>Timing</legend><p class="hint">20 ticks = 1 second.</p><div class="timings"><label>Black screen<input type="number" data-field="black_hold_ticks" min="0" max="1200" step="1" required></label><label>World fade<input type="number" data-field="fade_from_black_ticks" min="1" max="1200" step="1" required></label><label>Text reveal<input type="number" data-field="reveal_ticks" min="1" max="1200" step="1" required></label><label>Text hold<input type="number" data-field="hold_ticks" min="1" max="1200" step="1" required></label><label>Text fade out<input type="number" data-field="fade_out_ticks" min="1" max="1200" step="1" required></label><label>Bar movement<input type="number" data-field="bar_transition_ticks" min="1" max="1200" step="1" required></label></div></fieldset>
+</div>
+<div class="settings-panel" id="locations-panel" role="tabpanel" aria-labelledby="locations-tab" hidden>
+<fieldset><legend>Sample location names</legend><label class="stack">Biome<input id="biome" value="Plains" maxlength="256"></label><label class="stack">Structure<input id="structure" value="Savanna Village" maxlength="256"></label><label class="stack">Dimension<input id="dimension" value="Overworld" maxlength="256"></label><p class="hint">Try different names here. In-game names come from the spawn location. Your JSON keeps the location tags.</p></fieldset>
+</div>
+</form>
+</div>
+</div>
+</div>
+
+</main>
+<footer class="site-footer">Not affiliated with Mojang or Microsoft.</footer>
+<script src="editor/icons.js"></script><script src="editor/assets.js"></script><script src="editor/engine.js"></script><script src="editor/tooltips.js"></script><script src="editor/editor.js"></script>
+</body></html>

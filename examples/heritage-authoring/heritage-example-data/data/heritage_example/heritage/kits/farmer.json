@@ -1,0 +1,36 @@
+{
+  "title": "Farmer",
+  "description": "A wooden hoe, seeds, bread, and leather boots.",
+  "order": 20,
+  "tags": [
+    "heritage_example:starter"
+  ],
+  "items": [
+    {
+      "index": 0,
+      "item": {
+        "id": "minecraft:wooden_hoe"
+      }
+    },
+    {
+      "index": 1,
+      "item": {
+        "id": "minecraft:wheat_seeds",
+        "count": 16
+      }
+    },
+    {
+      "index": 2,
+      "item": {
+        "id": "minecraft:bread",
+        "count": 8
+      }
+    },
+    {
+      "index": 36,
+      "item": {
+        "id": "minecraft:leather_boots"
+      }
+    }
+  ]
+}

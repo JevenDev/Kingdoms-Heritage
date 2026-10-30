@@ -1,0 +1,27 @@
+{
+  "title": "New journey",
+  "type": "pool",
+  "search_radius": 6400,
+  "pool": [
+    {
+      "type": "biome",
+      "target": "minecraft:plains"
+    },
+    {
+      "type": "biome",
+      "target": "minecraft:forest"
+    },
+    {
+      "type": "structure",
+      "target": "#minecraft:village"
+    }
+  ],
+  "intro": {
+    "text": "You woke up in <gold><biome></gold>...",
+    "subtitle": "<structure> / <dimension>",
+    "title_position": "left_center",
+    "subtitle_position": "left_center",
+    "cinematic_bars": true,
+    "hide_hud_during_bars": true
+  }
+}
