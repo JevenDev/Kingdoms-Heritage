@@ -21,7 +21,8 @@
     "hold_ticks": 60,
     "fade_out_ticks": 20,
     "control": "after_title",
-    "blip": true
+    "blip": true,
+    "title": true
   },
   "title_key": "heritage_example.spawn.settler.title",
   "image": "heritage_example:textures/gui/locations/settler.png",

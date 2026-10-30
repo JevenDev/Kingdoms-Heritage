@@ -12,7 +12,10 @@
       "target": "minecraft:forest",
       "intro": {
         "text": "You wake beneath the trees.",
-        "subtitle": "Find your way through <gold><biome></gold>."
+        "subtitle": "Find your way through <gold><biome></gold>.",
+        "title": true,
+        "animation": "letter_by_letter",
+        "blip": true
       }
     },
     {
@@ -21,7 +24,10 @@
       "intro": {
         "text": "Welcome to <gold><structure></gold>.",
         "control": "during_title",
-        "hold_ticks": 100
+        "hold_ticks": 100,
+        "title": true,
+        "animation": "letter_by_letter",
+        "blip": true
       }
     },
     {
@@ -35,6 +41,9 @@
     "title_position": "left_center",
     "subtitle_position": "left_center",
     "cinematic_bars": true,
-    "hide_hud_during_bars": true
+    "hide_hud_during_bars": true,
+    "title": true,
+    "animation": "letter_by_letter",
+    "blip": true
   }
 }

@@ -20,13 +20,15 @@
       "x": 7.1,
       "y": 63.1
     },
-    "large_subtitle": true,
     "subtitle_coordinates": {
       "width": 38.2,
       "x": 56.4,
       "y": 71.2
     },
     "cinematic_bars": true,
-    "hide_hud_during_bars": true
+    "hide_hud_during_bars": true,
+    "title": true,
+    "animation": "letter_by_letter",
+    "blip": true
   }
 }

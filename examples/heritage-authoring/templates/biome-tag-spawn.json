@@ -17,11 +17,12 @@
     "outline": true,
     "black_hold_ticks": 60,
     "fade_from_black_ticks": 60,
-    "animation": "fade_in",
+    "animation": "letter_by_letter",
     "reveal_ticks": 40,
     "hold_ticks": 60,
     "fade_out_ticks": 20,
     "control": "after_title",
-    "blip": false
+    "blip": true,
+    "title": true
   }
 }
