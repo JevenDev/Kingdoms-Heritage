@@ -6,6 +6,7 @@ import com.jvn.kingdomsheritage.KingdomsHeritage;
 import com.jvn.kingdomsheritage.network.HeritageNetwork;
 import java.util.List;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.GenericMessageScreen;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.network.chat.Component;
 import net.neoforged.api.distmarker.Dist;
@@ -175,7 +176,8 @@ public final class ClientSelection {
         catalog = null;
         selection = null;
         if (minecraft.level != null) minecraft.level.disconnect();
-        minecraft.disconnect();
+        if (minecraft.isLocalServer()) minecraft.disconnect(new GenericMessageScreen(Component.translatable("menu.savingLevel")));
+        else minecraft.disconnect();
         minecraft.setScreen(new TitleScreen());
     }
 }
