@@ -38,13 +38,13 @@
   .assembler .pack-configuration { min-height: 34px; max-height: 25%; margin-bottom: 8px; }
 }
 
-.kit-editor button:not([role=tab]):not(.item-choice):not(.mc-inventory *) {
+:is(.intro-editor, .kit-editor, .assembler) button:not([role=tab]):not(.item-choice):not(.mc-inventory *):not(.location-summary button) {
   font-family: 'Archivo', sans-serif;
   background: #eee !important;
   border-color: #eee !important;
   color: #000 !important;
   font-weight: 600;
 }
-.kit-editor button:not([role=tab]):not(.item-choice):not(.mc-inventory *):hover:not(:disabled) { background: #fff !important; }
-.kit-editor button:not([role=tab]):not(.item-choice):not(.mc-inventory *):active:not(:disabled) { background: #ddd !important; }
-.kit-editor button:not([role=tab]):not(.item-choice):not(.mc-inventory *)[aria-pressed=true] { border-color: #e4c17a !important; }
+:is(.intro-editor, .kit-editor, .assembler) button:not([role=tab]):not(.item-choice):not(.mc-inventory *):not(.location-summary button):hover:not(:disabled) { background: #fff !important; }
+:is(.intro-editor, .kit-editor, .assembler) button:not([role=tab]):not(.item-choice):not(.mc-inventory *):not(.location-summary button):active:not(:disabled) { background: #ddd !important; }
+:is(.intro-editor, .kit-editor, .assembler) button:not([role=tab]):not(.item-choice):not(.mc-inventory *):not(.location-summary button)[aria-pressed=true] { border-color: #e4c17a !important; }
