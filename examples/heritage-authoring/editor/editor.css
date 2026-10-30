@@ -171,14 +171,10 @@ legend { color: #aaa; font-size: calc(12px + var(--reading-increase)); padding: 
   .intro-name-control input { flex: 1; width: 100%; }
 }
 
-.intro-editor :is(button, select, input, textarea, .file-button, .handoff, label, legend, .toolbar span) { font-size: var(--body-font-size); }
-.intro-editor :is(button, select, input:not([type=checkbox]):not([type=range]):not([type=file]):not([type=color]), .file-button, .handoff) { height: var(--control-height); min-height: var(--control-height); padding-block: 0; line-height: 1; }
-.intro-editor input[type=color] { width: var(--control-height); height: var(--control-height); }
-
-.intro-editor { display: flex; flex-direction: column; height: 100dvh; overflow: hidden; }
-.intro-editor > :is(header, footer) { flex: 0 0 auto; }
-.intro-editor > main { display: flex; flex-direction: column; flex: 1 1 0; min-height: 0; overflow: hidden; }
-.intro-editor > main > :is(.workflow-nav, .document-toolbar) { flex: 0 0 auto; }
+:is(.intro-editor, .kit-editor, .assembler) { display: flex; flex-direction: column; height: 100dvh; overflow: hidden; }
+:is(.intro-editor, .kit-editor, .assembler) > :is(header, footer) { flex: 0 0 auto; }
+:is(.intro-editor, .kit-editor, .assembler) > main { display: flex; flex-direction: column; flex: 1 1 0; min-height: 0; overflow: hidden; }
+:is(.intro-editor, .kit-editor, .assembler) > main > :is(.workflow-nav, .document-toolbar) { flex: 0 0 auto; }
 .intro-editor .workspace { flex: 1 1 0; height: auto; min-height: 0; grid-template-rows: minmax(0,1fr); overflow: hidden; }
 .intro-editor :is(.authoring, .preview-column, .text-editor, .export) { min-height: 0; }
 .intro-editor .pane-toolbar { flex-shrink: 0; }
@@ -188,4 +184,29 @@ legend { color: #aaa; font-size: calc(12px + var(--reading-increase)); padding: 
 .intro-editor .editor-help { flex: 0 1 auto; min-height: 0; max-height: 40%; overflow: auto; }
 @media(max-width:850px) {
   .intro-editor .workspace { grid-template-rows: minmax(0,1fr) minmax(0,1fr); }
+}
+
+.kit-editor .kit-workspace { flex: 1 1 0; height: auto; min-height: 0; grid-template-rows: minmax(0,1fr); overflow: hidden; }
+.kit-editor .kit-source { overflow: hidden; }
+.kit-editor :is(.pane-toolbar, .item-browser-heading, .item-search, .browser-pages) { flex-shrink: 0; }
+.kit-editor :is(.export, #details-panel, .kit-preview-top, .kit-library) { min-height: 0; overflow: auto; overscroll-behavior: contain; }
+.kit-editor .kit-preview-column { height: auto; min-height: 0; grid-template-rows: minmax(0,1fr); }
+.kit-editor .code-editor { min-height: 80px; }
+.kit-editor .kit-feedback { flex: 0 1 auto; min-height: 0; max-height: 30%; overflow: auto; }
+.kit-editor #item-browser { min-height: 40px; }
+.assembler .pack-configuration { flex: 0 1 auto; min-height: 80px; max-height: 30%; overflow: auto; overscroll-behavior: contain; margin-bottom: 16px; }
+.assembler .pack-settings { margin-bottom: 0; }
+.assembler .assembly-workspace { flex: 1 1 0; min-height: 0; grid-template-rows: minmax(0,1fr); align-items: stretch; overflow: hidden; }
+.assembler :is(.draft-library, .location-editor, .pack-output) { min-height: 0; overflow: auto; overscroll-behavior: contain; }
+@media(max-width:1100px) {
+  .assembler .assembly-workspace { grid-template-rows: minmax(0,1fr) minmax(0,1fr); }
+}
+@media(max-width:960px) {
+  .kit-editor .kit-workspace { grid-template-rows: minmax(0,1fr) minmax(0,1fr); }
+}
+@media(max-width:800px) {
+  .kit-editor .kit-preview-column { grid-template-rows: minmax(0,1fr) minmax(0,1fr); }
+}
+@media(max-width:700px) {
+  .assembler .assembly-workspace { grid-template-rows: repeat(3,minmax(0,1fr)); }
 }

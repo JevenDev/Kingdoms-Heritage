@@ -1,0 +1,20 @@
+:where(.intro-editor, .kit-editor, .assembler) :not(:is(h1, h2, h3, h4, h5, h6, header h1 *, .mc-inventory, .mc-inventory *, .mc-drag-stack, .mc-drag-stack *, .item-choice)) {
+  font-size: var(--body-font-size) !important;
+}
+:where(.intro-editor, .kit-editor, .assembler) :is(button, select, input:not([type=checkbox]):not([type=range]):not([type=file]):not([type=color]), .file-button, .handoff):not(.mc-inventory *):not(.item-choice):not(.location-summary button) {
+  height: var(--control-height) !important;
+  min-height: var(--control-height) !important;
+  padding-block: 0 !important;
+  line-height: 1 !important;
+}
+:where(.intro-editor, .kit-editor, .assembler) input[type=color] {
+  width: var(--control-height) !important;
+  height: var(--control-height) !important;
+}
+:where(.intro-editor, .kit-editor, .assembler) input[type=checkbox]:not(.mc-inventory *) {
+  width: 15px !important;
+  height: 15px !important;
+}
+.assembler .location-summary :is(strong, .summary-detail) {
+  font-size: var(--body-font-size);
+}
