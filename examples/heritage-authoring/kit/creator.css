@@ -66,6 +66,13 @@
 #delete-item-message { font-size: calc(13px + var(--reading-increase)); line-height: 1.7; overflow-wrap: anywhere; }
 .delete-item-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
 #confirm-delete { color: #f2a2a2; }
+#lore-editor { border-top: 1px solid #252525; padding-top: 10px; margin-top: 9px; }
+#lore-heading { margin: 0 0 8px; font-size: calc(12px + var(--reading-increase)); font-weight: 400; }
+.lore-line { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.lore-line input { flex: 1; min-width: 0; font-size: calc(12px + var(--reading-increase)); }
+.lore-line button, #add-lore-line { padding: 4px 6px; min-height: 28px; font-size: calc(12px + var(--reading-increase)); }
+#lore-editor .hint { margin: 6px 0 0; }
+#lore-status:empty { display: none; }
 #component-details { border-top: 1px solid #252525; padding-top: 6px; margin-top: 9px; font-size: calc(12px + var(--reading-increase)); }
 #component-details summary { cursor: pointer; padding: 3px 0; }
 #component-state { color: #d4be8c; font-size: calc(11px + var(--reading-increase)); margin-left: 8px; }

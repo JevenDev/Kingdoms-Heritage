@@ -128,6 +128,11 @@ function feedback() {
   $('paste-slot').disabled=locked||!slotClipboard;
   $('clear-slot').disabled=locked||(!view.entry(selected)&&!drafts.has(selected));
   $('apply-components').disabled=locked||!view.entry(selected);
+  const lore=view.entry(selected)?.item.components?.['minecraft:lore'],invalidLore=lore!==undefined&&!Array.isArray(lore);
+  const loreLocked=locked||!view.entry(selected)||!!errorState||!!carried||drafts.has(selected)||invalidLore;
+  $('add-lore-line').disabled=loreLocked;
+  for(const control of $('lore-lines').querySelectorAll('input,button'))control.disabled=loreLocked;
+  $('lore-status').textContent=invalidLore?'Lore must be a list. Fix it in Item components.':drafts.has(selected)?"Apply or revert this item's pending edits to edit lore.":!view.entry(selected)?'Choose an item to add lore.':'';
   $('select-slots').disabled=locked||!!carried;
   $('select-slots').setAttribute('aria-pressed',String(selectionMode));
   $('selection-count').textContent=selectedSlots.size?selectedSlots.size+' selected':selectionMode?'Click slots to select':'';
@@ -150,7 +155,37 @@ function slotFields() {
   $('revert-slot').hidden=!draft;
   const starting=typeof selected==='number'&&selected===(documentState.selected_slot??0);
   $('set-start').setAttribute('aria-pressed',String(starting));$('set-start').textContent=starting?'Starting slot':'Start here';
-  markSelectedItem();feedback();
+  loreFields(stack);markSelectedItem();feedback();
+}
+function loreFields(stack) {
+  const lines=stack?.components?.['minecraft:lore'],values=Array.isArray(lines)?lines:[],container=$('lore-lines');
+  while(container.children.length>values.length)container.lastElementChild.remove();
+  for(const [index,line] of values.entries()){
+    let row=container.children[index];
+    if(!row){
+      row=document.createElement('div');row.className='lore-line';
+      const input=document.createElement('input'),remove=document.createElement('button');
+      input.type='text';input.dataset.loreLine=index;input.setAttribute('aria-label','Lore line '+(index+1));input.setAttribute('aria-describedby','lore-hint');
+      remove.type='button';remove.dataset.removeLore=index;remove.textContent='Remove';remove.setAttribute('aria-label','Remove lore line '+(index+1));
+      row.append(input,remove);container.append(row);
+    }
+    const input=row.querySelector('input'),text=T.plain(T.decode(line));
+    if(input.value!==text)input.value=text;
+  }
+}
+function editLore(update,key=null) {
+  return attempt(()=>{
+    if(!canEdit()||carried)return false;
+    const stack=view.entry(selected)?.item;if(!stack)return false;
+    checkDraft(selected);
+    const next=K.copy(stack);next.components??={};
+    const lines=next.components['minecraft:lore']??[];
+    if(!Array.isArray(lines))throw new Error('Lore must be a list. Fix it in Item components.');
+    update(lines);
+    if(lines.length)next.components['minecraft:lore']=lines;else delete next.components['minecraft:lore'];
+    if(!Object.keys(next.components).length)delete next.components;
+    return commit(E.setSlot(documentState,selected,next),key);
+  });
 }
 function display() {
   preview.reveal(selected);view.selected=selected;view.set(documentState,preview.sync());
@@ -448,7 +483,7 @@ document.addEventListener('keydown',event=>{
   if(document.querySelector('dialog[open]'))return;
   const modifier=event.ctrlKey||event.metaKey,field=event.target.closest('input,textarea,select,[contenteditable=true]'),slot=event.target.closest('.mc-slot');
   if(modifier&&event.key.toLowerCase()==='f'){event.preventDefault();$('search-items').focus();$('search-items').select();return;}
-  if(modifier&&!event.altKey&&['z','y'].includes(event.key.toLowerCase())&&(!field||['kit-json','title','description','order','tags','count'].includes(field.id))){
+  if(modifier&&!event.altKey&&['z','y'].includes(event.key.toLowerCase())&&(!field||field.dataset.loreLine!==undefined||['kit-json','title','description','order','tags','count'].includes(field.id))){
     event.preventDefault();restore(event.key.toLowerCase()==='y'||event.shiftKey?1:-1);return;
   }
   if(slot&&modifier&&event.key.toLowerCase()==='c'){event.preventDefault();copySlot();}
@@ -481,6 +516,22 @@ $('item-id').addEventListener('input',updateDraft);$('components').addEventListe
 $('apply-id').addEventListener('click',()=>applySlotDraft());
 $('item-id').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();applySlotDraft();}});
 $('apply-components').addEventListener('click',()=>applySlotDraft(true));
+$('lore-lines').addEventListener('input',event=>{
+  const input=event.target.closest('input[data-lore-line]');if(!input)return;
+  const index=Number(input.dataset.loreLine),text=input.value;
+  editLore(lines=>{lines[index]=JSON.stringify(text);},'lore:'+selected+':'+index);
+});
+$('lore-lines').addEventListener('click',event=>{
+  const button=event.target.closest('button[data-remove-lore]');if(!button)return;
+  const index=Number(button.dataset.removeLore);
+  if(editLore(lines=>lines.splice(index,1))){
+    const inputs=$('lore-lines').querySelectorAll('input');
+    (inputs[Math.min(index,inputs.length-1)]||$('add-lore-line')).focus();
+  }
+});
+$('add-lore-line').addEventListener('click',()=>{
+  if(editLore(lines=>lines.push(JSON.stringify(''))))$('lore-lines').lastElementChild.querySelector('input').focus();
+});
 $('revert-slot').addEventListener('click',()=>{drafts.delete(selected);if(['item-id','components'].includes(errorState?.target))errorState=null;slotFields();record();});
 $('discard-drafts').addEventListener('click',()=>{drafts.clear();if(['item-id','components'].includes(errorState?.target))errorState=null;slotFields();record();notice('Slot edits reverted. You can undo this.');});
 $('go-to-draft').addEventListener('click',()=>{const slot=drafts.keys().next().value;if(slot!==undefined){selectSlot(slot);if($('item-id').value!==view.entry(selected)?.item.id)$('item-id').focus();else{$('component-details').open=true;$('components').focus();}}});
