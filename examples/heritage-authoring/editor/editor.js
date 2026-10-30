@@ -1,23 +1,95 @@
 (async () => {
 'use strict';
-const P=HeritagePreview, $=id=>document.getElementById(id);
+const P=HeritagePreview, $=id=>document.getElementById(id),storageKey='heritage.introEditor.v1';
+const previewFields=['viewport','background','biome','structure','dimension','loop'];
 const canvas=$('preview'), ctx=canvas.getContext('2d'), font=new Map(), tinted=new Map(), widthBuckets=new Map();
 let jsonState=P.readJson(JSON.stringify({intro:P.defaults}));
 let config=jsonState.config, main=[], sub=[], all=[], blocks=[], cues=[], revealEnds=[];
 let time=0, playing=false, previewing=true, muted=false, lastFrame=0, frameRequest=0, slant=-7, activeField=$('text'), valid=true;
 let audioContext, audioBuffer, gain;
 let history=[], historyIndex=-1, restoringHistory=false, historyGroup=null, historyTime=0, currentValidation={error:null,fromJson:false};
+let workspace,saveTimer,saveUnavailable=false,saveBlocked=false;
+function draftOptions() {
+  if(!workspace)return;
+  const field=$('intro-drafts'),ids=[...workspace.entries.keys()];
+  if(field.options.length!==ids.length||ids.some((id,index)=>field.options[index]?.value!==id)){
+    field.replaceChildren(...ids.map(id=>{const option=document.createElement('option');option.value=id;return option;}));
+  }
+  const names=new Map();
+  for(const option of field.options){
+    const value=option.value===workspace.active?$('intro-name').value:workspace.entries.get(option.value).state.name;
+    const name=typeof value==='string'&&value.trim()?value.trim():'Untitled intro',count=(names.get(name)||0)+1;names.set(name,count);
+    option.textContent=name+(count>1?' ('+count+')':'');
+  }
+  field.value=workspace.active;
+}
+function saveDraft() {
+  clearTimeout(saveTimer);
+  if(!workspace||saveBlocked)return;
+  try{
+    workspace.update(historySnapshot());localStorage.setItem(storageKey,JSON.stringify(workspace.serialize()));
+    $('intro-draft-status').textContent='Draft saved';saveUnavailable=false;
+  }catch(error){
+    saveUnavailable=true;$('intro-draft-status').textContent='Draft could not be saved. Copy your JSON to keep it.';
+  }
+}
+function scheduleSave() {
+  clearTimeout(saveTimer);
+  if(!workspace||saveBlocked)return;
+  if(!saveUnavailable)$('intro-draft-status').textContent='Saving draft…';
+  saveTimer=setTimeout(saveDraft,350);
+}
+function activateIntro(id) {
+  if(id===workspace.active)return;
+  try{
+    const entry=workspace.get(id);P.readJson(JSON.stringify(entry.state.document));
+    workspace.capture(historySnapshot(),history,historyIndex);workspace.select(id);
+    history=entry.history;historyIndex=entry.historyIndex;history[historyIndex]=entry.state;
+    restoreHistory(0);saveDraft();
+  }catch(error){$('intro-drafts').value=workspace.active;$('copy-status').textContent='Could not open intro: '+error.message;}
+}
+function openIntro(raw=JSON.stringify({intro:{text:'A new journey begins.',subtitle:''}},null,2),name='My intro') {
+  let parsed=P.readJson(JSON.stringify({intro:{text:'A new journey begins.',subtitle:''}})),error=null;
+  try{parsed=P.readJson(raw);}catch(failure){error={message:failure.message};}
+  const state={
+    name,source:raw,document:parsed.document,validation:{error,fromJson:!!error},
+    values:fields.map(field=>field.type==='checkbox'?parsed.config[field.dataset.field]:String(parsed.config[field.dataset.field])),
+    selection:[0,0],preview:historySnapshot().preview
+  };
+  activateIntro(workspace.add(state));
+}
+function loadDrafts() {
+  const initial=historySnapshot();
+  try{
+    const raw=localStorage.getItem(storageKey),saved=raw===null?null:JSON.parse(raw);
+    if(raw!==null&&(!saved||saved.version!==2||!Array.isArray(saved.intros)))throw new Error('Saved intros are invalid.');
+    workspace=new HeritageDrafts(saved,initial,undefined,'intros');
+    const entry=workspace.get();P.readJson(JSON.stringify(entry.state.document));
+    history=entry.history;historyIndex=entry.historyIndex;restoreHistory(0);
+    $('intro-draft-status').textContent=raw===null?'Draft ready':'Draft restored';
+  }catch(error){
+    saveBlocked=true;workspace=new HeritageDrafts(null,initial,undefined,'intros');
+    history=[initial];historyIndex=0;restoreHistory(0);
+    $('intro-draft-status').textContent='Saved intros unavailable. Copy your JSON to keep new edits.';
+  }
+}
 function updateHistoryButtons() {
   $('undo').disabled=historyIndex<=0;
   $('redo').disabled=historyIndex>=history.length-1;
 }
 function historySnapshot() {
-  return {source:$('json').value,jsonState,config,validation:currentValidation,values:fields.map(field=>field.type==='checkbox'?field.checked:field.value),selection:[$('json').selectionStart,$('json').selectionEnd]};
+  return {
+    name:$('intro-name').value,source:$('json').value,document:jsonState.document,
+    validation:{...currentValidation,error:currentValidation.error?{message:currentValidation.error.message}:null},
+    values:fields.map(field=>field.type==='checkbox'?field.checked:field.value),
+    selection:[$('json').selectionStart,$('json').selectionEnd],
+    preview:Object.fromEntries(previewFields.map(id=>[id,$(id).type==='checkbox'?$(id).checked:$(id).value]))
+  };
 }
 function recordHistory(event) {
   if(restoringHistory) return;
   const snapshot=historySnapshot(),previous=history[historyIndex];
-  if(previous&&previous.source===snapshot.source&&JSON.stringify(previous.values)===JSON.stringify(snapshot.values)) return;
+  if(previous&&previous.name===snapshot.name&&previous.source===snapshot.source&&JSON.stringify(previous.values)===JSON.stringify(snapshot.values)) return;
   const group=event?.type==='input'&&['TEXTAREA','INPUT'].includes(event.target.tagName)&&!['checkbox','color'].includes(event.target.type)?event.target:null;
   const now=performance.now();
   history.splice(historyIndex+1);
@@ -25,7 +97,7 @@ function recordHistory(event) {
   else { history.push(snapshot); historyIndex++; }
   if(history.length>200) {history.shift();historyIndex--;}
   historyGroup=group;historyTime=now;
-  updateHistoryButtons();
+  updateHistoryButtons();draftOptions();scheduleSave();
 }
 function restoreHistory(direction) {
   const next=historyIndex+direction;
@@ -34,16 +106,19 @@ function restoreHistory(direction) {
   pause();
   historyIndex=next;
   const snapshot=history[next];
-  jsonState=snapshot.jsonState;config=snapshot.config;
+  jsonState=P.readJson(JSON.stringify(snapshot.document));config=jsonState.config;
+  $('intro-name').value=typeof snapshot.name==='string'?snapshot.name:'Untitled intro';
   $('json').value=snapshot.source;
-  fields.forEach((field,i)=>{if(field.type==='checkbox')field.checked=snapshot.values[i];else field.value=snapshot.values[i];});
+  fillFields();
+  if(Array.isArray(snapshot.values)&&snapshot.values.length===fields.length)fields.forEach((field,i)=>{if(field.type==='checkbox')field.checked=snapshot.values[i];else field.value=snapshot.values[i];});
+  for(const id of previewFields)if(snapshot.preview?.[id]!==undefined){if($(id).type==='checkbox')$(id).checked=snapshot.preview[id];else $(id).value=snapshot.preview[id];}
   $('json').setSelectionRange(...snapshot.selection);
   $('preset').value='custom';
   validation(snapshot.validation.error,snapshot.validation.fromJson);
   refreshPreview();
   historyGroup=null;
   restoringHistory=false;
-  updateHistoryButtons();
+  updateHistoryButtons();draftOptions();scheduleSave();
 }
 const sources=new Set();
 const hex=n=>'#'+n.toString(16).padStart(6,'0');
@@ -151,6 +226,7 @@ function validation(error=null,fromJson=false) {
   syncCode();
   $('json-state').textContent=error?'Check '+(fromJson?'JSON':'options'):'JSON ready';
   $('text-tab').disabled=!!error&&fromJson;
+  if(error&&fromJson&&$('text-tab').getAttribute('aria-selected')==='true')$('json-tab').click();
   $('error').hidden=valid;
   $('error').textContent=error?error.message+' Showing the last valid preview.':'';
   $('json').setAttribute('aria-invalid',String(!!error&&fromJson));
@@ -365,20 +441,25 @@ $('named-color').value='#ffaa00';
 $('named-color').addEventListener('change',()=>{$('color').value=$('named-color').value;});
 fillFields();
 $('json').value=JSON.stringify(jsonState.document,null,2);
+loadDrafts();
 const linkedIntro=new URLSearchParams(location.search).get('intro');
-if(linkedIntro!==null) { $('json').value=linkedIntro;applyJson(); }
-else { syncCode();refreshPreview(); }
-recordHistory();
+if(linkedIntro!==null){
+  openIntro(linkedIntro,'Imported intro');
+  const url=new URL(location.href);url.searchParams.delete('intro');window.history.replaceState(null,'',url.pathname+url.search+url.hash);
+}
 document.addEventListener('keydown',event=>{
   if(!(event.ctrlKey||event.metaKey)||event.altKey) return;
   const key=event.key.toLowerCase();
   if(key!=='z'&&key!=='y') return;
   const target=event.target;
-  if(target instanceof HTMLInputElement&&!target.hasAttribute('data-field')) return;
+  if(target instanceof HTMLInputElement&&!target.hasAttribute('data-field')&&target.id!=='intro-name') return;
   event.preventDefault();
   restoreHistory(key==='y'||event.shiftKey?1:-1);
 });
-$('play').disabled=$('restart').disabled=$('timeline').disabled=false;
+$('timeline').disabled=false;
+$('intro-drafts').addEventListener('change',()=>activateIntro($('intro-drafts').value));
+$('intro-name').addEventListener('input',event=>recordHistory(event));
+$('new-intro').addEventListener('click',()=>{openIntro();$('intro-name').focus();$('intro-name').select();});
 for(const field of fields) {
   field.addEventListener('input',event=>{$('preset').value='custom';editing(event);});
   if(field.tagName==='TEXTAREA') field.addEventListener('focus',()=>{activeField=field;});
@@ -397,9 +478,10 @@ $('mute').addEventListener('click',()=>{
   $('mute').setAttribute('aria-label',muted?'Unmute preview sound':'Mute preview sound');
   if(!muted&&playing&&config.blip) prepareAudio().catch(error=>{$('audio-status').textContent=error.message;});
 });
-$('background').addEventListener('input',draw);
-$('viewport').addEventListener('change',()=>{rebuild();draw();});
-for(const id of ['biome','structure','dimension']) $(id).addEventListener('input',()=>{pause();refreshPreview();});
+$('background').addEventListener('input',()=>{draw();scheduleSave();});
+$('viewport').addEventListener('change',()=>{rebuild();draw();scheduleSave();});
+$('loop').addEventListener('change',scheduleSave);
+for(const id of ['biome','structure','dimension']) $(id).addEventListener('input',()=>{pause();refreshPreview();scheduleSave();});
 $('json').addEventListener('input',applyJson);
 setupTabs('data-editor-tab','-panel');
 setupTabs('data-options-tab','-panel');
@@ -425,23 +507,18 @@ document.querySelectorAll('[data-token]').forEach(button=>button.addEventListene
   activeField.focus();editing();
 }));
 $('preset').addEventListener('change',()=>{
-  const value=$('preset').value;
-  if(value==='custom') return;
-  pause();
-  if(value==='default')config={...P.defaults};
-  else {
-    config={...config,text:'A new journey begins.',subtitle:'',title:true,animation:'immediate',title_position:'mid_center'};
-    if(['wave','rainbow'].includes(value)) config.text='<'+value+'>'+config.text+'</'+value+'>';
-    if(value==='gradient')config.text='<gradient:#ffcc55:#55aaff>'+config.text+'</gradient>';
-    if(value==='letter'||value==='word') {
-      config.text='You woke up in <gold><biome></gold>...';config.animation=value==='letter'?'letter_by_letter':'word_by_word';
+  const value=$('preset').value;if(value==='custom')return;
+  const name=$('preset').selectedOptions[0].textContent;
+  let example={...P.defaults};
+  if(value!=='default'){
+    example={...example,text:'A new journey begins.',subtitle:'',title:true,animation:'immediate',title_position:'mid_center'};
+    if(['wave','rainbow'].includes(value))example.text='<'+value+'>'+example.text+'</'+value+'>';
+    if(value==='gradient')example.text='<gradient:#ffcc55:#55aaff>'+example.text+'</gradient>';
+    if(value==='letter'||value==='word'){
+      example.text='You woke up in <gold><biome></gold>...';example.animation=value==='letter'?'letter_by_letter':'word_by_word';
     }
   }
-  jsonState=P.updateJson(jsonState,config);
-  fillFields();
-  $('json').value=JSON.stringify(jsonState.document,null,2);
-  validation();refreshPreview();
-  recordHistory();
+  openIntro(JSON.stringify({intro:example},null,2),name);$('preset').value='custom';
 });
 $('copy').addEventListener('click',async()=>{
   if(!valid) return;
@@ -456,7 +533,8 @@ $('copy').addEventListener('click',async()=>{
   }
 });
 HeritageTooltips.setup({font,sprite});
-document.addEventListener('visibilitychange',()=>{if(document.hidden)pause();});
+window.addEventListener('pagehide',saveDraft);
+document.addEventListener('visibilitychange',()=>{if(document.hidden){pause();saveDraft();}});
 })().catch(error=>{
   document.getElementById('phase').textContent='Preview could not load: '+error.message;
 });

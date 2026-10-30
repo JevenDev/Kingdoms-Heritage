@@ -1,9 +1,10 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Heritage intro editor</title><link rel="stylesheet" href="editor/editor.css?v=3"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Heritage intro editor</title><link rel="stylesheet" href="editor/editor.css?v=4"></head>
 <body>
 <header><h1><a class="home-link" href="index.html" aria-label="Heritage home">Heritage</a><span>Intro editor</span></h1><nav aria-label="Documentation"><a href="kit-editor.html" data-icon="braces">Kit creator</a><a href="docs.html" data-icon="book-open">Documentation</a><a href="docs.html#/text-styles" data-icon="images">Style examples</a></nav></header>
 <main>
+<div class="document-toolbar"><div class="document-name"><select id="intro-drafts" class="document-select" aria-label="Open intro"></select><span id="intro-draft-status" class="draft-status" role="status">Draft ready</span></div><div class="document-file-actions"><label class="intro-name-control">Name<input id="intro-name" value="Location intro" maxlength="120" autocomplete="off" aria-label="Intro name"></label><button id="new-intro" class="primary" type="button">New intro</button><select id="preset" aria-label="Load example intro"><option value="custom" selected>Examples…</option><option value="default">Location intro</option><option value="wave">Wave</option><option value="rainbow">Rainbow</option><option value="gradient">Gradient</option><option value="letter">Letter reveal</option><option value="word">Word reveal</option></select></div></div>
 <div class="workspace">
 <div class="authoring">
 <div class="pane-toolbar">
@@ -17,7 +18,7 @@
 <div class="code-status"><span id="json-state">JSON ready</span><span id="line-count"></span></div>
 </section>
 <section class="text-editor" id="text-panel" role="tabpanel" aria-labelledby="text-tab" hidden>
-<div class="section-heading"><h2 id="text-heading">Text</h2><label>Example <select id="preset"><option value="custom">Custom</option><option value="default" selected>Location intro</option><option value="wave">Wave</option><option value="rainbow">Rainbow</option><option value="gradient">Gradient</option><option value="letter">Letter reveal</option><option value="word">Word reveal</option></select></label></div>
+<div class="section-heading"><h2 id="text-heading">Text</h2></div>
 <div class="toolbar" role="group" aria-label="Text formatting"><button type="button" data-wrap="bold"><strong>Bold</strong></button><button type="button" data-wrap="italic"><em>Italic</em></button><button type="button" data-wrap="underline">Underline</button><select id="effect" aria-label="Text effect"><option value="wave">Wave</option><option value="shake">Shake</option><option value="pulse">Pulse</option><option value="jump">Jump</option><option value="rainbow">Rainbow</option><option value="strike">Strikethrough</option><option value="obfuscated">Obfuscated</option></select><button type="button" id="apply-effect">Apply effect</button></div>
 <div class="toolbar" role="group" aria-label="Text color"><select id="named-color" aria-label="Named color"></select><input id="color" type="color" value="#ffaa00" aria-label="Text color"><button type="button" id="apply-color">Apply color</button><input id="gradient-end" type="color" value="#55aaff" aria-label="Gradient end color"><button type="button" id="apply-gradient">Apply gradient</button></div>
 <p class="hint">Select text to style, or leave it unselected to style the whole field. You can also type tags directly.</p>
@@ -60,5 +61,5 @@
 
 </main>
 <footer class="site-footer">Not affiliated with Mojang or Microsoft.</footer>
-<script src="editor/icons.js"></script><script src="editor/assets.js"></script><script src="editor/engine.js"></script><script src="editor/tooltips.js"></script><script src="editor/json-editor.js"></script><script src="editor/editor.js?v=2"></script>
+<script src="editor/icons.js"></script><script src="editor/assets.js"></script><script src="editor/engine.js"></script><script src="editor/tooltips.js?v=3"></script><script src="editor/json-editor.js"></script><script src="kit/drafts.js?v=2"></script><script src="editor/editor.js?v=5"></script>
 </body></html>

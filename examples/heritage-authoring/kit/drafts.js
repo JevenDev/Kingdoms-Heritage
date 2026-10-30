@@ -1,15 +1,15 @@
 (() => {
 'use strict';
 const copy=value=>JSON.parse(JSON.stringify(value));
-class KitDrafts {
-  constructor(saved,initial,createId=()=>crypto.randomUUID()) {
-    this.createId=createId;this.entries=new Map();
-    if(saved?.version===2&&Array.isArray(saved.kits)){
-      for(const entry of saved.kits){
-        if(typeof entry.id!=='string'||this.entries.has(entry.id)||typeof entry.state?.source!=='string'||!entry.state.document)throw new Error('Saved kits are invalid.');
+class Drafts {
+  constructor(saved,initial,createId=()=>crypto.randomUUID(),collection='kits') {
+    this.collection=collection;this.createId=createId;this.entries=new Map();
+    if(saved?.version===2&&Array.isArray(saved[collection])){
+      for(const entry of saved[collection]){
+        if(typeof entry.id!=='string'||this.entries.has(entry.id)||typeof entry.state?.source!=='string'||!entry.state.document)throw new Error('Saved drafts are invalid.');
         this.entries.set(entry.id,{state:copy(entry.state),history:[copy(entry.state)],historyIndex:0});
       }
-      if(!this.entries.has(saved.active))throw new Error('The active saved kit is missing.');
+      if(!this.entries.has(saved.active))throw new Error('The active saved draft is missing.');
       this.active=saved.active;
     }else{
       this.active=this.add(typeof saved?.source==='string'?saved:initial);
@@ -26,14 +26,14 @@ class KitDrafts {
   }
   get(id=this.active) {
     const entry=this.entries.get(id);
-    if(!entry)throw new Error('This kit draft is unavailable.');
+    if(!entry)throw new Error('This draft is unavailable.');
     return copy(entry);
   }
   select(id) {const entry=this.get(id);this.active=id;return entry;}
   serialize() {
-    return {version:2,active:this.active,kits:[...this.entries].map(([id,entry])=>({id,state:copy(entry.state)}))};
+    return {version:2,active:this.active,[this.collection]:[...this.entries].map(([id,entry])=>({id,state:copy(entry.state)}))};
   }
 }
-globalThis.HeritageKitDrafts=KitDrafts;
-if(typeof module!=='undefined')module.exports=KitDrafts;
+globalThis.HeritageDrafts=globalThis.HeritageKitDrafts=Drafts;
+if(typeof module!=='undefined')module.exports=Drafts;
 })();
