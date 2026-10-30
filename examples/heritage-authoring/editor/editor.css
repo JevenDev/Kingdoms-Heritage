@@ -174,3 +174,18 @@ legend { color: #aaa; font-size: calc(12px + var(--reading-increase)); padding: 
 .intro-editor :is(button, select, input, textarea, .file-button, .handoff, label, legend, .toolbar span) { font-size: var(--body-font-size); }
 .intro-editor :is(button, select, input:not([type=checkbox]):not([type=range]):not([type=file]):not([type=color]), .file-button, .handoff) { height: var(--control-height); min-height: var(--control-height); padding-block: 0; line-height: 1; }
 .intro-editor input[type=color] { width: var(--control-height); height: var(--control-height); }
+
+.intro-editor { display: flex; flex-direction: column; height: 100dvh; overflow: hidden; }
+.intro-editor > :is(header, footer) { flex: 0 0 auto; }
+.intro-editor > main { display: flex; flex-direction: column; flex: 1 1 0; min-height: 0; overflow: hidden; }
+.intro-editor > main > :is(.workflow-nav, .document-toolbar) { flex: 0 0 auto; }
+.intro-editor .workspace { flex: 1 1 0; height: auto; min-height: 0; grid-template-rows: minmax(0,1fr); overflow: hidden; }
+.intro-editor :is(.authoring, .preview-column, .text-editor, .export) { min-height: 0; }
+.intro-editor .pane-toolbar { flex-shrink: 0; }
+.intro-editor :is(.preview-column, .text-editor, .export) { overflow: auto; overscroll-behavior: contain; }
+.intro-editor .code-editor { min-height: 80px; }
+.intro-editor .editor-feedback { flex: 0 1 auto; min-height: 0; max-height: 30%; overflow: auto; }
+.intro-editor .editor-help { flex: 0 1 auto; min-height: 0; max-height: 40%; overflow: auto; }
+@media(max-width:850px) {
+  .intro-editor .workspace { grid-template-rows: minmax(0,1fr) minmax(0,1fr); }
+}
