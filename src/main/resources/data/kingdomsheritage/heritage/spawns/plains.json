@@ -1,5 +1,6 @@
 {
   "title": "Plains",
+  "image": "kingdomsheritage:textures/gui/locations/plains.png",
   "type": "biome",
   "order": 3,
   "target": "minecraft:plains",

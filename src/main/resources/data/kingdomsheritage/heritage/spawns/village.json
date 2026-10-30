@@ -1,5 +1,6 @@
 {
   "title": "Village",
+  "image": "kingdomsheritage:textures/gui/locations/village.png",
   "type": "structure",
   "order": 2,
   "target": "minecraft:village",

@@ -1,5 +1,6 @@
 {
   "title": "Default",
+  "image": "kingdomsheritage:textures/gui/locations/default.png",
   "type": "default",
   "order": 0,
   "title_key": "heritage.kingdomsheritage.spawns.default.title",
