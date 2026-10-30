@@ -66,6 +66,13 @@ summary { cursor: pointer; }
 .preview-pane .section-heading { margin-bottom: 14px; }
 .preview-size select { padding: 5px 8px; font-size: calc(12px + var(--reading-increase)); background: #000; }
 canvas { display: block; width: 100%; height: auto; aspect-ratio: 16/9; background: #252525; image-rendering: pixelated; }
+#preview { touch-action: none; }
+#preview:focus-visible { outline: 1px solid #aaa; outline-offset: 2px; }
+.position-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; margin-top: 10px; }
+.position-toolbar .check { margin: 0 auto 0 0; font-size: calc(12px + var(--reading-increase)); }
+.position-toolbar button { padding: 4px 7px; font-size: calc(12px + var(--reading-increase)); }
+.position-toolbar button[aria-pressed=true] { border-color: #aaa; color: #fff; }
+.position-help { margin: 6px 0 0; }
 .playback { display: grid; grid-template-columns: auto auto minmax(40px,1fr) auto auto; align-items: center; gap: 10px; padding: 14px 0 10px; }
 .playback input { width: 100%; min-width: 0; }
 .playback button { min-width: 56px; }
@@ -85,6 +92,11 @@ output { font-size: 12px; color: #aaa; font-variant-numeric: tabular-nums; white
 .settings .hint { margin: 4px 0 0; line-height: 1.4; }
 .options .option-tabs button { padding-top: 10px; padding-bottom: 8px; }
 .appearance-settings fieldset { display: contents; }
+.position-control { grid-column: 1/-1; border-top: 1px solid #242424; padding-top: 8px; margin-top: 4px; }
+.position-control .check { margin-top: 5px; }
+.coordinate-fields { display: flex; flex-wrap: wrap; gap: 8px 16px; padding-top: 6px; }
+.coordinate-fields label { display: flex; align-items: center; gap: 7px; font-size: calc(12px + var(--reading-increase)); color: #aaa; }
+.coordinate-fields input { width: 76px; }
 .appearance-settings legend { display: none; }
 .appearance-settings .stack { display: flex; flex-direction: row; justify-content: space-between; margin: 0; font-size: calc(12px + var(--reading-increase)); }
 .appearance-settings .stack select { width: 55%; min-width: 0; }

@@ -26,6 +26,14 @@ record IntroLayout(IntroLayout.Block title, IntroLayout.Block subtitle) {
         }
         float availableWidth = Math.max(1, width - margin * 2);
         float availableHeight = Math.max(1, bottom - top);
+        float titleScale = intro.title() ? 1.5F : 1;
+        int lineHeight = font.lineHeight + 3 + verticalPadding * 2;
+        if (intro.titleCoordinates() != null || intro.subtitleCoordinates() != null) {
+            return new IntroLayout(positioned(font, text, titleScale, intro.titlePosition(), intro.titleCoordinates(),
+                    lineHeight, width, height, margin, top, availableWidth, availableHeight),
+                    positioned(font, subtitle, 1, intro.subtitlePosition(), intro.subtitleCoordinates(),
+                            lineHeight, width, height, margin, top, availableWidth, availableHeight));
+        }
         var titlePosition = intro.titlePosition();
         var subtitlePosition = intro.subtitlePosition();
         boolean together = subtitle.isEmpty() || titlePosition == subtitlePosition;
@@ -34,8 +42,6 @@ record IntroLayout(IntroLayout.Block title, IntroLayout.Block subtitle) {
                 ? availableWidth / (Math.abs(titlePosition.column() - subtitlePosition.column()) == 2 ? 2 : 3)
                 : availableWidth;
         float maxHeight = separateRows ? availableHeight / 3 : availableHeight;
-        float titleScale = intro.title() ? 1.5F : 1;
-        int lineHeight = font.lineHeight + 3 + verticalPadding * 2;
         var titleLines = IntroText.wrap(font, text, Math.max(1, (int) (wrapWidth / titleScale)));
         var subtitleLines = subtitle.isEmpty() ? List.<IntroText.Line>of()
                 : IntroText.wrap(font, subtitle, Math.max(1, (int) wrapWidth));
@@ -54,6 +60,28 @@ record IntroLayout(IntroLayout.Block title, IntroLayout.Block subtitle) {
                 availableWidth, availableHeight, wrapWidth, maxHeight),
                 place(subtitleLines, 1, subtitlePosition, lineHeight, margin, top,
                         availableWidth, availableHeight, wrapWidth, maxHeight));
+    }
+
+    private static Block positioned(Font font, List<IntroText.Glyph> glyphs, float scale, IntroDefinition.Position position,
+                                    IntroDefinition.Coordinates coordinates, int lineHeight, int width, int height,
+                                    float margin, float top, float availableWidth, float availableHeight) {
+        if (coordinates == null) {
+            var lines = glyphs.isEmpty() ? List.<IntroText.Line>of()
+                    : IntroText.wrap(font, glyphs, Math.max(1, (int) (availableWidth / scale)));
+            return place(lines, scale, position, lineHeight, margin, top, availableWidth, availableHeight, availableWidth, availableHeight);
+        }
+        float x = (float) (width * coordinates.x() / 100);
+        float y = (float) (height * coordinates.y() / 100);
+        float maxWidth = Math.max(1, Math.min((float) (width * coordinates.width() / 100), span(x, width, position.column())));
+        float maxHeight = Math.max(1, span(y, height, position.row()));
+        var lines = glyphs.isEmpty() ? List.<IntroText.Line>of() : IntroText.wrap(font, glyphs, Math.max(1, (int) (maxWidth / scale)));
+        scale *= Math.min(1, Math.min(maxHeight / Math.max(1, lines.size() * lineHeight * scale),
+                maxWidth / Math.max(1, maxWidth(lines) * scale)));
+        return new Block(lines, x, y - lines.size() * lineHeight * scale * position.row() / 2, scale, position, lineHeight);
+    }
+
+    private static float span(float anchor, int size, int alignment) {
+        return alignment == 0 ? size - anchor : alignment == 2 ? anchor : 2 * Math.min(anchor, size - anchor);
     }
 
     private static Block place(List<IntroText.Line> lines, float scale, IntroDefinition.Position position, int lineHeight,

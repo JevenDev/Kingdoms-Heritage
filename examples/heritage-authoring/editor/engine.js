@@ -21,6 +21,10 @@ function readJson(source) {
     const value=config[key].trim().toLowerCase().replaceAll(' ','_');
     config[key]=Object.hasOwn(positionAliases,value)?positionAliases[value]:value;
   }
+  for(const key of ['title_coordinates','subtitle_coordinates']) {
+    config[key]=Object.hasOwn(intro,key)?intro[key]:null;
+    if(config[key]&&typeof config[key]==='object'&&!Array.isArray(config[key]))config[key]={width:50,...config[key]};
+  }
   validate(config);
   return {document,wrapped,config};
 }
@@ -194,6 +198,11 @@ function padding(glyphs) {
   return [Math.ceil(Math.max(...animated.map(g=>g.effect.shake?1.15:0)))+1,
     Math.ceil(Math.max(...animated.map(g=>(g.effect.wave?1.75:0)+(g.effect.jump?2.4:0))))+1];
 }
+function bounds(block) {
+  const textWidth=Math.max(0,...block.lines.map(line=>line.width))*block.scale;
+  const width=block.wrapWidth??textWidth;
+  return {x:block.x-width*block.column/2,y:block.y,width,height:block.lines.length*block.lineHeight*block.scale};
+}
 function layout(cfg,main,sub,width,height,slant,advance) {
   const pads=padding([...main,...sub]), margin=Math.min(20+Math.max(...pads)*1.5,Math.min(width,height)/4);
   let top=margin,bottom=height-margin;
@@ -204,9 +213,24 @@ function layout(cfg,main,sub,width,height,slant,advance) {
   }
   const aw=Math.max(1,width-margin*2), ah=Math.max(1,bottom-top);
   const p=positions[cfg.title_position], q=positions[cfg.subtitle_position];
+  const ts=cfg.title?1.5:1, lh=12+pads[1]*2;
+  if(cfg.title_coordinates||cfg.subtitle_coordinates) {
+    const span=(anchor,size,alignment)=>alignment===0?size-anchor:alignment===2?anchor:2*Math.min(anchor,size-anchor);
+    function positioned(glyphs,scale,pos,coordinates) {
+      const x=coordinates?width*coordinates.x/100:margin+aw*pos[0]/2;
+      const anchorY=coordinates?height*coordinates.y/100:0;
+      const maxWidth=coordinates?Math.max(1,Math.min(width*(coordinates.width??50)/100,span(x,width,pos[0]))):aw;
+      const maxHeight=coordinates?Math.max(1,span(anchorY,height,pos[1])):ah;
+      const lines=glyphs.length?wrap(glyphs,Math.max(1,Math.trunc(maxWidth/scale)),advance):[];
+      scale*=Math.min(1,maxHeight/Math.max(1,lines.length*lh*scale),maxWidth/Math.max(1,...lines.map(line=>line.width*scale)));
+      const y=coordinates?anchorY-lines.length*lh*scale*pos[1]/2:top+(ah-lines.length*lh*scale)*pos[1]/2;
+      return {lines,scale,column:pos[0],x,y,lineHeight:lh,...(coordinates?{wrapWidth:maxWidth}:{})};
+    }
+    return [positioned(main,ts,p,cfg.title_coordinates),positioned(sub,1,q,cfg.subtitle_coordinates)];
+  }
   const together=!sub.length || cfg.title_position===cfg.subtitle_position, rows=!together&&p[1]!==q[1];
   const ww=!together&&!rows?aw/(Math.abs(p[0]-q[0])===2?2:3):aw;
-  const maxHeight=rows?ah/3:ah, ts=cfg.title?1.5:1, lh=12+pads[1]*2;
+  const maxHeight=rows?ah/3:ah;
   const a=wrap(main,Math.max(1,Math.trunc(ww/ts)),advance), b=sub.length?wrap(sub,Math.max(1,Math.trunc(ww)),advance):[];
   const maxWidth=lines=>Math.max(0,...lines.map(line=>line.width));
   function place(lines,scale,pos) {
@@ -251,12 +275,20 @@ function validate(cfg) {
     if(!Number.isInteger(cfg[field])||cfg[field]<min||cfg[field]>1200) throw Object.assign(new Error(({black_hold_ticks:'Black screen',fade_from_black_ticks:'World fade',reveal_ticks:'Text reveal',hold_ticks:'Text hold',fade_out_ticks:'Text fade out',bar_transition_ticks:'Bar movement'})[field]+' must be a whole number from '+min+' to 1200.'),{field});
   }
   for(const key of ['title_position','subtitle_position']) if(!Object.hasOwn(positions,cfg[key])) throw new Error('Unknown text position.');
+  for(const key of ['title_coordinates','subtitle_coordinates'])if(cfg[key]!=null) {
+    const value=cfg[key];
+    if(typeof value!=='object'||Array.isArray(value))throw Object.assign(new Error(key+' must contain x and y percentages.'),{field:key});
+    for(const field of ['x','y','width']) {
+      const number=Object.hasOwn(value,field)?value[field]:(field==='width'?50:NaN),min=field==='width'?1:0;
+      if(typeof number!=='number'||!Number.isFinite(number)||number<min||number>100)throw Object.assign(new Error(key+'.'+field+' must be a number from '+min+' to 100.'),{field:key+'.'+field});
+    }
+  }
   if(!['fade_in','word_by_word','letter_by_letter','immediate'].includes(cfg.animation)) throw new Error('Unknown reveal mode.');
   if(!['after_title','during_title'].includes(cfg.control)) throw new Error('Unknown control setting.');
   if(!['random','straight'].includes(cfg.bar_style)) throw new Error('Unknown bar style.');
   return cfg;
 }
-const api={componentText,validateComponent,colors,positions,defaults,packDefaults,readJson,updateJson,parse,wrap,padding,layout,presentation,duration,wordEnds,visible,glyphFrame,validate,clamp,active};
+const api={componentText,validateComponent,colors,positions,defaults,packDefaults,readJson,updateJson,parse,wrap,padding,bounds,layout,presentation,duration,wordEnds,visible,glyphFrame,validate,clamp,active};
 if(typeof module!=='undefined') module.exports=api;
 else globalThis.HeritagePreview=api;
 })();

@@ -2,7 +2,7 @@
 'use strict';
 const P=HeritagePreview, $=id=>document.getElementById(id),storageKey='heritage.introEditor.v1';
 if(!await HeritageSession.acquire(storageKey))return;
-const previewFields=['viewport','background','biome','structure','dimension','loop'];
+const previewFields=['viewport','background','biome','structure','dimension','loop','show-text-boxes'];
 const canvas=$('preview'), ctx=canvas.getContext('2d'), font=new Map(), tinted=new Map(), widthBuckets=new Map();
 let jsonState=P.readJson(JSON.stringify({intro:P.defaults}));
 let config=jsonState.config, main=[], sub=[], all=[], blocks=[], cues=[], revealEnds=[];
@@ -10,6 +10,7 @@ let time=0, playing=false, previewing=true, muted=false, lastFrame=0, frameReque
 let audioContext, audioBuffer, gain;
 let history=[], historyIndex=-1, restoringHistory=false, historyGroup=null, historyTime=0, currentValidation={error:null,fromJson:false};
 let workspace,saveTimer,saveUnavailable=false,saveBlocked=false;
+let selectedBlock=null,drag=null;
 function draftOptions() {
   if(!workspace)return;
   const field=$('intro-drafts'),ids=[...workspace.entries.keys()];
@@ -55,7 +56,7 @@ function openIntro(raw=JSON.stringify({intro:{text:'A new journey begins.',subti
   try{parsed=P.readJson(raw);}catch(failure){error={message:failure.message};}
   const state={
     name,source:raw,document:parsed.document,validation:{error,fromJson:!!error},
-    values:fields.map(field=>field.type==='checkbox'?parsed.config[field.dataset.field]:P.componentText(parsed.config[field.dataset.field])||String(parsed.config[field.dataset.field])),
+    values:fields.map(field=>{const value=configValue(parsed.config,field.dataset.field);return field.type==='checkbox'?value:P.componentText(value)||String(value);}),
     selection:[0,0],preview:historySnapshot().preview
   };
   activateIntro(workspace.add(state));if(!error)$('text-tab').click();
@@ -166,16 +167,29 @@ function random(seed) {
   let state=seed>>>0;
   return ()=>{ state=(Math.imul(state,1664525)+1013904223)>>>0; return state/4294967296; };
 }
+function configValue(config,field) {
+  const [key,part]=field.split('.');
+  return part?(config[key]?.[part]??({x:50,y:50,width:50})[part]):config[key];
+}
 function fillFields() {
   for(const field of fields) {
-    const value=config[field.dataset.field];
+    const value=configValue(config,field.dataset.field);
     if(field.type==='checkbox') field.checked=value;
     else {field.value=['text','subtitle'].includes(field.dataset.field)?P.componentText(value):value;field.readOnly=['text','subtitle'].includes(field.dataset.field)&&typeof value!=='string';}
     if(field.readOnly)field.title='Structured Minecraft text is preserved. Edit this field in JSON.';else field.removeAttribute('title');
   }
+  updateCoordinateControls();
+}
+function updateCoordinateControls() {
+  for(const kind of ['title','subtitle']) {
+    const custom=!!config[kind+'_coordinates'];
+    $(kind+'-custom').checked=custom;
+    $(kind+'-coordinates').hidden=!custom;
+    $(kind+'-position-label').textContent=(kind==='title'?'Title':'Subtitle')+(custom?' anchor':' position');
+  }
 }
 function stopSounds() { for(const source of sources) source.stop(); sources.clear(); }
-function pause() { playing=false;if(frameRequest)cancelAnimationFrame(frameRequest);frameRequest=0; HeritageIcons.action('play','play','Play'); stopSounds(); }
+function pause() { playing=false;if(frameRequest)cancelAnimationFrame(frameRequest);frameRequest=0; HeritageIcons.action('play','play','Play'); stopSounds(); if(blocks.length)draw(); }
 async function prepareAudio() {
   if(audioBuffer) { await audioContext.resume(); return; }
   audioContext ||= new AudioContext();
@@ -259,7 +273,7 @@ function validation(error=null,fromJson=false) {
   $('copy-status').textContent='';
   $('download-intro').disabled=!valid;
   for(const id of ['copy','format-json','play','restart']) $(id).disabled=!valid;
-  for(const control of [...fields,...document.querySelectorAll('.text-editor button, .text-editor select')]) control.disabled=!!error&&fromJson;
+  for(const control of [...fields,$('title-custom'),$('subtitle-custom'),...document.querySelectorAll('.text-editor button, .text-editor select')]) control.disabled=!!error&&fromJson;
 }
 function refreshPreview() {
   rebuild();
@@ -286,23 +300,133 @@ function editing(event) {
     const changes={};
     for(const field of fields) {
       if(field.readOnly)continue;
+      const [key,part]=field.dataset.field.split('.');
+      if(part&&!$(key.replace('_coordinates','')+'-custom').checked)continue;
       let value=field.value;
       if(field.type==='checkbox') value=field.checked;
       else if(field.type==='number') {
         if(!field.value.trim()) throw Object.assign(new Error(field.closest('label').firstChild.textContent.trim()+' is required.'),{field:field.dataset.field});
         value=Number(field.value);
       }
-      if(value!==config[field.dataset.field]) changes[field.dataset.field]=value;
+      if(part) {
+        changes[key]??={...config[key]};
+        changes[key][part]=value;
+      } else if(value!==config[key]) changes[key]=value;
     }
+    for(const kind of ['title','subtitle'])if(!$(kind+'-custom').checked)changes[kind+'_coordinates']=undefined;
     const next=P.updateJson(jsonState,changes);
     jsonState=next;
     config=next.config;
     $('json').value=JSON.stringify(jsonState.document,null,2);
+    updateCoordinateControls();
     validation();
     refreshPreview();
   } catch(error) { validation(error); }
   recordHistory(event);
 }
+function coordinatesFor(kind) {
+  if(config[kind+'_coordinates'])return {...config[kind+'_coordinates']};
+  const block=blocks[kind==='title'?0:1],w=canvas.width/2,h=canvas.height/2;
+  const height=block.lines.length*block.lineHeight*block.scale;
+  const width=Math.max(0,...block.lines.map(line=>line.width))*block.scale;
+  const position=P.positions[config[kind+'_position']];
+  return {x:P.clamp(block.x/w*100,0,100),y:P.clamp((block.y+height*position[1]/2)/h*100,0,100),width:P.clamp(Math.ceil(width/w*1000)/10,1,100)};
+}
+function setCoordinates(kind,coordinates) {
+  pause();
+  jsonState=P.updateJson(jsonState,{[kind+'_coordinates']:coordinates});
+  config=jsonState.config;
+  $('json').value=JSON.stringify(jsonState.document,null,2);
+  $('preset').value='custom';
+  fillFields();validation();refreshPreview();
+}
+function selectBlock(kind) {
+  pause();
+  selectedBlock=kind;
+  $('show-text-boxes').checked=true;
+  for(const name of ['title','subtitle'])$('move-'+name).setAttribute('aria-pressed',String(name===kind));
+  draw();canvas.focus();
+}
+function point(event) {
+  const rect=canvas.getBoundingClientRect();
+  return {x:(event.clientX-rect.left)/rect.width*canvas.width/2,y:(event.clientY-rect.top)/rect.height*canvas.height/2};
+}
+function blockAt(point) {
+  const order=selectedBlock===null?[1,0]:[selectedBlock==='title'?0:1,selectedBlock==='title'?1:0];
+  for(const index of order) {
+    const block=blocks[index];if(!block?.lines.length)continue;
+    const box=P.bounds(block);
+    if(point.x>=box.x-3&&point.x<=box.x+box.width+3&&point.y>=box.y-3&&point.y<=box.y+box.height+3)return index===0?'title':'subtitle';
+  }
+  return null;
+}
+function drawBounds() {
+  if(!$('show-text-boxes').checked||playing)return;
+  ctx.save();ctx.lineWidth=.5;
+  blocks.forEach((block,index)=>{
+    if(!block.lines.length)return;
+    const kind=index===0?'title':'subtitle',box=P.bounds(block);
+    ctx.strokeStyle=selectedBlock===kind?'#ffaa00':'#999';
+    ctx.strokeRect(box.x-2,box.y-2,box.width+4,box.height+4);
+    const position=P.positions[config[kind+'_position']];
+    const anchorY=block.y+box.height*position[1]/2;
+    ctx.fillStyle=ctx.strokeStyle;ctx.fillRect(block.x-1,anchorY-1,2,2);
+  });
+  ctx.restore();
+}
+function finishDrag(cancel=false) {
+  if(!drag)return;
+  const previous=drag;drag=null;
+  if(canvas.hasPointerCapture(previous.pointerId))canvas.releasePointerCapture(previous.pointerId);
+  canvas.style.cursor='grab';
+  if(cancel) {
+    jsonState=previous.state;config=jsonState.config;$('json').value=previous.source;
+    fillFields();validation();refreshPreview();
+  } else if(previous.moved)recordHistory();
+}
+function setupPositionControls() {
+  for(const kind of ['title','subtitle']) {
+    $(kind+'-custom').addEventListener('change',event=>{
+      if(event.target.checked) {
+        setCoordinates(kind,coordinatesFor(kind));recordHistory(event);
+      }else editing(event);
+    });
+    $('move-'+kind).addEventListener('click',()=>selectBlock(kind));
+  }
+  canvas.addEventListener('pointerdown',event=>{
+    if(event.button!==0||!valid||playing||!$('show-text-boxes').checked)return;
+    const position=point(event),kind=blockAt(position);if(!kind)return;
+    event.preventDefault();selectBlock(kind);
+    drag={kind,start:position,coordinates:coordinatesFor(kind),pointerId:event.pointerId,state:jsonState,source:$('json').value,moved:false};
+    canvas.setPointerCapture(event.pointerId);canvas.style.cursor='grabbing';
+  });
+  canvas.addEventListener('pointermove',event=>{
+    if(!drag) {
+      canvas.style.cursor=valid&&!playing&&$('show-text-boxes').checked&&blockAt(point(event))?'grab':'default';return;
+    }
+    if(event.pointerId!==drag.pointerId)return;
+    const position=point(event),dx=position.x-drag.start.x,dy=position.y-drag.start.y;
+    if(!drag.moved&&Math.abs(dx)+Math.abs(dy)<1)return;
+    drag.moved=true;
+    const round=value=>Math.round(P.clamp(value,0,100)*10)/10;
+    setCoordinates(drag.kind,{...drag.coordinates,x:round(drag.coordinates.x+dx/(canvas.width/2)*100),y:round(drag.coordinates.y+dy/(canvas.height/2)*100)});
+  });
+  canvas.addEventListener('pointerup',event=>{if(event.pointerId===drag?.pointerId)finishDrag();});
+  canvas.addEventListener('pointercancel',()=>finishDrag(true));
+  canvas.addEventListener('lostpointercapture',()=>finishDrag());
+  canvas.addEventListener('keydown',event=>{
+    if(event.key==='Escape'){finishDrag(true);selectedBlock=null;for(const kind of ['title','subtitle'])$('move-'+kind).setAttribute('aria-pressed','false');draw();return;}
+    if(!selectedBlock||!valid||playing||event.ctrlKey||event.metaKey||event.altKey||!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key))return;
+    event.preventDefault();
+    const coordinates=coordinatesFor(selectedBlock),step=event.shiftKey?1:.1;
+    const key=event.key==='ArrowLeft'||event.key==='ArrowRight'?'x':'y';
+    const direction=event.key==='ArrowLeft'||event.key==='ArrowUp'?-1:1;
+    coordinates[key]=Math.round(P.clamp(coordinates[key]+direction*step,0,100)*10)/10;
+    setCoordinates(selectedBlock,coordinates);recordHistory({type:'input',target:$(selectedBlock+'-'+key)});
+  });
+  $('show-text-boxes').addEventListener('change',()=>{draw();scheduleSave();});
+}
+
 function sprite(g,color) {
   const key=g.id+':'+color;
   if(tinted.has(key)) return tinted.get(key);
@@ -394,6 +518,8 @@ function draw() {
     }
   }
   ctx.globalAlpha=1;
+  drawBounds();
+  $('move-subtitle').disabled=!sub.length;
   $('timeline').value=time;
   const clock=(time/20).toFixed(1)+' / '+(total/20).toFixed(1)+' s';
   if($('clock').textContent!==clock){
@@ -480,7 +606,7 @@ document.addEventListener('keydown',event=>{
   const key=event.key.toLowerCase();
   if(key!=='z'&&key!=='y') return;
   const target=event.target;
-  if(target instanceof HTMLInputElement&&!target.hasAttribute('data-field')&&target.id!=='intro-name') return;
+  if(target instanceof HTMLInputElement&&!target.hasAttribute('data-field')&&!target.hasAttribute('data-position-custom')&&target.id!=='intro-name') return;
   event.preventDefault();
   restoreHistory(key==='y'||event.shiftKey?1:-1);
 });
@@ -492,6 +618,7 @@ for(const field of fields) {
   field.addEventListener('input',event=>{$('preset').value='custom';editing(event);});
   if(field.tagName==='TEXTAREA') field.addEventListener('focus',()=>{activeField=field;});
 }
+setupPositionControls();
 $('settings').addEventListener('submit',event=>event.preventDefault());
 $('play').addEventListener('click',()=>play());
 $('restart').addEventListener('click',()=>play(true));

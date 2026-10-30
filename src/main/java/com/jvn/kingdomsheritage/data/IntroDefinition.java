@@ -12,10 +12,27 @@ public record IntroDefinition(Component text, Component subtitle, boolean title,
                               Control control, boolean blip, int revealTicks, int holdTicks,
                               int fadeOutTicks, int fadeFromBlackTicks, boolean cinematicBars, BarStyle barStyle,
                               int barTransitionTicks, Position titlePosition, Position subtitlePosition, int blackHoldTicks,
-                              boolean outline, boolean hideHudDuringBars) {
+                              boolean outline, boolean hideHudDuringBars,
+                              Coordinates titleCoordinates, Coordinates subtitleCoordinates) {
     public enum Animation { FADE_IN, WORD_BY_WORD, LETTER_BY_LETTER, IMMEDIATE }
     public enum Control { AFTER_TITLE, DURING_TITLE }
     public enum BarStyle { RANDOM, STRAIGHT }
+    public record Coordinates(double x, double y, double width) {
+        public Coordinates {
+            percentage(x, "x", 0);
+            percentage(y, "y", 0);
+            percentage(width, "width", 1);
+        }
+
+        private JsonObject json() {
+            JsonObject json = new JsonObject();
+            json.addProperty("x", x);
+            json.addProperty("y", y);
+            json.addProperty("width", width);
+            return json;
+        }
+    }
+
     public enum Position {
         MID_CENTER(1, 1), TOP_CENTER(1, 0), BOTTOM_CENTER(1, 2), LEFT_CENTER(0, 1), RIGHT_CENTER(2, 1),
         TOP_LEFT(0, 0), TOP_RIGHT(2, 0), BOTTOM_LEFT(0, 2), BOTTOM_RIGHT(2, 2);
@@ -80,6 +97,16 @@ public record IntroDefinition(Component text, Component subtitle, boolean title,
                 blackHoldTicks, outline, false);
     }
 
+    public IntroDefinition(Component text, Component subtitle, boolean title, Animation animation,
+                           Control control, boolean blip, int revealTicks, int holdTicks,
+                           int fadeOutTicks, int fadeFromBlackTicks, boolean cinematicBars, BarStyle barStyle,
+                           int barTransitionTicks, Position titlePosition, Position subtitlePosition, int blackHoldTicks,
+                           boolean outline, boolean hideHudDuringBars) {
+        this(text, subtitle, title, animation, control, blip, revealTicks, holdTicks, fadeOutTicks,
+                fadeFromBlackTicks, cinematicBars, barStyle, barTransitionTicks, titlePosition, subtitlePosition,
+                blackHoldTicks, outline, hideHudDuringBars, null, null);
+    }
+
     public static IntroDefinition parse(JsonObject json) {
         Component text = component(json, "text", false);
         Component subtitle = component(json, "subtitle", true);
@@ -96,7 +123,29 @@ public record IntroDefinition(Component text, Component subtitle, boolean title,
                 ticks(json, "bar_transition_ticks", 40),
                 Position.parse(GsonHelper.getAsString(json, "title_position", "mid_center")),
                 Position.parse(GsonHelper.getAsString(json, "subtitle_position", "mid_center")), ticks(json, "black_hold_ticks", 60, 0),
-                GsonHelper.getAsBoolean(json, "outline", true), GsonHelper.getAsBoolean(json, "hide_hud_during_bars", false));
+                GsonHelper.getAsBoolean(json, "outline", true), GsonHelper.getAsBoolean(json, "hide_hud_during_bars", false),
+                coordinates(json, "title_coordinates"), coordinates(json, "subtitle_coordinates"));
+    }
+
+    private static Coordinates coordinates(JsonObject json, String key) {
+        if (!json.has(key) || json.get(key).isJsonNull()) return null;
+        JsonObject value = GsonHelper.getAsJsonObject(json, key);
+        return new Coordinates(coordinate(value, "x", null), coordinate(value, "y", null), coordinate(value, "width", 50D));
+    }
+
+    private static double coordinate(JsonObject json, String key, Double fallback) {
+        if (!json.has(key) && fallback != null) return fallback;
+        var value = json.get(key);
+        if (value == null || !value.isJsonPrimitive() || !value.getAsJsonPrimitive().isNumber()) {
+            throw new IllegalArgumentException(key + " must be a percentage");
+        }
+        return value.getAsDouble();
+    }
+
+    private static void percentage(double value, String key, int minimum) {
+        if (!Double.isFinite(value) || value < minimum || value > 100) {
+            throw new IllegalArgumentException(key + " must be between " + minimum + " and 100 percent");
+        }
     }
 
     private static Component component(JsonObject json, String key, boolean optional) {
@@ -153,6 +202,8 @@ public record IntroDefinition(Component text, Component subtitle, boolean title,
         json.addProperty("bar_transition_ticks", barTransitionTicks);
         json.addProperty("title_position", titlePosition.name().toLowerCase(Locale.ROOT));
         json.addProperty("subtitle_position", subtitlePosition.name().toLowerCase(Locale.ROOT));
+        if (titleCoordinates != null) json.add("title_coordinates", titleCoordinates.json());
+        if (subtitleCoordinates != null) json.add("subtitle_coordinates", subtitleCoordinates.json());
         return json;
     }
 }
