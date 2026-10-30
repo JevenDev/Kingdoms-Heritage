@@ -77,28 +77,11 @@ public final class HeritageCommands {
 
     private static int validate(CommandSourceStack source, ServerPlayer player) {
         int errors = 0;
-        for (var spawn : HeritageCatalog.spawns().values()) {
+        for (var definition : HeritageCatalog.spawns().values()) {
             try {
-                var level = source.getServer().getLevel(ResourceKey.create(Registries.DIMENSION, spawn.dimension()));
-                if (level == null) throw new HeritageException("dimension", "Dimension is unavailable: %s", spawn.dimension().toString());
-                if (spawn.kind() == SpawnDefinition.Kind.BIOME) {
-                    SpawnResolver.validateBiome(level, spawn);
-                } else if (spawn.kind() == SpawnDefinition.Kind.STRUCTURE) {
-                    var registry = level.registryAccess().registryOrThrow(Registries.STRUCTURE);
-                    boolean tag = registry.getTag(TagKey.create(Registries.STRUCTURE, spawn.target())).filter(value -> value.size() > 0).isPresent();
-                    if (!tag && (spawn.targetTag() || !registry.containsKey(spawn.target()))) {
-                        throw new HeritageException("structure", "Unknown or empty structure target: %s", spawn.target().toString());
-                    }
-                    if (!source.getServer().getWorldData().worldGenOptions().generateStructures()) {
-                        throw new HeritageException("structures_disabled", "Structure generation is disabled in this world");
-                    }
-                } else if (spawn.kind() == SpawnDefinition.Kind.FIXED) {
-                    var position = new BlockPos(spawn.x(), spawn.y(), spawn.z());
-                    if (!level.getWorldBorder().isWithinBounds(position) || spawn.y() <= level.getMinBuildHeight()
-                            || spawn.y() + 2 >= level.getMaxBuildHeight()) throw new HeritageException("fixed_bounds", "Fixed position is outside the playable bounds");
-                }
+                validateSpawn(source.getServer(), definition);
             } catch (IllegalArgumentException error) {
-                source.sendFailure(Component.translatable("commands.kingdomsheritage.invalid", spawn.id().toString(), HeritageException.component(error)));
+                source.sendFailure(Component.translatable("commands.kingdomsheritage.invalid", definition.id().toString(), HeritageException.component(error)));
                 errors++;
             }
         }
@@ -116,5 +99,28 @@ public final class HeritageCommands {
                 HeritageCatalog.spawns().size(), HeritageCatalog.kits().size(), total), false);
         if (player == null) source.sendSuccess(() -> Component.translatable("commands.kingdomsheritage.validation_player"), false);
         return errors == 0 ? 1 : 0;
+    }
+
+    static void validateSpawn(net.minecraft.server.MinecraftServer server, SpawnDefinition definition) {
+        for (var spawn : definition.destinations()) {
+            var level = server.getLevel(ResourceKey.create(Registries.DIMENSION, spawn.dimension()));
+            if (level == null) throw new HeritageException("dimension", "Dimension is unavailable: %s", spawn.dimension().toString());
+            if (spawn.kind() == SpawnDefinition.Kind.BIOME) {
+                SpawnResolver.validateBiome(level, spawn);
+            } else if (spawn.kind() == SpawnDefinition.Kind.STRUCTURE) {
+                var registry = level.registryAccess().registryOrThrow(Registries.STRUCTURE);
+                boolean tag = registry.getTag(TagKey.create(Registries.STRUCTURE, spawn.target())).filter(value -> value.size() > 0).isPresent();
+                if (!tag && (spawn.targetTag() || !registry.containsKey(spawn.target()))) {
+                    throw new HeritageException("structure", "Unknown or empty structure target: %s", spawn.target().toString());
+                }
+                if (!server.getWorldData().worldGenOptions().generateStructures()) {
+                    throw new HeritageException("structures_disabled", "Structure generation is disabled in this world");
+                }
+            } else if (spawn.kind() == SpawnDefinition.Kind.FIXED) {
+                var position = new BlockPos(spawn.x(), spawn.y(), spawn.z());
+                if (!level.getWorldBorder().isWithinBounds(position) || spawn.y() <= level.getMinBuildHeight()
+                        || spawn.y() + 2 >= level.getMaxBuildHeight()) throw new HeritageException("fixed_bounds", "Fixed position is outside the playable bounds");
+            }
+        }
     }
 }

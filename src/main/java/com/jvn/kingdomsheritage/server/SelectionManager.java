@@ -182,7 +182,7 @@ public final class SelectionManager {
             sendProgress(player, "applying");
             KingdomsHeritage.LOGGER.debug("Prepared Heritage location {} in {} ms of server work",
                     spawn.id(), preparation.search().workMillis());
-            JsonObject intro = SpawnIntro.prepare(spawn, destination);
+            JsonObject intro = SpawnIntro.prepare(preparation.search().definition(), destination);
             KitService.apply(player, kit, stacks, inventoryPolicy(player));
             CompoundTag state = state(player);
             player.teleportTo(destination.level(), destination.position().getX() + 0.5,

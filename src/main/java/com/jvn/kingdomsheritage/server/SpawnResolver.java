@@ -51,14 +51,15 @@ public final class SpawnResolver {
         private long workNanos;
 
         public Search(ServerPlayer player, SpawnDefinition definition, BlockPos original) {
-            this.definition = definition;
+            this.definition = definition.choose(player.getRandom());
             this.original = original;
-            level = player.server.getLevel(ResourceKey.create(Registries.DIMENSION, definition.dimension()));
-            if (level == null) throw new HeritageException("dimension", "Dimension is unavailable: %s", definition.dimension().toString());
+            level = player.server.getLevel(ResourceKey.create(Registries.DIMENSION, this.definition.dimension()));
+            if (level == null) throw new HeritageException("dimension", "Dimension is unavailable: %s", this.definition.dimension().toString());
             origin = level.getSharedSpawnPos();
-            cacheKey = new CacheKey(level, definition, origin, searchRadius(definition));
+            cacheKey = new CacheKey(level, this.definition, origin, searchRadius(this.definition));
         }
 
+        public SpawnDefinition definition() { return definition; }
         public Destination destination() { return destination; }
         public long workMillis() { return workNanos / 1000000; }
         public String stage() { return located ? "checking" : "searching"; }
