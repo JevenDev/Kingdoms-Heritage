@@ -158,7 +158,7 @@ public final class ClientSelection {
     private static void tick(ClientTickEvent.Post event) {
         SelectionTransition.tick();
         SpawnIntroOverlay.tick();
-        SelectionMusic.tick(catalog != null || SpawnIntroOverlay.active());
+        SelectionMusic.tick(catalog != null || SpawnIntroOverlay.awaitingReveal());
         Minecraft minecraft = Minecraft.getInstance();
         if (catalog == null || minecraft.level == null || minecraft.player == null) return;
         if (kits != null) {
