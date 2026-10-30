@@ -66,6 +66,70 @@ function decode(value,inherited){
   catch(error){if(!(error instanceof SyntaxError))throw error;return parse('[Invalid text component]',{color:colors.red});}
 }
 const plain=runs=>runs.map(run=>run.text).join('');
+const loreDefaults={color:colors.dark_purple,...Object.fromEntries(flags.map(key=>[key,key==='italic']))};
+function loreStyle(value) {
+  const runs=decode(value,loreDefaults),root=runs.length?null:typeof value==='string'?JSON.parse(value):value;
+  const base=style(Array.isArray(root)?root[0]:root,loreDefaults);
+  return Object.fromEntries(Object.keys(loreDefaults).map(key=>{
+    const values=new Set((runs.length?runs:[base]).map(run=>run[key]??loreDefaults[key]));
+    return [key,values.size===1?[...values][0]:null];
+  }));
+}
+const loreAliases={b:'bold',i:'italic',italics:'italic',u:'underline',underlined:'underline',s:'strike',strikethrough:'strike',obfuscate:'obfuscated',magic:'obfuscated'};
+const loreFlags={bold:'bold',italic:'italic',underline:'underlined',strike:'strikethrough',obfuscated:'obfuscated'};
+const loreBase={...loreDefaults,italic:false};
+function loreMarkup(value) {
+  const runs=decode(value,loreDefaults),escape=text=>text.replace(/\\/g,'\\\\').replace(/</g,'\\<');
+  return (runs.length?runs:[{text:'',...loreStyle(value)}]).map(run=>{
+    const tags=[];
+    if(run.color&&run.color!==loreBase.color)tags.push(Object.keys(colors).find(name=>colors[name]===run.color)||'color:'+run.color);
+    for(const [tag,key] of Object.entries(loreFlags))if(run[key])tags.push(tag);
+    return tags.map(tag=>'<'+tag+'>').join('')+escape(run.text)+tags.slice().reverse().map(tag=>'</'+tag.split(':')[0]+'>').join('');
+  }).join('');
+}
+function loreTag(raw) {
+  const parts=raw.trim().toLowerCase().split(':'),name=loreAliases[parts[0]]??parts[0];
+  const tint=color(name==='color'?parts.slice(1).join(':'):name);
+  if(tint)return {name:name==='color'?'color':parts[0],format:{color:tint}};
+  if(parts.length===1&&Object.hasOwn(loreFlags,name))return {name,format:{[loreFlags[name]]:true}};
+  return {name,format:null};
+}
+function parseLoreMarkup(text,previous) {
+  if(previous!==undefined&&text===loreMarkup(previous))return previous;
+  const tokens=[...text.matchAll(/\\([\\<])|<(\/?)([^<>]+)>/g)].map(match=>({start:match.index,end:match.index+match[0].length,raw:match[0],literal:match[1],closing:!!match[2],...(match[3]?loreTag(match[3]):{})}));
+  const open=[];
+  for(const [index,token] of tokens.entries()){
+    if(token.literal)continue;
+    if(!token.closing&&token.format&&open.length<64)open.push(index);
+    else if(token.closing&&open.length&&tokens[open[open.length-1]].name===token.name){
+      const start=open.pop();tokens[start].match=index;token.match=start;
+    }
+  }
+  const styles=[loreBase],runs=[];
+  function append(value) {
+    if(!value)return;
+    const format=styles[styles.length-1],previous=runs[runs.length-1];
+    if(previous&&Object.keys(loreBase).every(key=>previous[key]===format[key]))previous.text+=value;
+    else runs.push({text:value,...format});
+  }
+  let cursor=0;
+  for(const token of tokens){
+    append(text.slice(cursor,token.start));
+    if(token.literal)append(token.literal);
+    else if(token.match!==undefined){
+      if(token.closing)styles.pop();else styles.push({...styles[styles.length-1],...token.format});
+    }else append(token.raw);
+    cursor=token.end;
+  }
+  append(text.slice(cursor));
+  return JSON.stringify(runs.length?{text:'',italic:false,extra:runs}:{text:'',italic:false});
+}
+function wrapLoreMarkup(text,start,end,tag) {
+  const parsed=loreTag(tag);
+  if(!parsed.format)throw new Error('Choose a lore color or text format.');
+  const a=start===end?0:start,b=start===end?text.length:end,open='<'+tag+'>',close='</'+parsed.name+'>';
+  return {text:text.slice(0,a)+open+text.slice(a,b)+close+text.slice(b),start:a+open.length,end:b+open.length};
+}
 function title(stack,tooltip=false){
   const components=stack.components??{},custom=components['minecraft:custom_name'],itemName=components['minecraft:item_name'];
   let rarity=components['minecraft:rarity']??rarities[HeritageKit.normalize(stack.id)]??'common';
@@ -109,6 +173,6 @@ function wrap(lines,limit,advance){
   return output;
 }
 const name=stack=>plain(title(stack));
-globalThis.HeritageItemText={configure,parse,decode,plain,title,name,tooltip,wrap,colors};
+globalThis.HeritageItemText={configure,parse,decode,plain,loreMarkup,parseLoreMarkup,wrapLoreMarkup,title,name,tooltip,wrap,colors};
 if(typeof module!=='undefined')module.exports=globalThis.HeritageItemText;
 })();

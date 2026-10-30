@@ -2,7 +2,7 @@
 'use strict';
 const K=HeritageKit,E=HeritageEquipment,M=HeritageKitMouse,V=HeritageInventory,T=HeritageItemText,$=id=>document.getElementById(id),storageKey='heritage.kitCreator.v1';
 const searchIndex=HeritageItems.items.map(item=>({item,search:(item.name+' '+item.id).toLowerCase()})),itemButtons=new Map();
-let documentState=K.copy(HeritageKitExamples[0].kit),selected=0,page=0,rawInvalid=false,errorState=null,drafts=new Map(),slotClipboard=null;
+let documentState=K.copy(HeritageKitExamples[0].kit),selected=0,page=0,rawInvalid=false,errorState=null,drafts=new Map(),loreSources=new Map(),slotClipboard=null;
 let kitWarnings=[],activeItemButton,carried=null,pendingDelete=null,selectedSlots=new Set(),selectionMode=false,selectionAnchor=null;
 let pageSize=90,pageCount=1,wheelPageTime=-Infinity;
 let history=[],historyIndex=-1,historyGroup=null,historyTime=0,saveTimer,saveUnavailable=false,saveBlocked=false,workspace;
@@ -25,7 +25,7 @@ const view=new V.Inventory($('inventory'),{
 const preview=new HeritageEquipmentEditor({getDocument:()=>documentState,getSelection:()=>selected,onSelect:selectSlot,onUpdate:(saveHistory=false)=>{display();if(saveHistory)record();else scheduleSave();},notice,canSwitch:()=>{if(errorState?.target==='count'){notice('Fix the count before changing inventory views.');return false;}return true;}});
 const fingerprint=stack=>JSON.stringify(stack?[K.normalize(stack.id),stack.components??{}]:null);
 const source=()=>$('kit-json').value;
-const snapshot=()=>({source:source(),document:K.copy(documentState),cursor:K.copy(carried),selected,selection:[...selectedSlots],selectionMode,drafts:K.copy([...drafts]),error:errorState?K.copy(errorState):null,preview:preview.snapshot()});
+const snapshot=()=>({source:source(),document:K.copy(documentState),cursor:K.copy(carried),selected,selection:[...selectedSlots],selectionMode,drafts:K.copy([...drafts]),loreSources:K.copy([...loreSources]),error:errorState?K.copy(errorState):null,preview:preview.snapshot()});
 function saveDraft() {
   clearTimeout(saveTimer);
   if(saveBlocked)return;
@@ -38,7 +38,7 @@ function scheduleSave() {
   saveTimer=setTimeout(saveDraft,350);
 }
 function record(key=null) {
-  const next=snapshot(),previous=history[historyIndex],signature=state=>JSON.stringify([state.source,state.cursor,state.drafts,state.error,state.preview?.profiles]);
+  const next=snapshot(),previous=history[historyIndex],signature=state=>JSON.stringify([state.source,state.cursor,state.drafts,state.loreSources,state.error,state.preview?.profiles]);
   if(previous&&signature(previous)===signature(next)){feedback();return;}
   history.splice(historyIndex+1);
   const now=performance.now();
@@ -49,7 +49,7 @@ function record(key=null) {
 }
 function restore(direction) {
   const next=historyIndex+direction;if(next<0||next>=history.length)return;
-  historyIndex=next;const state=history[next];documentState=K.copy(state.document);carried=M.cursor(state.cursor);kitWarnings=K.read(JSON.stringify(documentState)).warnings;selected=state.selected;drafts=new Map(K.copy(state.drafts));errorState=state.error;rawInvalid=false;preview.restore(state.preview);
+  historyIndex=next;const state=history[next];documentState=K.copy(state.document);carried=M.cursor(state.cursor);kitWarnings=K.read(JSON.stringify(documentState)).warnings;selected=state.selected;drafts=new Map(K.copy(state.drafts));loreSources=readLoreSources(state.loreSources);errorState=state.error;rawInvalid=false;preview.restore(state.preview);
   selectedSlots=new Set((state.selection??[]).filter(E.valid));selectionMode=state.selectionMode===true;selectionAnchor=null;
   $('kit-json').value=state.source;
   try{K.read(state.source);}catch(failure){rawInvalid=true;}
@@ -83,7 +83,7 @@ function openKit(raw=JSON.stringify({title:'My kit',items:[]},null,2)) {
   let kit={title:'My kit',items:[]},error=null;
   try{kit=K.read(raw).document;}catch(failure){error={message:failure.message,target:'kit-json',value:raw};}
   const first=(Array.isArray(kit.items)?kit.items:[]).find(entry=>['curios','accessories'].includes(entry.inventory));
-  const state={source:raw,document:kit,cursor:null,selected:first?E.id(first):0,selection:[],selectionMode:false,drafts:[],error,preview:null};
+  const state={source:raw,document:kit,cursor:null,selected:first?E.id(first):0,selection:[],selectionMode:false,drafts:[],loreSources:[],error,preview:null};
   activateKit(workspace.add(state));
 }
 function notice(message){$('status').textContent=message;}
@@ -131,7 +131,7 @@ function feedback() {
   const lore=view.entry(selected)?.item.components?.['minecraft:lore'],invalidLore=lore!==undefined&&!Array.isArray(lore);
   const loreLocked=locked||!view.entry(selected)||!!errorState||!!carried||drafts.has(selected)||invalidLore;
   $('add-lore-line').disabled=loreLocked;
-  for(const control of $('lore-lines').querySelectorAll('input,button'))control.disabled=loreLocked;
+  for(const control of $('lore-lines').querySelectorAll('input,textarea,select,button'))control.disabled=loreLocked;
   $('lore-status').textContent=invalidLore?'Lore must be a list. Fix it in Item components.':drafts.has(selected)?"Apply or revert this item's pending edits to edit lore.":!view.entry(selected)?'Choose an item to add lore.':'';
   $('select-slots').disabled=locked||!!carried;
   $('select-slots').setAttribute('aria-pressed',String(selectionMode));
@@ -158,20 +158,49 @@ function slotFields() {
   loreFields(stack);markSelectedItem();feedback();
 }
 function loreFields(stack) {
-  const lines=stack?.components?.['minecraft:lore'],values=Array.isArray(lines)?lines:[],container=$('lore-lines');
+  const lines=stack?.components?.['minecraft:lore'],values=Array.isArray(lines)?lines:[],container=$('lore-lines'),previous=loreSources.get(selected)??[];
+  const sources=values.map((line,index)=>previous[index]?.value===JSON.stringify(line)&&typeof previous[index].text==='string'?previous[index]:{value:JSON.stringify(line),text:T.loreMarkup(line)});
+  if(stack)loreSources.set(selected,sources);else loreSources.delete(selected);
   while(container.children.length>values.length)container.lastElementChild.remove();
-  for(const [index,line] of values.entries()){
+  for(let index=0;index<values.length;index++){
     let row=container.children[index];
     if(!row){
       row=document.createElement('div');row.className='lore-line';
-      const input=document.createElement('input'),remove=document.createElement('button');
-      input.type='text';input.dataset.loreLine=index;input.setAttribute('aria-label','Lore line '+(index+1));input.setAttribute('aria-describedby','lore-hint');
+      const input=document.createElement('textarea'),remove=document.createElement('button');
+      input.rows=2;input.dataset.loreLine=index;input.setAttribute('aria-label','Lore line '+(index+1));input.setAttribute('aria-describedby','lore-hint');input.spellcheck=false;
       remove.type='button';remove.dataset.removeLore=index;remove.textContent='Remove';remove.setAttribute('aria-label','Remove lore line '+(index+1));
-      row.append(input,remove);container.append(row);
+      const toolbar=document.createElement('div'),preset=document.createElement('select'),tint=document.createElement('input'),apply=document.createElement('button');
+      toolbar.className='lore-format';toolbar.role='group';toolbar.setAttribute('aria-label','Lore line '+(index+1)+' formatting');
+      preset.dataset.loreColor=index;preset.setAttribute('aria-label','Lore line '+(index+1)+' color preset');
+      for(const [name,value] of Object.entries(T.colors)){
+        const option=document.createElement('option');option.value=value;option.textContent=name.replaceAll('_',' ');preset.append(option);
+      }
+      const custom=document.createElement('option');custom.value='custom';custom.textContent='Custom color';custom.disabled=true;preset.append(custom);preset.value='#ffaa00';
+      tint.type='color';tint.value='#ffaa00';tint.dataset.loreTint=index;tint.setAttribute('aria-label','Lore line '+(index+1)+' custom color');
+      apply.type='button';apply.textContent='Apply color';apply.dataset.loreApplyColor=index;apply.setAttribute('aria-label','Lore line '+(index+1)+' apply color');
+      toolbar.append(preset,tint,apply);
+      for(const [key,label] of Object.entries({bold:'Bold',italic:'Italic',underline:'Underline',strike:'Strike',obfuscated:'Obfuscated'})){
+        const button=document.createElement('button');button.type='button';button.dataset.loreFormat=key;button.dataset.loreIndex=index;button.textContent=label;
+        button.setAttribute('aria-label','Lore line '+(index+1)+' '+label.toLowerCase());toolbar.append(button);
+      }
+      row.append(input,remove,toolbar);container.append(row);
     }
-    const input=row.querySelector('input'),text=T.plain(T.decode(line));
-    if(input.value!==text)input.value=text;
+    const input=row.querySelector('textarea');
+    if(input.value!==sources[index].text)input.value=sources[index].text;
   }
+}
+function readLoreSources(value) {
+  return new Map(Array.isArray(value)?value.filter(entry=>Array.isArray(entry)&&E.valid(entry[0])&&Array.isArray(entry[1])):[]);
+}
+function setLoreMarkup(index,text,key=null) {
+  return editLore(lines=>{
+    const value=T.parseLoreMarkup(text,lines[index]),sources=loreSources.get(selected)??[];
+    lines[index]=value;sources[index]={value:JSON.stringify(value),text};loreSources.set(selected,sources);
+  },key);
+}
+function wrapLoreSelection(index,tag) {
+  const input=$('lore-lines').children[index].querySelector('textarea'),wrapped=T.wrapLoreMarkup(input.value,input.selectionStart,input.selectionEnd,tag);
+  if(setLoreMarkup(index,wrapped.text)){input.focus();input.setSelectionRange(wrapped.start,wrapped.end);}
 }
 function editLore(update,key=null) {
   return attempt(()=>{
@@ -483,7 +512,7 @@ document.addEventListener('keydown',event=>{
   if(document.querySelector('dialog[open]'))return;
   const modifier=event.ctrlKey||event.metaKey,field=event.target.closest('input,textarea,select,[contenteditable=true]'),slot=event.target.closest('.mc-slot');
   if(modifier&&event.key.toLowerCase()==='f'){event.preventDefault();$('search-items').focus();$('search-items').select();return;}
-  if(modifier&&!event.altKey&&['z','y'].includes(event.key.toLowerCase())&&(!field||field.dataset.loreLine!==undefined||['kit-json','title','description','order','tags','count'].includes(field.id))){
+  if(modifier&&!event.altKey&&['z','y'].includes(event.key.toLowerCase())&&(!field||field.closest('#lore-lines')||['kit-json','title','description','order','tags','count'].includes(field.id))){
     event.preventDefault();restore(event.key.toLowerCase()==='y'||event.shiftKey?1:-1);return;
   }
   if(slot&&modifier&&event.key.toLowerCase()==='c'){event.preventDefault();copySlot();}
@@ -517,20 +546,29 @@ $('apply-id').addEventListener('click',()=>applySlotDraft());
 $('item-id').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();applySlotDraft();}});
 $('apply-components').addEventListener('click',()=>applySlotDraft(true));
 $('lore-lines').addEventListener('input',event=>{
-  const input=event.target.closest('input[data-lore-line]');if(!input)return;
-  const index=Number(input.dataset.loreLine),text=input.value;
-  editLore(lines=>{lines[index]=JSON.stringify(text);},'lore:'+selected+':'+index);
+  const field=event.target.closest('textarea[data-lore-line]');
+  if(field){const index=Number(field.dataset.loreLine);setLoreMarkup(index,field.value,'lore:'+selected+':'+index);return;}
+  const tint=event.target.closest('input[data-lore-tint]');
+  if(tint)tint.closest('.lore-line').querySelector('select').value=Object.values(T.colors).includes(tint.value)?tint.value:'custom';
+});
+$('lore-lines').addEventListener('change',event=>{
+  const preset=event.target.closest('select[data-lore-color]');if(!preset||preset.value==='custom')return;
+  preset.closest('.lore-line').querySelector('input[type=color]').value=preset.value;
 });
 $('lore-lines').addEventListener('click',event=>{
+  const format=event.target.closest('button[data-lore-format]');
+  if(format){wrapLoreSelection(Number(format.dataset.loreIndex),format.dataset.loreFormat);return;}
+  const color=event.target.closest('button[data-lore-apply-color]');
+  if(color){wrapLoreSelection(Number(color.dataset.loreApplyColor),'color:'+color.closest('.lore-line').querySelector('input[type=color]').value);return;}
   const button=event.target.closest('button[data-remove-lore]');if(!button)return;
   const index=Number(button.dataset.removeLore);
-  if(editLore(lines=>lines.splice(index,1))){
-    const inputs=$('lore-lines').querySelectorAll('input');
+  if(editLore(lines=>{lines.splice(index,1);loreSources.get(selected)?.splice(index,1);})){
+    const inputs=$('lore-lines').querySelectorAll('textarea[data-lore-line]');
     (inputs[Math.min(index,inputs.length-1)]||$('add-lore-line')).focus();
   }
 });
 $('add-lore-line').addEventListener('click',()=>{
-  if(editLore(lines=>lines.push(JSON.stringify(''))))$('lore-lines').lastElementChild.querySelector('input').focus();
+  if(editLore(lines=>lines.push(T.parseLoreMarkup(''))))$('lore-lines').lastElementChild.querySelector('textarea').focus();
 });
 $('revert-slot').addEventListener('click',()=>{drafts.delete(selected);if(['item-id','components'].includes(errorState?.target))errorState=null;slotFields();record();});
 $('discard-drafts').addEventListener('click',()=>{drafts.clear();if(['item-id','components'].includes(errorState?.target))errorState=null;slotFields();record();notice('Slot edits reverted. You can undo this.');});
@@ -604,6 +642,7 @@ if(saved&&typeof saved.source==='string') {
     const parsed=K.read(JSON.stringify(saved.document));documentState=parsed.document;kitWarnings=parsed.warnings;
     initialSource=saved.source;selected=E.valid(saved.selected)?saved.selected:0;selectedSlots=new Set((Array.isArray(saved.selection)?saved.selection:[]).filter(E.valid));selectionMode=saved.selectionMode===true;preview.restore(saved.preview);carried=M.cursor(saved.cursor);
     drafts=new Map(Array.isArray(saved.drafts)?saved.drafts.filter(entry=>Array.isArray(entry)&&E.valid(entry[0])&&entry[1]&&typeof entry[1].id==='string'&&typeof entry[1].components==='string'):[]);
+    loreSources=readLoreSources(saved.loreSources);
     $('draft-status').textContent=loadFailure||(hadSavedDraft?'Draft restored':'Draft ready');
   }catch(failure){$('draft-status').textContent='Draft could not be restored. Import it again.';}
 }
