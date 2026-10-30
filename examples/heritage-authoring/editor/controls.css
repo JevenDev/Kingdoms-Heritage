@@ -1,4 +1,4 @@
-:where(.intro-editor, .kit-editor, .assembler) :not(:is(h1, h2, h3, h4, h5, h6, header h1 *, .mc-inventory, .mc-inventory *, .mc-drag-stack, .mc-drag-stack *, .item-choice)) {
+:where(.intro-editor, .kit-editor, .assembler) :not(:is(h1, header h1 *, .mc-inventory, .mc-inventory *, .mc-drag-stack, .mc-drag-stack *, .item-choice)) {
   font-size: var(--body-font-size) !important;
 }
 :where(.intro-editor, .kit-editor, .assembler) :is(button, select, input:not([type=checkbox]):not([type=range]):not([type=file]):not([type=color]), .file-button, .handoff):not(.mc-inventory *):not(.item-choice):not(.location-summary button) {
@@ -18,3 +18,33 @@
 .assembler .location-summary :is(strong, .summary-detail) {
   font-size: var(--body-font-size);
 }
+
+.document-actions-menu { display: contents; }
+.document-actions-menu > summary { display: none; }
+@media(max-width:620px), (max-height:600px) {
+  :is(.intro-editor, .kit-editor, .assembler) > header { height: auto; min-height: 0; padding: 8px 16px; gap: 4px 12px; }
+  :is(.intro-editor, .kit-editor, .assembler) > main { padding: 8px 16px; }
+  .workflow-nav { gap: 6px 12px; margin-bottom: 8px; }
+  .document-toolbar { flex-wrap: nowrap; align-items: center; margin: 0 0 8px; }
+  .document-name { display: grid; flex: 1; gap: 2px; }
+  .document-name .document-select { min-width: 0; width: 100%; }
+  .document-name .draft-status { white-space: normal; }
+  .assembler .document-name > .stack { flex-direction: row; align-items: center; gap: 8px; }
+  .document-actions-menu { display: block; position: relative; flex: 0 0 auto; }
+  .document-actions-menu > summary { display: inline-flex; align-items: center; justify-content: center; height: var(--control-height); padding: 0 10px; border: 1px solid #eee; border-radius: 6px; background: #eee; color: #000; font-weight: 600; cursor: pointer; list-style: none; }
+  .document-actions-menu > summary::-webkit-details-marker { display: none; }
+  .document-actions-menu .document-file-actions { display: grid; grid-template-columns: minmax(0,1fr); position: absolute; right: 0; top: calc(100% + 8px); z-index: 30; width: min(360px,calc(100vw - 32px)); max-height: calc(100dvh - 100px); overflow: auto; overscroll-behavior: contain; padding: 10px; border: 1px solid #444; border-radius: 6px; background: #080808; }
+  .document-actions-menu .document-file-actions select { width: 100%; max-width: none; }
+  .assembler .pack-configuration { min-height: 34px; max-height: 25%; margin-bottom: 8px; }
+}
+
+.kit-editor button:not([role=tab]):not(.item-choice):not(.mc-inventory *) {
+  font-family: 'Archivo', sans-serif;
+  background: #eee !important;
+  border-color: #eee !important;
+  color: #000 !important;
+  font-weight: 600;
+}
+.kit-editor button:not([role=tab]):not(.item-choice):not(.mc-inventory *):hover:not(:disabled) { background: #fff !important; }
+.kit-editor button:not([role=tab]):not(.item-choice):not(.mc-inventory *):active:not(:disabled) { background: #ddd !important; }
+.kit-editor button:not([role=tab]):not(.item-choice):not(.mc-inventory *)[aria-pressed=true] { border-color: #e4c17a !important; }

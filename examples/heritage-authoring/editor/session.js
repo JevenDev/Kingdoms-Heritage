@@ -1,8 +1,26 @@
 (() => {
 'use strict';
+function toolbarActions() {
+  const menu=document.querySelector('.document-actions-menu');
+  if(!menu)return;
+  const compact=matchMedia('(max-width:620px), (max-height:600px)');
+  const update=()=>{menu.open=!compact.matches;if(!compact.matches)menu.querySelector('.document-file-actions').style.maxHeight='';};
+  const fit=()=>{
+    if(!compact.matches||!menu.open)return;
+    const actions=menu.querySelector('.document-file-actions');
+    actions.style.maxHeight=Math.max(34,document.querySelector('main').getBoundingClientRect().bottom-actions.getBoundingClientRect().top-8)+'px';
+  };
+  update();compact.addEventListener('change',update);
+  menu.addEventListener('toggle',fit);window.addEventListener('resize',fit);
+  document.addEventListener('pointerdown',event=>{if(compact.matches&&!menu.contains(event.target))menu.open=false;});
+  menu.addEventListener('click',event=>{if(compact.matches&&event.target.closest('button,a,.file-button'))menu.open=false;});
+  menu.addEventListener('change',event=>{if(compact.matches&&event.target.tagName==='SELECT')menu.open=false;});
+  menu.addEventListener('keydown',event=>{if(compact.matches&&event.key==='Escape'){event.preventDefault();menu.open=false;menu.querySelector('summary').focus();}});
+}
 async function acquire(key) {
   const main=document.querySelector('main');
   main.hidden=true;
+  toolbarActions();
   let release,lockError='';
   const held=new Promise(resolve=>{release=resolve;});
   const available=globalThis.navigator?.locks?await new Promise(resolve=>{

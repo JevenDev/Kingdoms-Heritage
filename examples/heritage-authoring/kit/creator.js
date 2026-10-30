@@ -172,7 +172,7 @@ function loreFields(stack) {
       row=document.createElement('div');row.className='lore-line';
       const input=document.createElement('textarea'),remove=document.createElement('button');
       input.rows=2;input.dataset.loreLine=index;input.setAttribute('aria-label','Lore line '+(index+1));input.setAttribute('aria-describedby','lore-hint');input.spellcheck=false;
-      remove.type='button';remove.dataset.removeLore=index;remove.textContent='Remove';remove.setAttribute('aria-label','Remove lore line '+(index+1));
+      remove.type='button';remove.className='primary';remove.dataset.removeLore=index;remove.textContent='Remove';remove.setAttribute('aria-label','Remove lore line '+(index+1));
       const toolbar=document.createElement('div'),preset=document.createElement('select'),tint=document.createElement('input'),apply=document.createElement('button');
       toolbar.className='lore-format';toolbar.role='group';toolbar.setAttribute('aria-label','Lore line '+(index+1)+' formatting');
       preset.dataset.loreColor=index;preset.setAttribute('aria-label','Lore line '+(index+1)+' color preset');
@@ -181,10 +181,10 @@ function loreFields(stack) {
       }
       const custom=document.createElement('option');custom.value='custom';custom.textContent='Custom color';custom.disabled=true;preset.append(custom);preset.value='#ffaa00';
       tint.type='color';tint.value='#ffaa00';tint.dataset.loreTint=index;tint.setAttribute('aria-label','Lore line '+(index+1)+' custom color');
-      apply.type='button';apply.textContent='Apply color';apply.dataset.loreApplyColor=index;apply.setAttribute('aria-label','Lore line '+(index+1)+' apply color');
+      apply.type='button';apply.className='primary';apply.textContent='Apply color';apply.dataset.loreApplyColor=index;apply.setAttribute('aria-label','Lore line '+(index+1)+' apply color');
       toolbar.append(preset,tint,apply);
       for(const [key,label] of Object.entries({bold:'Bold',italic:'Italic',underline:'Underline',strike:'Strike',obfuscated:'Obfuscated'})){
-        const button=document.createElement('button');button.type='button';button.dataset.loreFormat=key;button.dataset.loreIndex=index;button.textContent=label;
+        const button=document.createElement('button');button.type='button';button.className='primary';button.dataset.loreFormat=key;button.dataset.loreIndex=index;button.textContent=label;
         button.setAttribute('aria-label','Lore line '+(index+1)+' '+label.toLowerCase());toolbar.append(button);
       }
       row.append(input,remove,toolbar);container.append(row);
