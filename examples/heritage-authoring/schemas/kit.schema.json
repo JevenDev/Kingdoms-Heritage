@@ -1,0 +1,188 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Heritage starter kit",
+  "type": "object",
+  "properties": {
+    "enabled": {
+      "type": "boolean",
+      "default": true
+    }
+  },
+  "if": {
+    "required": [
+      "enabled"
+    ],
+    "properties": {
+      "enabled": {
+        "const": false
+      }
+    }
+  },
+  "else": {
+    "required": [
+      "items"
+    ],
+    "properties": {
+      "title": {
+        "type": "string",
+        "maxLength": 120,
+        "minLength": 1,
+        "pattern": "\\S"
+      },
+      "title_key": {
+        "type": "string",
+        "maxLength": 256
+      },
+      "description": {
+        "type": "string",
+        "maxLength": 4000,
+        "default": ""
+      },
+      "description_key": {
+        "type": "string",
+        "maxLength": 256
+      },
+      "order": {
+        "type": "integer",
+        "default": 0
+      },
+      "selected_slot": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 8,
+        "default": 0
+      },
+      "tags": {
+        "type": "array",
+        "maxItems": 128,
+        "items": {
+          "type": "string",
+          "pattern": "^(?:[a-z0-9_.-]+:)?[a-z0-9/._-]+$"
+        },
+        "default": []
+      },
+      "items": {
+        "type": "array",
+        "maxItems": 256,
+        "items": {
+          "$ref": "#/$defs/itemEntry"
+        },
+        "description": "Player or equipment entries. Inventory, slot, index and cosmetic must identify a unique slot."
+      }
+    },
+    "allOf": [
+      {
+        "anyOf": [
+          {
+            "required": [
+              "title"
+            ]
+          },
+          {
+            "required": [
+              "title_key"
+            ],
+            "properties": {
+              "title_key": {
+                "type": "string",
+                "maxLength": 120,
+                "minLength": 1,
+                "pattern": "\\S"
+              }
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "$defs": {
+    "itemEntry": {
+      "type": "object",
+      "required": [
+        "index",
+        "item"
+      ],
+      "properties": {
+        "inventory": {
+          "type": "string",
+          "enum": [
+            "player",
+            "curios",
+            "accessories"
+          ],
+          "default": "player"
+        },
+        "slot": {
+          "type": "string",
+          "maxLength": 128,
+          "default": ""
+        },
+        "index": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255
+        },
+        "cosmetic": {
+          "type": "boolean",
+          "default": false
+        },
+        "item": {
+          "type": "object",
+          "required": [
+            "id"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^(?:[a-z0-9_.-]+:)?[a-z0-9/._-]+$"
+            },
+            "count": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            },
+            "components": {
+              "type": "object"
+            }
+          },
+          "description": "Minecraft 1.21.1 item-stack JSON. The game validates components and the item-specific stack limit."
+        }
+      },
+      "if": {
+        "properties": {
+          "inventory": {
+            "const": "player"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "index": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 40
+          },
+          "slot": {
+            "const": ""
+          },
+          "cosmetic": {
+            "const": false
+          }
+        }
+      },
+      "else": {
+        "required": [
+          "slot"
+        ],
+        "properties": {
+          "slot": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "\\S"
+          }
+        }
+      }
+    }
+  }
+}

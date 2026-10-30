@@ -1,0 +1,376 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Heritage starting location",
+  "type": "object",
+  "properties": {
+    "enabled": {
+      "type": "boolean",
+      "default": true
+    }
+  },
+  "if": {
+    "required": [
+      "enabled"
+    ],
+    "properties": {
+      "enabled": {
+        "const": false
+      }
+    }
+  },
+  "else": {
+    "required": [
+      "type"
+    ],
+    "properties": {
+      "title": {
+        "type": "string",
+        "maxLength": 120,
+        "minLength": 1,
+        "pattern": "\\S"
+      },
+      "title_key": {
+        "type": "string",
+        "maxLength": 256
+      },
+      "description": {
+        "type": "string",
+        "maxLength": 4000,
+        "default": ""
+      },
+      "description_key": {
+        "type": "string",
+        "maxLength": 256
+      },
+      "order": {
+        "type": "integer",
+        "default": 0
+      },
+      "subtitle": {
+        "type": "string",
+        "maxLength": 120,
+        "default": ""
+      },
+      "subtitle_key": {
+        "type": "string",
+        "maxLength": 256
+      },
+      "image": {
+        "type": "string",
+        "pattern": "^(?:[a-z0-9_.-]+:)?[a-z0-9/._-]+$",
+        "default": "kingdomsheritage:textures/gui/campaign_select_screen/campaign_select_screen_card_fallback.png"
+      },
+      "type": {
+        "type": "string",
+        "pattern": "^(?:[dD][eE][fF][aA][uU][lL][tT]|[rR][aA][nN][dD][oO][mM]|[bB][iI][oO][mM][eE]|[sS][tT][rR][uU][cC][tT][uU][rR][eE]|[fF][iI][xX][eE][dD]|[pP][oO][oO][lL])$",
+        "examples": [
+          "default",
+          "random",
+          "biome",
+          "structure",
+          "fixed",
+          "pool"
+        ]
+      },
+      "dimension": {
+        "type": "string",
+        "pattern": "^(?:[a-z0-9_.-]+:)?[a-z0-9/._-]+$",
+        "default": "minecraft:overworld"
+      },
+      "target": {
+        "type": "string",
+        "pattern": "^#?(?:[a-z0-9_.-]+:)?[a-z0-9/._-]+$"
+      },
+      "piece": {
+        "type": "string",
+        "pattern": "^(?:[a-z0-9_.-]+:)?[a-z0-9/._-]+$"
+      },
+      "x": {
+        "type": "integer",
+        "minimum": -29999984,
+        "maximum": 29999984
+      },
+      "y": {
+        "type": "integer"
+      },
+      "z": {
+        "type": "integer",
+        "minimum": -29999984,
+        "maximum": 29999984
+      },
+      "search_radius": {
+        "type": "integer",
+        "minimum": 16,
+        "maximum": 30000,
+        "description": "Omit to inherit the pool value or server configuration. Explicit zero is invalid."
+      },
+      "random_radius": {
+        "type": "integer",
+        "minimum": 16,
+        "maximum": 30000,
+        "description": "Omit to inherit the pool value or server configuration. Explicit zero is invalid."
+      },
+      "intro": {
+        "$ref": "intro.schema.json"
+      },
+      "kits": {
+        "type": "array",
+        "maxItems": 128,
+        "items": {
+          "type": "string",
+          "pattern": "^#?(?:[a-z0-9_.-]+:)?[a-z0-9/._-]+$"
+        },
+        "default": [],
+        "description": "Allowed kit IDs or #tags. Empty allows all enabled kits."
+      },
+      "pool": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 128,
+        "items": {
+          "$ref": "#/$defs/destination"
+        }
+      }
+    },
+    "allOf": [
+      {
+        "anyOf": [
+          {
+            "required": [
+              "title"
+            ]
+          },
+          {
+            "required": [
+              "title_key"
+            ],
+            "properties": {
+              "title_key": {
+                "type": "string",
+                "maxLength": 120,
+                "minLength": 1,
+                "pattern": "\\S"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "if": {
+          "properties": {
+            "type": {
+              "type": "string",
+              "pattern": "^(?:[bB][iI][oO][mM][eE]|[sS][tT][rR][uU][cC][tT][uU][rR][eE])$",
+              "examples": [
+                "biome",
+                "structure"
+              ]
+            }
+          }
+        },
+        "then": {
+          "required": [
+            "target"
+          ]
+        }
+      },
+      {
+        "if": {
+          "properties": {
+            "type": {
+              "type": "string",
+              "pattern": "^(?:[fF][iI][xX][eE][dD])$",
+              "examples": [
+                "fixed"
+              ]
+            }
+          }
+        },
+        "then": {
+          "required": [
+            "x",
+            "y",
+            "z"
+          ]
+        }
+      },
+      {
+        "if": {
+          "required": [
+            "piece"
+          ]
+        },
+        "then": {
+          "properties": {
+            "type": {
+              "type": "string",
+              "pattern": "^(?:[sS][tT][rR][uU][cC][tT][uU][rR][eE])$",
+              "examples": [
+                "structure"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "if": {
+          "properties": {
+            "type": {
+              "type": "string",
+              "pattern": "^(?:[pP][oO][oO][lL])$",
+              "examples": [
+                "pool"
+              ]
+            }
+          }
+        },
+        "then": {
+          "required": [
+            "pool"
+          ],
+          "properties": {
+            "target": false,
+            "x": false,
+            "y": false,
+            "z": false
+          }
+        },
+        "else": {
+          "properties": {
+            "pool": false
+          }
+        }
+      }
+    ]
+  },
+  "$defs": {
+    "destination": {
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "pattern": "^(?:[dD][eE][fF][aA][uU][lL][tT]|[rR][aA][nN][dD][oO][mM]|[bB][iI][oO][mM][eE]|[sS][tT][rR][uU][cC][tT][uU][rR][eE]|[fF][iI][xX][eE][dD])$",
+          "examples": [
+            "default",
+            "random",
+            "biome",
+            "structure",
+            "fixed"
+          ]
+        },
+        "dimension": {
+          "type": "string",
+          "pattern": "^(?:[a-z0-9_.-]+:)?[a-z0-9/._-]+$",
+          "default": "minecraft:overworld"
+        },
+        "target": {
+          "type": "string",
+          "pattern": "^#?(?:[a-z0-9_.-]+:)?[a-z0-9/._-]+$"
+        },
+        "piece": {
+          "type": "string",
+          "pattern": "^(?:[a-z0-9_.-]+:)?[a-z0-9/._-]+$"
+        },
+        "x": {
+          "type": "integer",
+          "minimum": -29999984,
+          "maximum": 29999984
+        },
+        "y": {
+          "type": "integer"
+        },
+        "z": {
+          "type": "integer",
+          "minimum": -29999984,
+          "maximum": 29999984
+        },
+        "search_radius": {
+          "type": "integer",
+          "minimum": 16,
+          "maximum": 30000,
+          "description": "Omit to inherit the pool value or server configuration. Explicit zero is invalid."
+        },
+        "random_radius": {
+          "type": "integer",
+          "minimum": 16,
+          "maximum": 30000,
+          "description": "Omit to inherit the pool value or server configuration. Explicit zero is invalid."
+        },
+        "intro": {
+          "anyOf": [
+            {
+              "$ref": "intro.schema.json"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Omit to inherit the pool intro. An object replaces it completely. Null disables it."
+        }
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "type": "string",
+                "pattern": "^(?:[bB][iI][oO][mM][eE]|[sS][tT][rR][uU][cC][tT][uU][rR][eE])$",
+                "examples": [
+                  "biome",
+                  "structure"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "target"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "type": "string",
+                "pattern": "^(?:[fF][iI][xX][eE][dD])$",
+                "examples": [
+                  "fixed"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "x",
+              "y",
+              "z"
+            ]
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "piece"
+            ]
+          },
+          "then": {
+            "properties": {
+              "type": {
+                "type": "string",
+                "pattern": "^(?:[sS][tT][rR][uU][cC][tT][uU][rR][eE])$",
+                "examples": [
+                  "structure"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

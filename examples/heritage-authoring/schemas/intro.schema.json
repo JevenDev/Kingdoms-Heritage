@@ -1,0 +1,337 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Heritage cinematic intro",
+  "description": "Standalone intro object for Minecraft 1.21.1. Full Minecraft component decoding and the combined serialized text limit are checked in-game.",
+  "type": "object",
+  "required": [
+    "text"
+  ],
+  "properties": {
+    "text": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/component"
+        },
+        {
+          "if": {
+            "type": "string"
+          },
+          "then": {
+            "minLength": 1,
+            "pattern": "\\S"
+          }
+        }
+      ]
+    },
+    "subtitle": {
+      "$ref": "#/$defs/component",
+      "default": ""
+    },
+    "title": {
+      "type": "boolean",
+      "default": false
+    },
+    "large_subtitle": {
+      "type": "boolean",
+      "default": false
+    },
+    "outline": {
+      "type": "boolean",
+      "default": true
+    },
+    "animation": {
+      "type": "string",
+      "pattern": "^(?:[fF][aA][dD][eE]_[iI][nN]|[wW][oO][rR][dD]_[bB][yY]_[wW][oO][rR][dD]|[lL][eE][tT][tT][eE][rR]_[bB][yY]_[lL][eE][tT][tT][eE][rR]|[iI][mM][mM][eE][dD][iI][aA][tT][eE])$",
+      "default": "fade_in",
+      "examples": [
+        "fade_in",
+        "word_by_word",
+        "letter_by_letter",
+        "immediate"
+      ]
+    },
+    "control": {
+      "type": "string",
+      "pattern": "^(?:[aA][fF][tT][eE][rR]_[tT][iI][tT][lL][eE]|[dD][uU][rR][iI][nN][gG]_[tT][iI][tT][lL][eE])$",
+      "default": "after_title",
+      "examples": [
+        "after_title",
+        "during_title"
+      ]
+    },
+    "blip": {
+      "type": "boolean",
+      "default": false
+    },
+    "black_hold_ticks": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1200,
+      "default": 60
+    },
+    "fade_from_black_ticks": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1200,
+      "default": 60
+    },
+    "reveal_ticks": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1200,
+      "default": 40
+    },
+    "hold_ticks": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1200,
+      "default": 60
+    },
+    "fade_out_ticks": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1200,
+      "default": 20
+    },
+    "cinematic_bars": {
+      "type": "boolean",
+      "default": false
+    },
+    "bar_style": {
+      "type": "string",
+      "pattern": "^(?:[rR][aA][nN][dD][oO][mM]|[sS][tT][rR][aA][iI][gG][hH][tT])$",
+      "default": "random",
+      "examples": [
+        "random",
+        "straight"
+      ]
+    },
+    "bar_transition_ticks": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1200,
+      "default": 40
+    },
+    "hide_hud_during_bars": {
+      "type": "boolean",
+      "default": false
+    },
+    "title_position": {
+      "type": "string",
+      "pattern": "^[ \\t\\r\\n]*(?:[mM][iI][dD][_ ][cC][eE][nN][tT][eE][rR]|[tT][oO][pP][_ ][cC][eE][nN][tT][eE][rR]|[bB][oO][tT][tT][oO][mM][_ ][cC][eE][nN][tT][eE][rR]|[lL][eE][fF][tT][_ ][cC][eE][nN][tT][eE][rR]|[rR][iI][gG][hH][tT][_ ][cC][eE][nN][tT][eE][rR]|[tT][oO][pP][_ ][lL][eE][fF][tT]|[tT][oO][pP][_ ][rR][iI][gG][hH][tT]|[bB][oO][tT][tT][oO][mM][_ ][lL][eE][fF][tT]|[bB][oO][tT][tT][oO][mM][_ ][rR][iI][gG][hH][tT]|[cC][eE][nN][tT][eE][rR]|[mM][cC]|[mM][iI][dD][_ ][cC]|[tT][cC]|[tT][oO][pP][_ ][cC]|[bB][cC]|[bB][oO][tT][tT][oO][mM][_ ][cC]|[lL][cC]|[lL][eE][fF][tT][_ ][cC]|[rR][cC]|[rR][iI][gG][hH][tT][_ ][cC]|[tT][lL]|[tT][rR]|[bB][lL]|[bB][rR])[ \\t\\r\\n]*$",
+      "default": "mid_center",
+      "examples": [
+        "mid_center",
+        "top_center",
+        "bottom_center",
+        "left_center",
+        "right_center",
+        "top_left",
+        "top_right",
+        "bottom_left",
+        "bottom_right",
+        "center",
+        "mc",
+        "mid_c",
+        "tc",
+        "top_c",
+        "bc",
+        "bottom_c",
+        "lc",
+        "left_c",
+        "rc",
+        "right_c",
+        "tl",
+        "tr",
+        "bl",
+        "br"
+      ]
+    },
+    "subtitle_position": {
+      "type": "string",
+      "pattern": "^[ \\t\\r\\n]*(?:[mM][iI][dD][_ ][cC][eE][nN][tT][eE][rR]|[tT][oO][pP][_ ][cC][eE][nN][tT][eE][rR]|[bB][oO][tT][tT][oO][mM][_ ][cC][eE][nN][tT][eE][rR]|[lL][eE][fF][tT][_ ][cC][eE][nN][tT][eE][rR]|[rR][iI][gG][hH][tT][_ ][cC][eE][nN][tT][eE][rR]|[tT][oO][pP][_ ][lL][eE][fF][tT]|[tT][oO][pP][_ ][rR][iI][gG][hH][tT]|[bB][oO][tT][tT][oO][mM][_ ][lL][eE][fF][tT]|[bB][oO][tT][tT][oO][mM][_ ][rR][iI][gG][hH][tT]|[cC][eE][nN][tT][eE][rR]|[mM][cC]|[mM][iI][dD][_ ][cC]|[tT][cC]|[tT][oO][pP][_ ][cC]|[bB][cC]|[bB][oO][tT][tT][oO][mM][_ ][cC]|[lL][cC]|[lL][eE][fF][tT][_ ][cC]|[rR][cC]|[rR][iI][gG][hH][tT][_ ][cC]|[tT][lL]|[tT][rR]|[bB][lL]|[bB][rR])[ \\t\\r\\n]*$",
+      "default": "mid_center",
+      "examples": [
+        "mid_center",
+        "top_center",
+        "bottom_center",
+        "left_center",
+        "right_center",
+        "top_left",
+        "top_right",
+        "bottom_left",
+        "bottom_right",
+        "center",
+        "mc",
+        "mid_c",
+        "tc",
+        "top_c",
+        "bc",
+        "bottom_c",
+        "lc",
+        "left_c",
+        "rc",
+        "right_c",
+        "tl",
+        "tr",
+        "bl",
+        "br"
+      ]
+    },
+    "title_coordinates": {
+      "$ref": "#/$defs/coordinates"
+    },
+    "subtitle_coordinates": {
+      "$ref": "#/$defs/coordinates"
+    }
+  },
+  "$defs": {
+    "component": {
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/component"
+          }
+        },
+        {
+          "type": "object",
+          "anyOf": [
+            {
+              "required": [
+                "text"
+              ]
+            },
+            {
+              "required": [
+                "translate"
+              ]
+            },
+            {
+              "required": [
+                "score"
+              ]
+            },
+            {
+              "required": [
+                "selector"
+              ]
+            },
+            {
+              "required": [
+                "keybind"
+              ]
+            },
+            {
+              "required": [
+                "nbt"
+              ]
+            }
+          ],
+          "properties": {
+            "text": {
+              "type": "string"
+            },
+            "translate": {
+              "type": "string"
+            },
+            "fallback": {
+              "type": "string"
+            },
+            "selector": {
+              "type": "string"
+            },
+            "keybind": {
+              "type": "string"
+            },
+            "nbt": {
+              "type": "string"
+            },
+            "score": {
+              "type": "object",
+              "required": [
+                "name",
+                "objective"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "objective": {
+                  "type": "string"
+                }
+              }
+            },
+            "color": {
+              "type": "string"
+            },
+            "font": {
+              "type": "string",
+              "pattern": "^(?:[a-z0-9_.-]+:)?[a-z0-9/._-]+$"
+            },
+            "bold": {
+              "type": "boolean"
+            },
+            "italic": {
+              "type": "boolean"
+            },
+            "underlined": {
+              "type": "boolean"
+            },
+            "strikethrough": {
+              "type": "boolean"
+            },
+            "obfuscated": {
+              "type": "boolean"
+            },
+            "extra": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/component"
+              }
+            },
+            "with": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/component"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "coordinates": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "x",
+        "y"
+      ],
+      "properties": {
+        "x": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "y": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "width": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 50
+        }
+      },
+      "description": "Screen percentages. The matching position determines anchor alignment. Null restores preset placement."
+    }
+  }
+}
