@@ -300,7 +300,8 @@ public final class SpawnSelectScreen extends Screen {
             graphics.pose().pushPose();
             graphics.pose().translate(getX(), getY(), 0);
             graphics.pose().scale(scale, scale, 1);
-            blit(graphics, cover, 0, 0, CARD_WIDTH, CARD_HEIGHT);
+            if (cover.equals(FALLBACK)) blit(graphics, cover, 0, 0, CARD_WIDTH, CARD_HEIGHT);
+            else blit(graphics, cover, 4, 4, CARD_WIDTH - 8, CARD_HEIGHT - 8);
             blit(graphics, expanded == null ? CARD : EXPANDED, 0, 0, expanded == null ? CARD_WIDTH : EXPANDED_WIDTH, CARD_HEIGHT);
             if (choice == selected) graphics.renderOutline(2, 2, 124, 188, 0xfff2cd83);
             else if (isHoveredOrFocused()) graphics.renderOutline(2, 2, 124, 188, 0xffeeeeee);
