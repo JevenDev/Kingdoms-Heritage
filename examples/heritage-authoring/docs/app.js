@@ -202,7 +202,7 @@ async function copy(text,button) {
   }
 }
 function renderSearch(query) {
-  clearKits();document.title='Search documentation · Heritage';
+  clearKits();document.title='Search documentation · Kingdoms: Heritage';
   const terms=query.toLowerCase().trim().split(/\s+/).filter(Boolean);
   const results=terms.length?pages.filter(page=>terms.every(term=>(page.title+' '+page.description+' '+page.markdown+(page.id==='text-styles'?JSON.stringify(styles):'')).toLowerCase().includes(term))):[];
   $('article').innerHTML='<h1>Search documentation</h1><p class="lead">'+(terms.length?results.length+' matching pages':'Type a field name, command, or style tag.')+'</p>'+results.map(page=>'<a class="search-result" href="#/'+page.id+'"><strong>'+escape(page.title)+'</strong><p>'+escape(page.description)+'</p></a>').join('')+(terms.length&&!results.length?'<p>No matches. Try a shorter field name or a term such as biome, outline, or kit.</p>':'');
@@ -218,7 +218,7 @@ function route() {
   if(id==='search'){current='search';$('search').value=new URLSearchParams(query).get('q')||'';renderSearch($('search').value);return;}
   const page=pages.find(item=>item.id===id)||pages[0];
   if(current!==page.id) {
-    clearKits();current=page.id;$('search').value='';document.title=page.title+' · Heritage';
+    clearKits();current=page.id;$('search').value='';document.title=page.title+' · Kingdoms: Heritage';
     const rendered=markdown(page.markdown);
     $('article').innerHTML='<h1>'+escape(page.title)+'</h1><p class="lead">'+escape(page.description)+'</p>'+rendered.html;
     examples(page.id);
