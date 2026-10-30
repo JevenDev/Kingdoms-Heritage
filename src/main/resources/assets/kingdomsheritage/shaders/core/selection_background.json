@@ -1,0 +1,10 @@
+{
+  "vertex": "kingdomsheritage:selection_background",
+  "fragment": "kingdomsheritage:selection_background",
+  "attributes": [ "Position" ],
+  "samplers": [],
+  "uniforms": [
+    { "name": "Resolution", "type": "float", "count": 2, "values": [ 640.0, 360.0 ] },
+    { "name": "Time", "type": "float", "count": 1, "values": [ 0.0 ] }
+  ]
+}

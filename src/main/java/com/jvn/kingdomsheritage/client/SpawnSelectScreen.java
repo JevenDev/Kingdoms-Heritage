@@ -298,7 +298,7 @@ public final class SpawnSelectScreen extends Screen {
 
     @Override
     public void renderBackground(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        graphics.fillGradient(0, 0, width, height, 0xff171a20, 0xff08090b);
+        SelectionBackground.render(graphics, width, height);
     }
 
     @Override
