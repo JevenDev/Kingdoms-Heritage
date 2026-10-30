@@ -54,47 +54,9 @@ document.querySelector('[data-wrap="underline"]').prepend(HeritageIcons.create('
 HeritageIcons.action('play','play','Play');
 HeritageIcons.action('mute','volume-2','Mute');
 const names=()=>Object.fromEntries(['biome','structure','dimension'].map(id=>[id,$(id).value]));
-function syncCodeScroll() {
-  $('highlighted-json').style.transform='translate('+(-$('json').scrollLeft)+'px,'+(-$('json').scrollTop)+'px)';
-  $('line-numbers').style.transform='translateY('+(-$('json').scrollTop)+'px)';
-}
-function sizeCodeLines() {
-  $('highlighted-json').style.width=$('json').clientWidth+'px';
-  const lines=$('highlighted-json').children, numbers=$('line-numbers').children;
-  for(let i=0;i<lines.length;i++) numbers[i].style.height=lines[i].getBoundingClientRect().height+'px';
-  syncCodeScroll();
-}
-new ResizeObserver(sizeCodeLines).observe($('json'));
-document.fonts.ready.then(sizeCodeLines);
-function syncCode() {
-  const source=$('json').value, fragment=document.createDocumentFragment();
-  const tokens=/"(?:\\.|[^"\\])*"|\b(?:true|false|null)\b|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/g;
-  for(const line of source.split('\n')) {
-  const row=document.createElement('div');
-  row.className='json-line';
-  let end=0;
-  for(const match of line.matchAll(tokens)) {
-    row.append(document.createTextNode(line.slice(end,match.index)));
-    const span=document.createElement('span'), token=match[0];
-    span.className=token.startsWith('"')?(/^\s*:/.test(line.slice(match.index+token.length))?'json-key':'json-string'):/^(true|false|null)$/.test(token)?'json-literal':'json-number';
-    span.textContent=token;
-    row.append(span);
-    end=match.index+token.length;
-  }
-  row.append(document.createTextNode(line.slice(end)));
-  fragment.append(row);
-  }
-  $('highlighted-json').replaceChildren(fragment);
-  const count=source.split('\n').length;
-  $('line-numbers').replaceChildren(...Array.from({length:count},(_,i)=>{
-    const number=document.createElement('span');
-    number.textContent=i+1;
-    return number;
-  }));
-  $('line-count').textContent=count+' lines';
-  $('json').parentElement.classList.add('ready');
-  sizeCodeLines();
-}
+const code=new HeritageJsonEditor($('json'),$('line-count'));
+const syncCode=()=>code.sync();
+const syncCodeScroll=()=>code.syncScroll();
 function setupTabs(attribute,panelSuffix) {
   const buttons=[...document.querySelectorAll('['+attribute+']')];
   function select(button) {
@@ -439,7 +401,6 @@ $('background').addEventListener('input',draw);
 $('viewport').addEventListener('change',()=>{rebuild();draw();});
 for(const id of ['biome','structure','dimension']) $(id).addEventListener('input',()=>{pause();refreshPreview();});
 $('json').addEventListener('input',applyJson);
-$('json').addEventListener('scroll',syncCodeScroll);
 setupTabs('data-editor-tab','-panel');
 setupTabs('data-options-tab','-panel');
 $('undo').addEventListener('click',()=>restoreHistory(-1));

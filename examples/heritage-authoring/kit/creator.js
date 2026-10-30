@@ -24,7 +24,7 @@ const view=new V.Inventory($('inventory'),{
 });
 const preview=new HeritageEquipmentEditor({getDocument:()=>documentState,getSelection:()=>selected,onSelect:selectSlot,onUpdate:(saveHistory=false)=>{display();if(saveHistory)record();else scheduleSave();},notice,canSwitch:()=>{if(errorState?.target==='count'){notice('Fix the count before changing inventory views.');return false;}return true;}});
 const fingerprint=stack=>JSON.stringify(stack?[K.normalize(stack.id),stack.components??{}]:null);
-const source=()=>$('kit-json').value;
+const source=()=>$('kit-json').value,code=new HeritageJsonEditor($('kit-json'),$('line-count'));
 const snapshot=()=>({source:source(),document:K.copy(documentState),cursor:K.copy(carried),selected,selection:[...selectedSlots],selectionMode,drafts:K.copy([...drafts]),loreSources:K.copy([...loreSources]),error:errorState?K.copy(errorState):null,preview:preview.snapshot()});
 function saveDraft() {
   clearTimeout(saveTimer);
@@ -116,7 +116,7 @@ function feedback() {
   $('kit-json').setAttribute('aria-invalid',String(rawInvalid));
   for(const id of ['count','title','order','tags','description','item-id','components'])$(id).setAttribute('aria-invalid',String(errorState?.target===id));
   $('json-state').textContent=rawInvalid?'Fix JSON to update the preview.':errorState?'Fix the field error':pending?'Apply slot edits':carried?'Place or return the held item before exporting':'JSON ready';
-  const lines=source().split('\n').length;$('line-count').textContent=lines+' line'+(lines===1?'':'s');
+  code.sync();
   $('pending-edits').hidden=!pending;
   $('pending-message').textContent=pending?pending+' slot'+(pending===1?' has':'s have')+' edits to apply. ':'';
   const locked=rawInvalid||documentState.enabled===false;
@@ -495,7 +495,7 @@ $('item-browser').addEventListener('pointerdown',event=>{
   if(event.button===1){event.preventDefault();libraryClick(button.dataset.item,{middle:true});return;}
   V.dragStart(event,{item:{id:button.dataset.item}},destination=>place(button.dataset.item,destination),{buttons:[0,2],onTap:()=>libraryClick(button.dataset.item,{button:event.button===2?1:0,shiftKey:event.shiftKey,ctrlKey:event.ctrlKey,metaKey:event.metaKey})});
 });
-for(const [id,name] of Object.entries({copy:'copy',undo:'undo-2',redo:'undo-2',format:'text-align-start',download:'external-link', 'copy-slot':'copy'}))$(id).prepend(HeritageIcons.create(name));
+for(const [id,name] of Object.entries({'json-tab':'braces','details-tab':'sliders-horizontal',copy:'copy',undo:'undo-2',redo:'undo-2',format:'text-align-start',download:'external-link', 'copy-slot':'copy'}))$(id).prepend(HeritageIcons.create(name));
 $('redo').querySelector('svg').style.transform='scaleX(-1)';
 for(let slot=0;slot<9;slot++){const option=document.createElement('option');option.value=slot;option.textContent='Hotbar '+(slot+1);$('selected-slot').append(option);}
 for(const sample of HeritageKitExamples){const option=document.createElement('option');option.value=sample.id;option.textContent=sample.kit.title;$('example').append(option);}

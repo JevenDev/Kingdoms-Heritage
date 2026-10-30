@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Heritage intro editor</title><link rel="stylesheet" href="editor/editor.css"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Heritage intro editor</title><link rel="stylesheet" href="editor/editor.css?v=3"></head>
 <body>
 <header><h1><a class="home-link" href="index.html" aria-label="Heritage home">Heritage</a><span>Intro editor</span></h1><nav aria-label="Documentation"><a href="kit-editor.html" data-icon="braces">Kit creator</a><a href="docs.html" data-icon="book-open">Documentation</a><a href="docs.html#/text-styles" data-icon="images">Style examples</a></nav></header>
 <main>
@@ -12,8 +12,8 @@
 </div>
 <section class="export" id="json-panel" role="tabpanel" aria-labelledby="json-tab">
 <div class="code-heading"><span>intro.json</span><div class="code-actions" role="group" aria-label="JSON actions"><button id="undo" class="quiet" type="button" title="Undo (Ctrl+Z)" disabled>Undo</button><button id="redo" class="quiet" type="button" title="Redo (Ctrl+Y)" disabled>Redo</button><button id="format-json" class="quiet" type="button">Format JSON</button></div></div>
-<p id="json-help" class="hint">Paste intro JSON or a full spawn file.</p>
-<div class="code-editor"><pre id="line-numbers" aria-hidden="true"></pre><pre id="highlighted-json" aria-hidden="true"></pre><textarea id="json" spellcheck="false" autocomplete="off" autocapitalize="off" aria-label="Intro JSON" aria-describedby="json-help error" wrap="soft"></textarea></div>
+<p id="json-help" class="code-help hint">Paste intro JSON or a full spawn file.</p>
+<div class="code-editor"><pre id="line-numbers" class="code-line-numbers" aria-hidden="true"></pre><pre id="highlighted-json" class="code-highlight" aria-hidden="true"></pre><textarea id="json" class="code-input" spellcheck="false" autocomplete="off" autocapitalize="off" aria-label="Intro JSON" aria-describedby="json-help error" wrap="soft"></textarea></div>
 <div class="code-status"><span id="json-state">JSON ready</span><span id="line-count"></span></div>
 </section>
 <section class="text-editor" id="text-panel" role="tabpanel" aria-labelledby="text-tab" hidden>
@@ -60,5 +60,5 @@
 
 </main>
 <footer class="site-footer">Not affiliated with Mojang or Microsoft.</footer>
-<script src="editor/icons.js"></script><script src="editor/assets.js"></script><script src="editor/engine.js"></script><script src="editor/tooltips.js"></script><script src="editor/editor.js"></script>
+<script src="editor/icons.js"></script><script src="editor/assets.js"></script><script src="editor/engine.js"></script><script src="editor/tooltips.js"></script><script src="editor/json-editor.js"></script><script src="editor/editor.js?v=2"></script>
 </body></html>
