@@ -199,8 +199,7 @@ function padding(glyphs) {
     Math.ceil(Math.max(...animated.map(g=>(g.effect.wave?1.75:0)+(g.effect.jump?2.4:0))))+1];
 }
 function bounds(block) {
-  const textWidth=Math.max(0,...block.lines.map(line=>line.width))*block.scale;
-  const width=block.wrapWidth??textWidth;
+  const width=Math.max(0,...block.lines.map(line=>line.width))*block.scale;
   return {x:block.x-width*block.column/2,y:block.y,width,height:block.lines.length*block.lineHeight*block.scale};
 }
 function guiViewport(width,height,requested=0) {
@@ -219,34 +218,70 @@ function layout(cfg,main,sub,width,height,slant,advance) {
   const aw=Math.max(1,width-margin*2), ah=Math.max(1,bottom-top);
   const p=positions[cfg.title_position], q=positions[cfg.subtitle_position];
   const ts=cfg.title?1.5:1, ss=cfg.large_subtitle?1.5:1, lh=12+pads[1]*2;
-  if(cfg.title_coordinates||cfg.subtitle_coordinates) {
-    const span=(anchor,size,alignment)=>alignment===0?size-anchor:alignment===2?anchor:2*Math.min(anchor,size-anchor);
-    function positioned(glyphs,scale,pos,coordinates) {
-      const x=coordinates?width*coordinates.x/100:margin+aw*pos[0]/2;
-      const anchorY=coordinates?height*coordinates.y/100:0;
-      const maxWidth=coordinates?Math.max(1,Math.min(width*(coordinates.width??50)/100,span(x,width,pos[0]))):aw;
-      const maxHeight=coordinates?Math.max(1,span(anchorY,height,pos[1])):ah;
-      const lines=glyphs.length?wrap(glyphs,Math.max(1,Math.trunc(maxWidth/scale)),advance):[];
-      scale*=Math.min(1,maxHeight/Math.max(1,lines.length*lh*scale),maxWidth/Math.max(1,...lines.map(line=>line.width*scale)));
-      const y=coordinates?anchorY-lines.length*lh*scale*pos[1]/2:top+(ah-lines.length*lh*scale)*pos[1]/2;
-      return {lines,scale,column:pos[0],x,y,lineHeight:lh,...(coordinates?{wrapWidth:maxWidth}:{})};
-    }
-    return [positioned(main,ts,p,cfg.title_coordinates),positioned(sub,ss,q,cfg.subtitle_coordinates)];
-  }
-  const together=!sub.length || cfg.title_position===cfg.subtitle_position, rows=!together&&p[1]!==q[1];
-  const ww=!together&&!rows?aw/(Math.abs(p[0]-q[0])===2?2:3):aw;
-  const maxHeight=rows?ah/3:ah;
-  const a=wrap(main,Math.max(1,Math.trunc(ww/ts)),advance), b=sub.length?wrap(sub,Math.max(1,Math.trunc(ww/ss)),advance):[];
   const maxWidth=lines=>Math.max(0,...lines.map(line=>line.width));
-  function place(lines,scale,pos) {
-    scale*=Math.min(1,maxHeight/Math.max(1,lines.length*lh*scale),ww/Math.max(1,maxWidth(lines)*scale));
-    return {lines,scale,column:pos[0],x:margin+aw*pos[0]/2,y:top+(ah-lines.length*lh*scale)*pos[1]/2,lineHeight:lh};
+  if(!cfg.title_coordinates&&!cfg.subtitle_coordinates&&(!sub.length||cfg.title_position===cfg.subtitle_position)) {
+    const a=wrap(main,Math.max(1,Math.trunc(aw/ts)),advance), b=sub.length?wrap(sub,Math.max(1,Math.trunc(aw/ss)),advance):[];
+    const th=a.length*lh*ts, sh=b.length*lh*ss, gap=b.length?8:0;
+    const fit=Math.min(1,ah/(th+gap+sh),aw/Math.max(1,maxWidth(a)*ts,maxWidth(b)*ss));
+    const x=margin+aw*p[0]/2,y=top+(ah-(th+gap+sh)*fit)*p[1]/2;
+    return [{lines:a,scale:ts*fit,column:p[0],x,y,lineHeight:lh},{lines:b,scale:ss*fit,column:p[0],x,y:y+(th+gap)*fit,lineHeight:lh}];
   }
-  if(!together) return [place(a,ts,p),place(b,ss,q)];
-  const th=a.length*lh*ts, sh=b.length*lh*ss, gap=b.length?8:0;
-  const fit=Math.min(1,ah/(th+gap+sh),aw/Math.max(1,maxWidth(a)*ts,maxWidth(b)*ss));
-  const x=margin+aw*p[0]/2,y=top+(ah-(th+gap+sh)*fit)*p[1]/2;
-  return [{lines:a,scale:ts*fit,column:p[0],x,y,lineHeight:lh},{lines:b,scale:ss*fit,column:p[0],x,y:y+(th+gap)*fit,lineHeight:lh}];
+  const span=(anchor,size,alignment)=>alignment===0?size-anchor:alignment===2?anchor:2*Math.min(anchor,size-anchor);
+  function positioned(glyphs,scale,pos,coordinates,limit=Infinity) {
+    const x=coordinates?width*coordinates.x/100:margin+aw*pos[0]/2;
+    const anchorY=coordinates?height*coordinates.y/100:0;
+    // configured widths only constrain text when another block would overlap
+    const maxWidth=Math.max(1,Math.min(limit,coordinates?span(x,width,pos[0]):aw));
+    const maxHeight=coordinates?Math.max(1,span(anchorY,height,pos[1])):ah;
+    const lines=glyphs.length?wrap(glyphs,Math.max(1,Math.trunc(maxWidth/scale)),advance):[];
+    scale*=Math.min(1,maxHeight/Math.max(1,lines.length*lh*scale),maxWidth/Math.max(1,...lines.map(line=>line.width*scale)));
+    const y=coordinates?anchorY-lines.length*lh*scale*pos[1]/2:top+(ah-lines.length*lh*scale)*pos[1]/2;
+    return {lines,scale,column:pos[0],x,y,lineHeight:lh};
+  }
+  const titleLayout=limit=>positioned(main,ts,p,cfg.title_coordinates,limit);
+  const subtitleLayout=limit=>positioned(sub,ss,q,cfg.subtitle_coordinates,limit);
+  const title=titleLayout(Infinity),subtitle=subtitleLayout(Infinity);
+  function overlaps(a,b) {
+    const hp=pads[0]+1,vp=pads[1]+1;
+    return a.lines.some((line,i)=>line.glyphs.length&&b.lines.some((other,j)=>{
+      if(!other.glyphs.length)return false;
+      const left=a.x-line.width*a.scale*a.column/2-hp*a.scale;
+      const right=left+(line.width+hp*2)*a.scale;
+      const top=a.y+(i*lh-vp)*a.scale,bottom=top+(9+vp*2)*a.scale;
+      const otherLeft=b.x-other.width*b.scale*b.column/2-hp*b.scale;
+      const otherTop=b.y+(j*lh-vp)*b.scale;
+      return left<otherLeft+(other.width+hp*2)*b.scale&&right>otherLeft&&top<otherTop+(9+vp*2)*b.scale&&bottom>otherTop;
+    }));
+  }
+  if(!overlaps(title,subtitle))return [title,subtitle];
+  const gap=4+pads[0]*2*Math.max(ts,ss);
+  const space=(block,left,right)=>block.x<left||block.x>right?0:span(block.x-left,right-left,block.column);
+  let best=null;
+  function consider(candidate) {
+    if(overlaps(...candidate))return;
+    const lines=blocks=>blocks.reduce((sum,block)=>sum+block.lines.length,0);
+    if(!best||lines(candidate)<lines(best)||lines(candidate)===lines(best)&&candidate[0].scale+candidate[1].scale>best[0].scale+best[1].scale)best=candidate;
+  }
+  [title,subtitle].forEach((block,index)=>{
+    const other=index===0?subtitle:title,box=bounds(other);
+    const coordinates=index===0?cfg.title_coordinates:cfg.subtitle_coordinates;
+    const limits=[space(block,0,box.x-gap),space(block,box.x+box.width+gap,width),coordinates?width*(coordinates.width??50)/100:aw];
+    for(const limit of limits) {
+      if(limit<=0||limit>=bounds(block).width)continue;
+      consider(index===0?[titleLayout(limit),subtitle]:[title,subtitleLayout(limit)]);
+    }
+  });
+  if(title.x!==subtitle.x) {
+    const middle=(title.x+subtitle.x)/2;
+    const titleWidth=title.x<subtitle.x?space(title,0,middle-gap/2):space(title,middle+gap/2,width);
+    const subWidth=title.x<subtitle.x?space(subtitle,middle+gap/2,width):space(subtitle,0,middle-gap/2);
+    if(titleWidth>0&&subWidth>0)consider([titleLayout(titleWidth),subtitleLayout(subWidth)]);
+  }
+  if(best)return best;
+  const th=bounds(title).height,sh=bounds(subtitle).height,fit=Math.min(1,ah/(th+8+sh));
+  const titleY=title.y+th*p[1]/2,subtitleY=subtitle.y+sh*q[1]/2,groupHeight=(th+8+sh)*fit;
+  const groupTop=clamp((titleY+subtitleY-groupHeight)/2,top,bottom-groupHeight);
+  return [{...title,y:groupTop,scale:title.scale*fit},{...subtitle,y:groupTop+(th+8)*fit,scale:subtitle.scale*fit}];
 }
 function presentation(cfg) { return Math.max(cfg.fade_from_black_ticks,(cfg.animation==='immediate'?0:cfg.reveal_ticks)+cfg.hold_ticks+cfg.fade_out_ticks); }
 function duration(cfg) { return cfg.black_hold_ticks+presentation(cfg); }
