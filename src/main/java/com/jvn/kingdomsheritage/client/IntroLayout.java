@@ -30,7 +30,9 @@ record IntroLayout(IntroLayout.Block title, IntroLayout.Block subtitle) {
         var subtitlePosition = intro.subtitlePosition();
         boolean together = subtitle.isEmpty() || titlePosition == subtitlePosition;
         boolean separateRows = !together && titlePosition.row() != subtitlePosition.row();
-        float wrapWidth = !together && !separateRows ? availableWidth / 3 : availableWidth;
+        float wrapWidth = !together && !separateRows
+                ? availableWidth / (Math.abs(titlePosition.column() - subtitlePosition.column()) == 2 ? 2 : 3)
+                : availableWidth;
         float maxHeight = separateRows ? availableHeight / 3 : availableHeight;
         float titleScale = intro.title() ? 1.5F : 1;
         int lineHeight = font.lineHeight + 3 + verticalPadding * 2;

@@ -205,7 +205,8 @@ function layout(cfg,main,sub,width,height,slant,advance) {
   const aw=Math.max(1,width-margin*2), ah=Math.max(1,bottom-top);
   const p=positions[cfg.title_position], q=positions[cfg.subtitle_position];
   const together=!sub.length || cfg.title_position===cfg.subtitle_position, rows=!together&&p[1]!==q[1];
-  const ww=!together&&!rows?aw/3:aw, maxHeight=rows?ah/3:ah, ts=cfg.title?1.5:1, lh=12+pads[1]*2;
+  const ww=!together&&!rows?aw/(Math.abs(p[0]-q[0])===2?2:3):aw;
+  const maxHeight=rows?ah/3:ah, ts=cfg.title?1.5:1, lh=12+pads[1]*2;
   const a=wrap(main,Math.max(1,Math.trunc(ww/ts)),advance), b=sub.length?wrap(sub,Math.max(1,Math.trunc(ww)),advance):[];
   const maxWidth=lines=>Math.max(0,...lines.map(line=>line.width));
   function place(lines,scale,pos) {
