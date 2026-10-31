@@ -23,6 +23,8 @@ public final class SpawnSelectScreen extends Screen {
     private static final int CARD_HEIGHT = 192;
     private static final int EXPANDED_WIDTH = 374;
     private static final int PAGE_SIZE = 10;
+    private static final int CONFIRMATION_WIDTH = 344;
+    private static final int CONFIRMATION_DURATION = 550;
     private static final ResourceLocation CARD = texture("campaign_select_screen_card");
     private static final ResourceLocation EXPANDED = texture("campaign_select_screen_card_expanded");
     private static final ResourceLocation FALLBACK = texture("campaign_select_screen_card_fallback");
@@ -35,11 +37,16 @@ public final class SpawnSelectScreen extends Screen {
     private final List<Button> pageButtons = new ArrayList<>();
     private JsonObject preview;
     private Card hovered;
+    private Card highlighted;
     private Button description;
     private int page;
     private float scale;
     private int top;
     private Button next;
+    private Button back;
+    private boolean confirming;
+    private float confirmationFrom;
+    private long confirmationStarted;
     private double descriptionScroll;
     private boolean submitted;
     private long renderedAt;
@@ -59,7 +66,11 @@ public final class SpawnSelectScreen extends Screen {
 
     void restoreSelection(String id) {
         selected = choices.stream().filter(choice -> choice.get("id").getAsString().equals(id)).findFirst().orElse(null);
-        if (selected != null) page = choices.indexOf(selected) / PAGE_SIZE;
+        if (selected != null) {
+            page = choices.indexOf(selected) / PAGE_SIZE;
+            confirming = true;
+            confirmationFrom = 1;
+        }
     }
 
     private static ResourceLocation texture(String name) {
@@ -71,13 +82,14 @@ public final class SpawnSelectScreen extends Screen {
         cards.clear();
         pageButtons.clear();
         hovered = null;
+        highlighted = null;
         renderedAt = net.minecraft.Util.getMillis();
         int count = Math.min(PAGE_SIZE, choices.size() - page * PAGE_SIZE);
         List<JsonObject> visible = choices.subList(page * PAGE_SIZE, page * PAGE_SIZE + count);
         for (JsonObject choice : visible) cards.add(addWidget(new Card(choice)));
         layoutCards(false);
         preview = expanded != null ? expanded : visible.contains(selected) ? selected : visible.getFirst();
-        description = addWidget(new Button(0, 0, Math.max(12, Math.round(19 * scale)), Math.max(18, Math.round(32 * scale)),
+        description = addWidget(new SelectionControls.SoundButton(0, 0, Math.max(12, Math.round(19 * scale)), Math.max(18, Math.round(32 * scale)),
                 Component.translatable(expanded == null ? "screen.kingdomsheritage.expand" : "screen.kingdomsheritage.collapse"),
                 button -> {
                     selected = preview;
@@ -104,31 +116,35 @@ public final class SpawnSelectScreen extends Screen {
         updateDescription();
         int buttonWidth = Math.min(130, (width - 100) / 2);
         addRenderableWidget(SelectionControls.disconnect(height));
-        next = addRenderableWidget(Button.builder(Component.empty(), button -> confirm())
-                .bounds((width - buttonWidth) / 2, height - 28, buttonWidth, 20).build());
+        next = addRenderableWidget(new SelectionControls.SoundButton((width - buttonWidth) / 2, height - 28,
+                buttonWidth, 20, Component.empty(), button -> confirm()));
+        back = addRenderableWidget(new SelectionControls.SoundButton(0, 0, buttonWidth, 20,
+                Component.translatable("screen.kingdomsheritage.choose_another"), button -> cancelChoice()));
         updateNext();
         if (choices.size() > PAGE_SIZE) {
             var previous = addRenderableWidget(SelectionControls.arrow((width - buttonWidth) / 2 - 40, height - 34, false,
                     Component.translatable("spectatorMenu.previous_page"), button -> { page--; rebuildWidgets(); }));
             previous.active = page > 0;
-            previous.visible = expanded == null;
+            previous.visible = expanded == null && !confirming;
             pageButtons.add(previous);
             var forward = addRenderableWidget(SelectionControls.arrow((width + buttonWidth) / 2 + 8, height - 34, true,
                     Component.translatable("spectatorMenu.next_page"), button -> { page++; rebuildWidgets(); }));
             forward.active = (page + 1) * PAGE_SIZE < choices.size();
-            forward.visible = expanded == null;
+            forward.visible = expanded == null && !confirming;
             pageButtons.add(forward);
         }
     }
 
     private void layoutCards(boolean animate) {
         int count = cards.size();
-        int cardWidth = expanded != null ? EXPANDED_WIDTH : CARD_WIDTH;
+        int cardWidth = confirming ? CONFIRMATION_WIDTH : expanded != null ? EXPANDED_WIDTH : CARD_WIDTH;
         scale = Math.max(0.1F, Math.min(1, Math.min((width - 32F) / cardWidth, (height - 116F) / CARD_HEIGHT)));
         float step = count <= 1 ? 0 : Math.min((CARD_WIDTH + 16) * scale, (width - 32F - CARD_WIDTH * scale) / (count - 1));
-        float groupWidth = expanded != null ? EXPANDED_WIDTH * scale : CARD_WIDTH * scale + (count - 1) * step;
+        float groupWidth = confirming ? CONFIRMATION_WIDTH * scale
+                : expanded != null ? EXPANDED_WIDTH * scale : CARD_WIDTH * scale + (count - 1) * step;
         int left = Math.round((width - groupWidth) / 2);
-        top = Math.round(40 + (height - 116 - CARD_HEIGHT * scale) / 2);
+        top = confirming ? Math.round((height - CARD_HEIGHT * scale) / 2)
+                : Math.round(40 + (height - 116 - CARD_HEIGHT * scale) / 2);
         long now = net.minecraft.Util.getMillis();
         for (int index = 0; index < count; index++) {
             Card card = cards.get(index);
@@ -136,18 +152,24 @@ public final class SpawnSelectScreen extends Screen {
             boolean visible = expanded == null || open;
             Layout target = new Layout(open ? left : left + Math.round(index * step), top, scale,
                     open ? EXPANDED_WIDTH : CARD_WIDTH, visible ? 1 : 0, open ? 1 : 0);
-            if (!visible && card.layout != null) {
+            if (confirming) {
+                target = card.choice == selected ? new Layout(left, top, scale, CARD_WIDTH, 1, 0)
+                        : card.layout;
+                if (target == null) target = new Layout(left + Math.round(index * step), top, scale, CARD_WIDTH, 1, 0);
+            }
+            if (!confirming && !visible && card.layout != null) {
                 target = new Layout(card.layout.x, card.layout.y + 4, card.layout.scale, CARD_WIDTH, 0, 0);
             }
             int delay = expanded == null && card.layout != null && card.layout.opacity < 1 ? index * 25 : 0;
             card.moveTo(target, now, animate, delay);
             card.visible = visible;
         }
-        for (Button button : pageButtons) button.visible = expanded == null;
+        for (Button button : pageButtons) button.visible = expanded == null && !confirming;
     }
 
     private void updateDescription() {
-        description.visible = expanded != null || !DefinitionJson.component(preview, "description").getString().isBlank();
+        description.visible = !confirming && confirmationProgress(net.minecraft.Util.getMillis()) == 0
+                && (expanded != null || !DefinitionJson.component(preview, "description").getString().isBlank());
         description.setTooltip(Tooltip.create(description.getMessage()));
         positionDescription();
     }
@@ -167,6 +189,7 @@ public final class SpawnSelectScreen extends Screen {
     }
 
     private Card cardAt(double mouseX, double mouseY) {
+        if (confirming || confirmationProgress(net.minecraft.Util.getMillis()) > 0) return null;
         for (Card card : cards) {
             if (card.layout.width > CARD_WIDTH && card.visible && contains(card, mouseX, mouseY, card.getRight())) return card;
         }
@@ -192,8 +215,8 @@ public final class SpawnSelectScreen extends Screen {
         Card card = cardAt(mouseX, mouseY);
         if (card != null && card.active && button == 0) {
             card.playDownSound(minecraft.getSoundManager());
-            card.onPress();
             setFocused(card);
+            card.onPress();
             setDragging(true);
             return true;
         }
@@ -202,6 +225,11 @@ public final class SpawnSelectScreen extends Screen {
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (keyCode == GLFW.GLFW_KEY_ESCAPE && confirming && !submitted && !SelectionTransition.active()) {
+            SelectionSounds.CLICK.play();
+            cancelChoice();
+            return true;
+        }
         if (getFocused() instanceof Card card && (keyCode == GLFW.GLFW_KEY_LEFT || keyCode == GLFW.GLFW_KEY_RIGHT)) {
             if (expanded != null) return true;
             int index = cards.indexOf(card) + (keyCode == GLFW.GLFW_KEY_LEFT ? -1 : 1);
@@ -215,8 +243,41 @@ public final class SpawnSelectScreen extends Screen {
         return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
+    private float confirmationProgress(long now) {
+        float progress = easeOut((now - confirmationStarted) / (float) CONFIRMATION_DURATION);
+        return Mth.lerp(progress, confirmationFrom, confirming ? 1 : 0);
+    }
+
+    private void choose(JsonObject choice) {
+        if (confirming || submitted || SelectionTransition.active()) return;
+        confirmationFrom = confirmationProgress(net.minecraft.Util.getMillis());
+        confirmationStarted = net.minecraft.Util.getMillis();
+        confirming = true;
+        selected = preview = choice;
+        expanded = null;
+        descriptionScroll = 0;
+        layoutCards(true);
+        updateDescription();
+        updateNext();
+        setFocused(next);
+        if (cards.stream().anyMatch(card -> card.choice != selected && card.layout.opacity > 0)) SelectionSounds.DISSOLVE.play();
+    }
+
+    private void cancelChoice() {
+        if (!confirming || submitted || SelectionTransition.active()) return;
+        confirmationFrom = confirmationProgress(net.minecraft.Util.getMillis());
+        confirmationStarted = net.minecraft.Util.getMillis();
+        confirming = false;
+        layoutCards(true);
+        description.setMessage(Component.translatable("screen.kingdomsheritage.expand"));
+        updateDescription();
+        updateNext();
+        setFocused(cards.stream().filter(card -> card.choice == selected).findFirst().orElse(null));
+    }
+
     private void confirm() {
-        if (selected == null || submitted || SelectionTransition.active()) return;
+        if (!confirming || confirmationProgress(net.minecraft.Util.getMillis()) < 1
+                || selected == null || submitted || SelectionTransition.active()) return;
         if (automaticKit == null) {
             ClientSelection.openKits(selected.get("id").getAsString());
             return;
@@ -233,27 +294,45 @@ public final class SpawnSelectScreen extends Screen {
         JsonObject only = kits.size() == 1 ? kits.getFirst() : null;
         automaticKit = only != null && only.getAsJsonArray("items").isEmpty()
                 && only.get("problem").getAsString().isEmpty() ? only : null;
-        for (Card card : cards) card.active = !submitted && card.visible;
-        description.active = !submitted;
-        next.active = selected != null && !kits.isEmpty() && !submitted;
+        float progress = confirmationProgress(net.minecraft.Util.getMillis());
+        for (Card card : cards) card.active = !submitted && !confirming && progress == 0 && card.visible;
+        description.active = !submitted && !confirming && progress == 0;
+        next.active = confirming && progress == 1 && selected != null && !kits.isEmpty() && !submitted;
+        next.visible = confirming || progress > 0;
+        back.active = confirming && !submitted && progress > 0.65F;
+        back.visible = next.visible;
+        for (int index = 0; index < pageButtons.size(); index++) {
+            Button button = pageButtons.get(index);
+            button.visible = expanded == null && !confirming && progress == 0;
+            button.active = index == 0 ? page > 0 : (page + 1) * PAGE_SIZE < choices.size();
+        }
         next.setMessage(submitted ? ClientSelection.progress() : Component.translatable(
-                automaticKit == null ? "screen.kingdomsheritage.next" : "screen.kingdomsheritage.begin"));
+                automaticKit == null ? "screen.kingdomsheritage.confirm_kit" : "screen.kingdomsheritage.confirm_begin"));
     }
 
     @Override
     public void tick() {
-        if (submitted) updateNext();
+        updateNext();
+        updateDescription();
     }
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         long now = net.minecraft.Util.getMillis();
+        float confirmation = confirmationProgress(now);
+        positionConfirmation(confirmation);
         for (Card card : cards) card.sample(now);
         hovered = cardAt(mouseX, mouseY);
         Card foreground = minecraft.getLastInputType().isKeyboard() && getFocused() instanceof Card focused
                 ? focused : hovered;
         Card moving = cards.stream().filter(card -> card.visible && card.layout.width > CARD_WIDTH).findFirst().orElse(null);
         if (moving != null) foreground = moving;
+        if (confirming || confirmation > 0) foreground = cards.stream().filter(card -> card.choice == selected).findFirst().orElse(null);
+        if (foreground != highlighted) {
+            highlighted = foreground;
+            if (foreground != null && foreground.active && !submitted && confirmation == 0
+                    && !SelectionTransition.active()) SelectionSounds.HOVER.play();
+        }
         if (foreground != null && preview != foreground.choice) {
             preview = foreground.choice;
             updateDescription();
@@ -264,12 +343,16 @@ public final class SpawnSelectScreen extends Screen {
         if (foreground == null) foreground = cards.stream().filter(card -> card.choice == preview).findFirst().orElse(null);
         float delta = Mth.clamp((now - renderedAt) / 1000F, 0, 0.05F);
         renderedAt = now;
-        int layer = 0;
-        for (var card : cards) {
-            card.animate(delta, card == active, mouseX);
-            if (card != foreground) card.draw(graphics, mouseX, mouseY, partialTick, layer++ * 10);
-        }
+        for (var card : cards) card.animate(delta, card == active, mouseX);
+        Card front = foreground;
+        SelectionDissolve.render(graphics, confirmation, () -> {
+            int layer = 0;
+            for (var card : cards) {
+                if (card != front) card.draw(graphics, mouseX, mouseY, partialTick, layer++ * 10);
+            }
+        });
         if (foreground != null) foreground.draw(graphics, mouseX, mouseY, partialTick, cards.size() * 10);
+        if (confirmation > 0) renderConfirmation(graphics, confirmation);
         positionDescription();
         graphics.pose().pushPose();
         graphics.pose().translate(0, 0, (cards.size() + 1) * 10);
@@ -279,20 +362,78 @@ public final class SpawnSelectScreen extends Screen {
         if (hovered != null && (!description.visible || !description.isHovered())) {
             setTooltipForNextRenderPass(hovered.getTooltip(), DefaultTooltipPositioner.INSTANCE, true);
         }
-        if (expanded == null && choices.size() > PAGE_SIZE) {
+        if (expanded == null && choices.size() > PAGE_SIZE && confirmation == 0) {
             Card last = cards.getLast();
             graphics.drawCenteredString(font, Component.literal((page + 1) + " / " + ((choices.size() + PAGE_SIZE - 1) / PAGE_SIZE)),
                     Math.round(last.layout.x + last.layout.width * last.layout.scale / 2),
                     Math.round(last.layout.y + CARD_HEIGHT * last.layout.scale) + 8, 0xffffff);
         }
-        graphics.drawCenteredString(font, title, width / 2, 12, 0xffffff);
+        if (confirmation < 1) graphics.drawCenteredString(font, title, width / 2, 12,
+                Math.max(4, Math.round((1 - confirmation) * 255)) << 24 | 0xffffff);
         String error = catalog.get("error").getAsString();
         if (!error.isEmpty()) {
             var lines = font.split(DefinitionJson.message(catalog, "error", minecraft.player.registryAccess()), width - 20);
             for (int index = 0; index < Math.min(2, lines.size()); index++) {
                 graphics.drawCenteredString(font, lines.get(index), width / 2, height - 51 + index * 9, 0xffaaaa);
             }
-        } else if (automaticKit == null) graphics.drawCenteredString(font, Component.translatable("screen.kingdomsheritage.step_location"), width / 2, height - 43, 0xffffff);
+        } else if (automaticKit == null && confirmation == 0) graphics.drawCenteredString(font, Component.translatable("screen.kingdomsheritage.step_location"), width / 2, height - 43, 0xffffff);
+    }
+
+    private int confirmationLeft() {
+        return Math.round((width - CONFIRMATION_WIDTH * confirmationScale()) / 2 + 152 * confirmationScale());
+    }
+
+    private float confirmationScale() {
+        return Math.max(0.1F, Math.min(1, Math.min((width - 32F) / CONFIRMATION_WIDTH, (height - 116F) / CARD_HEIGHT)));
+    }
+
+    private int confirmationTextWidth() {
+        return Math.max(1, Math.round(192 * confirmationScale()));
+    }
+
+    private int confirmationTop() {
+        int promptLines = font.split(Component.translatable("screen.kingdomsheritage.confirm_choice"), confirmationTextWidth()).size();
+        int nameLines = Math.min(2, font.split(DefinitionJson.component(selected, "title"), confirmationTextWidth()).size());
+        return (height - (promptLines + nameLines) * font.lineHeight - 64) / 2;
+    }
+
+    private void positionConfirmation(float progress) {
+        if (selected == null) return;
+        int x = confirmationLeft() + Math.round((1 - progress) * 12);
+        int textHeight = (font.split(Component.translatable("screen.kingdomsheritage.confirm_choice"), confirmationTextWidth()).size()
+                + Math.min(2, font.split(DefinitionJson.component(selected, "title"), confirmationTextWidth()).size())) * font.lineHeight;
+        int y = confirmationTop() + textHeight + 18;
+        int buttonWidth = Math.min(150, confirmationTextWidth());
+        next.setWidth(buttonWidth);
+        back.setWidth(buttonWidth);
+        next.setPosition(x, y);
+        back.setPosition(x, y + 24);
+        float alpha = Mth.clamp((progress - 0.3F) / 0.7F, 0, 1);
+        next.setAlpha(alpha);
+        back.setAlpha(alpha);
+    }
+
+    private void renderConfirmation(GuiGraphics graphics, float progress) {
+        float alpha = Mth.clamp((progress - 0.3F) / 0.7F, 0, 1);
+        if (alpha <= 0) return;
+        int x = confirmationLeft() + Math.round((1 - progress) * 12);
+        int y = confirmationTop();
+        int opacity = Math.max(4, Math.round(alpha * 255)) << 24;
+        for (var line : font.split(Component.translatable("screen.kingdomsheritage.confirm_choice"), confirmationTextWidth())) {
+            graphics.drawString(font, line, x, y, opacity | 0xffffff);
+            y += font.lineHeight;
+        }
+        y += 6;
+        var names = font.split(DefinitionJson.component(selected, "title"), confirmationTextWidth());
+        for (var line : names.subList(0, Math.min(2, names.size()))) {
+            graphics.drawString(font, line, x, y, opacity | 0xf2cd83);
+            y += font.lineHeight;
+        }
+    }
+
+    @Override
+    public void removed() {
+        SelectionDissolve.close();
     }
 
     @Override
@@ -325,7 +466,7 @@ public final class SpawnSelectScreen extends Screen {
         return 1 - remaining * remaining * remaining;
     }
 
-    private final class Card extends Button {
+    private final class Card extends SelectionControls.SoundButton {
         private final JsonObject choice;
         private final ResourceLocation cover;
         private float lift;
@@ -338,11 +479,12 @@ public final class SpawnSelectScreen extends Screen {
         private long started;
         private int delay;
         private int straightenDelay;
+        private int duration;
         private float fromTilt;
 
         private Card(JsonObject choice) {
             super(0, 0, CARD_WIDTH, CARD_HEIGHT, DefinitionJson.component(choice, "title"),
-                    button -> { selected = choice; preview = choice; updateNext(); updateDescription(); }, DEFAULT_NARRATION);
+                    button -> choose(choice));
             this.choice = choice;
             ResourceLocation requested = ResourceLocation.parse(choice.get("image").getAsString());
             cover = minecraft.getResourceManager().getResource(requested).isPresent() ? requested : FALLBACK;
@@ -356,6 +498,7 @@ public final class SpawnSelectScreen extends Screen {
             this.target = target;
             started = now;
             this.delay = delay;
+            duration = confirming || confirmationFrom > 0 ? CONFIRMATION_DURATION : target.opacity == 0 ? 140 : 240;
             fromTilt = tilt;
             straightenDelay = target.details == 1 && Math.abs(tilt) > 0.01F ? 60 : 0;
             sample(now);
@@ -366,7 +509,7 @@ public final class SpawnSelectScreen extends Screen {
             float elapsed = now - started - delay;
             if (target.details == 1) tilt = fromTilt * (1 - easeOut(elapsed / 60F));
             elapsed -= straightenDelay;
-            float progress = easeOut(elapsed / (target.opacity == 0 ? 140F : 240F));
+            float progress = easeOut(elapsed / duration);
             float descriptionProgress = easeOut((elapsed - (target.details == 1 ? 100 : 0))
                     / (target.details == 1 ? 140F : 90F));
             layout = from.interpolate(target, progress, descriptionProgress);
@@ -383,13 +526,18 @@ public final class SpawnSelectScreen extends Screen {
 
         private void animate(float delta, boolean active, int mouseX) {
             float response = 1 - (float) Math.exp(-delta * 12);
-            boolean flat = expanded != null || layout.width > CARD_WIDTH;
-            float targetLift = flat ? 0 : active ? 12 : choice == selected ? 4 : 0;
+            long now = net.minecraft.Util.getMillis();
+            float confirmation = choice == selected ? confirmationProgress(now) : 0;
+            float phase = (now % 20000L) / 20000F * Mth.TWO_PI;
+            boolean flat = confirming || confirmation > 0 || expanded != null || layout.width > CARD_WIDTH;
+            float targetLift = (flat ? 0 : active ? 12 : choice == selected ? 4 : 0)
+                    + Mth.sin(phase * 5) * 2.5F * confirmation;
             lift = Mth.lerp(response, lift, targetLift);
             hover = Mth.lerp(response, hover, active ? 1 : 0);
             selection = Mth.lerp(response, selection, choice == selected ? 1 : 0);
             float horizontal = Mth.clamp((mouseX - getX()) / (CARD_WIDTH * layout.scale) * 2 - 1, -1, 1);
-            float targetTilt = !flat && active && this == hovered ? horizontal * 1.25F : 0;
+            float targetTilt = (!flat && active && this == hovered ? horizontal * 1.25F : 0)
+                    + Mth.sin(phase * 4) * 0.35F * confirmation;
             if (target.details == 0) tilt = Mth.lerp(1 - (float) Math.exp(-delta * 10), tilt, targetTilt);
             setY(Math.round(layout.y - lift * layout.scale));
         }

@@ -4,6 +4,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.components.WidgetSprites;
+import net.minecraft.client.sounds.SoundManager;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 
@@ -21,12 +22,29 @@ final class SelectionControls {
     private SelectionControls() {}
 
     static Button disconnect(int screenHeight) {
+        return disconnect(screenHeight, false);
+    }
+
+    static Button disconnect(int screenHeight, boolean duringTransition) {
         Component message = Component.translatable("menu.disconnect");
         var button = new Button(8, screenHeight - 29, 31, 21, message,
-                ignored -> ClientSelection.disconnect(), narration -> narration.get()) {
+                ignored -> {
+                    ClientSelection.disconnect();
+                    SelectionSounds.CLICK.play();
+                }, narration -> narration.get()) {
+            private boolean highlighted;
+
             @Override
             protected void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+                boolean highlight = active && isHoveredOrFocused() && (!SelectionTransition.active() || duringTransition);
+                if (highlight && !highlighted) SelectionSounds.HOVER.play();
+                highlighted = highlight;
                 graphics.blitSprite(DISCONNECT.get(active, isHoveredOrFocused()), getX() + 4, getY() + 4, 23, 13);
+            }
+
+            @Override
+            public void playDownSound(SoundManager soundManager) {
+                // disconnect clears active sounds, so the press callback plays the click afterwards
             }
         };
         button.setTooltip(Tooltip.create(message));
@@ -34,7 +52,7 @@ final class SelectionControls {
     }
 
     static Button arrow(int x, int y, boolean forward, Component message, Button.OnPress onPress) {
-        var button = new Button(x, y, 32, 32, message, onPress, narration -> narration.get()) {
+        var button = new SoundButton(x, y, 32, 32, message, onPress, narration -> narration.get()) {
             @Override
             protected void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
                 float brightness = active ? 1 : 0.35F;
@@ -45,6 +63,21 @@ final class SelectionControls {
         };
         button.setTooltip(Tooltip.create(message));
         return button;
+    }
+
+    static class SoundButton extends Button {
+        SoundButton(int x, int y, int width, int height, Component message, OnPress onPress) {
+            this(x, y, width, height, message, onPress, DEFAULT_NARRATION);
+        }
+
+        SoundButton(int x, int y, int width, int height, Component message, OnPress onPress, CreateNarration narration) {
+            super(x, y, width, height, message, onPress, narration);
+        }
+
+        @Override
+        public void playDownSound(SoundManager soundManager) {
+            SelectionSounds.CLICK.play();
+        }
     }
 
     static void drawArrow(GuiGraphics graphics, boolean forward, boolean highlighted, int x, int y) {

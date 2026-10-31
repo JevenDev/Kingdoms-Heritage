@@ -1,4 +1,6 @@
 {
+  "toast.kingdomsheritage.now_playing": "Now playing",
+  "music.kingdomsheritage.selection": "Selection music - jvn",
   "intro.kingdomsheritage.wilderness": "Wilderness",
   "intro.kingdomsheritage.unknown": "Unknown",
   "structure.minecraft.village_desert": "Desert Village",
@@ -7,6 +9,10 @@
   "structure.minecraft.village_snowy": "Snowy Village",
   "structure.minecraft.village_taiga": "Taiga Village",
   "screen.kingdomsheritage.location": "Choose your starting location",
+  "screen.kingdomsheritage.confirm_choice": "Is this your choice?",
+  "screen.kingdomsheritage.choose_another": "Choose another",
+  "screen.kingdomsheritage.confirm_kit": "Yes, choose kit",
+  "screen.kingdomsheritage.confirm_begin": "Yes, begin",
   "screen.kingdomsheritage.kit": "Choose your starting kit",
   "screen.kingdomsheritage.previous_kit": "Previous kit",
   "screen.kingdomsheritage.next_kit": "Next kit",

@@ -11,5 +11,23 @@
     "sounds": [
       "kingdomsheritage:dialogue/dialogue_villager_01"
     ]
+  },
+  "ui_notice": {
+    "sounds": ["kingdomsheritage:ui/notice"]
+  },
+  "ui_error": {
+    "sounds": ["kingdomsheritage:ui/error"]
+  },
+  "ui_confirmation": {
+    "sounds": ["kingdomsheritage:ui/confirmation"]
+  },
+  "ui_click": {
+    "sounds": ["kingdomsheritage:ui/click"]
+  },
+  "ui_dissolve": {
+    "sounds": ["kingdomsheritage:ui/dissolve"]
+  },
+  "ui_hover": {
+    "sounds": ["kingdomsheritage:ui/hover"]
   }
 }

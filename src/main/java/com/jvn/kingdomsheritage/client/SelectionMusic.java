@@ -41,7 +41,14 @@ final class SelectionMusic {
             track = new Track();
             minecraft.getSoundManager().play(track);
         }
-        if (track != null) track.playing = playing;
+        if (track != null) {
+            track.playing = playing;
+            if (!playing && track.toast != null) track.toast.hide();
+            if (playing && track.toast == null && track.getVolume() > 0) {
+                track.toast = new SelectionMusicToast();
+                minecraft.getToasts().addToast(track.toast);
+            }
+        }
     }
 
     static void stop() {
@@ -58,6 +65,7 @@ final class SelectionMusic {
     private static final class Track extends AbstractTickableSoundInstance {
         private static final int FADE_IN_TICKS = 30;
         private static final int FADE_OUT_TICKS = 40;
+        private SelectionMusicToast toast;
         private boolean playing = true;
         private float fade;
 
@@ -84,6 +92,7 @@ final class SelectionMusic {
         }
 
         private void finish() {
+            if (toast != null) toast.hide();
             stop();
         }
     }

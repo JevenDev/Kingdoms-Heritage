@@ -181,16 +181,17 @@ public final class KitSelection {
                 button -> selection.select(selection.index - 1));
         selection.next = SelectionControls.arrow(screen.width - 28, 8, true, Component.translatable("screen.kingdomsheritage.next_kit"),
                 button -> selection.select(selection.index + 1));
-        selection.back = Button.builder(Component.translatable("gui.back"), button -> ClientSelection.back())
-                .bounds(8, screen.height - 27, 70, 20).build();
-        selection.confirm = Button.builder(Component.translatable("screen.kingdomsheritage.begin"), button -> {
+        selection.back = new SelectionControls.SoundButton(8, screen.height - 27, 70, 20,
+                Component.translatable("gui.back"), button -> ClientSelection.back());
+        selection.confirm = new SelectionControls.SoundButton(screen.width - 108, screen.height - 27, 100, 20,
+                Component.translatable("screen.kingdomsheritage.begin"), button -> {
             if (selection.submitted || SelectionTransition.active()) return;
             selection.submitted = true;
             selection.updateButtons();
             var request = new HeritageNetwork.Choose(selection.spawn,
                     selection.choices.get(selection.index).get("id").getAsString(), selection.catalog.get("revision").getAsLong());
             SelectionTransition.fadeOut(() -> PacketDistributor.sendToServer(request));
-        }).bounds(screen.width - 108, screen.height - 27, 100, 20).build();
+        });
         event.addListener(SelectionControls.disconnect(screen.height));
         event.addListener(selection.previous);
         event.addListener(selection.next);
@@ -294,7 +295,10 @@ public final class KitSelection {
         if (ClientSelection.kits() == null || !isInventory(event.getScreen())) return;
         int key = event.getKeyCode();
         if (key == GLFW.GLFW_KEY_ESCAPE || Minecraft.getInstance().options.keyInventory.matches(key, event.getScanCode())) {
-            if (!ClientSelection.kits().submitted) ClientSelection.back();
+            if (!ClientSelection.kits().submitted) {
+                SelectionSounds.CLICK.play();
+                ClientSelection.back();
+            }
             event.setCanceled(true);
         } else if (key != GLFW.GLFW_KEY_TAB && key != GLFW.GLFW_KEY_ENTER && key != GLFW.GLFW_KEY_SPACE
                 && key != GLFW.GLFW_KEY_LEFT && key != GLFW.GLFW_KEY_RIGHT && key != GLFW.GLFW_KEY_UP && key != GLFW.GLFW_KEY_DOWN) {

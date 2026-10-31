@@ -55,6 +55,7 @@ public final class ClientSelection {
         if (next.has("progress")) {
             progress = next.get("progress").getAsString();
             if (progress.equals("retry")) {
+                SelectionSounds.ERROR.play();
                 if (kits != null) kits.retry();
                 else if (selection != null) selection.retry();
                 progress = "";
@@ -63,6 +64,7 @@ public final class ClientSelection {
             return;
         }
         SpawnIntroOverlay.clear();
+        boolean confirmed = progress.equals("applying");
         progress = "";
         String spawnId = kits != null ? kits.spawnId() : selection == null ? null : selection.selectedId();
         String kitId = kits == null ? null : kits.kitId();
@@ -72,6 +74,7 @@ public final class ClientSelection {
         }
         kits = null;
         if (!next.has("spawns")) {
+            if (confirmed) SelectionSounds.CONFIRMATION.play();
             catalog = null;
             selection = null;
             if (minecraft.player != null) minecraft.player.closeContainer();
@@ -81,6 +84,8 @@ public final class ClientSelection {
             return;
         }
         if (!SelectionTransition.joining()) SelectionTransition.reveal();
+        if (next.get("error").getAsString().isEmpty()) SelectionSounds.NOTICE.play();
+        else SelectionSounds.ERROR.play();
         catalog = next;
         selection = new SpawnSelectScreen(catalog);
         selection.restoreSelection(spawnId);

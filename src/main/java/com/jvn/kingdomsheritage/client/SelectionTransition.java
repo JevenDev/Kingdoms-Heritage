@@ -146,7 +146,7 @@ final class SelectionTransition {
         }
         if (waiting()) {
             Minecraft minecraft = Minecraft.getInstance();
-            if (disconnect == null) disconnect = SelectionControls.disconnect(graphics.guiHeight());
+            if (disconnect == null) disconnect = SelectionControls.disconnect(graphics.guiHeight(), true);
             disconnect.setPosition(8, graphics.guiHeight() - disconnect.getHeight() - 8);
             double scale = minecraft.getWindow().getGuiScale();
             int mouseX = (int) (minecraft.mouseHandler.xpos() / scale);
