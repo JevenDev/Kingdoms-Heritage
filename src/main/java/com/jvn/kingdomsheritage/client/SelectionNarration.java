@@ -10,14 +10,16 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 
 record SelectionNarration(Component text, ToucanTextTimeline timeline) {
-    static SelectionNarration create(Component player, JsonObject locations, JsonObject kit, String policy) {
+    static SelectionNarration create(Component player, JsonObject locations, JsonObject kit, String policy, boolean hasBelongings) {
+        boolean keepsBelongings = hasBelongings && (policy.equals("PRESERVE") || policy.equals("MERGE"));
+        boolean receivesKit = !policy.equals("PRESERVE") && !kit.getAsJsonArray("items").isEmpty();
         Component equipment;
-        if (policy.equals("PRESERVE") || policy.equals("MERGE") && kit.getAsJsonArray("items").isEmpty()) {
+        if (!receivesKit && keepsBelongings) {
             equipment = Component.translatable("screen.kingdomsheritage.review_carried", aqua(Component.translatable("screen.kingdomsheritage.review_carried_items")));
-        } else if (kit.getAsJsonArray("items").isEmpty()) {
+        } else if (!receivesKit) {
             equipment = Component.translatable("screen.kingdomsheritage.review_empty", aqua(Component.translatable("screen.kingdomsheritage.review_empty_items")));
         } else {
-            equipment = Component.translatable(policy.equals("MERGE") ? "screen.kingdomsheritage.review_merged"
+            equipment = Component.translatable(keepsBelongings ? "screen.kingdomsheritage.review_merged"
                     : "screen.kingdomsheritage.review_equipment", aqua(DefinitionJson.component(kit, "title")));
         }
         var opening = Component.translatable("screen.kingdomsheritage.review_player", aqua(player));
@@ -32,7 +34,9 @@ record SelectionNarration(Component text, ToucanTextTimeline timeline) {
     private static Component aqua(Component text) { return text.copy().withStyle(ChatFormatting.AQUA); }
 
     private static ToucanTextTimeline.Segment segment(Component text, long pause) {
-        return new ToucanTextTimeline.Segment(text.getString().replace("\r\n", "\n").replace('\r', '\n'), pause);
+        var plain = new StringBuilder();
+        for (var glyph : IntroText.glyphs(text, 0)) plain.appendCodePoint(glyph.codePoint());
+        return new ToucanTextTimeline.Segment(plain.toString(), pause);
     }
 
     private static Component place(JsonObject locations) {

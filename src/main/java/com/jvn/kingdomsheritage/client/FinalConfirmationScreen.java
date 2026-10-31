@@ -1,6 +1,7 @@
 package com.jvn.kingdomsheritage.client;
 
 import com.google.gson.JsonObject;
+import com.jvn.kingdomsheritage.compat.EquipmentCompat;
 import com.jvn.kingdomsheritage.network.HeritageNetwork;
 import com.jvn.toucanlib.client.ToucanGuiText;
 import com.jvn.toucanlib.client.ToucanTextRenderer;
@@ -37,8 +38,11 @@ final class FinalConfirmationScreen extends Screen {
         token = UUID.fromString(review.get("token").getAsString());
         var kit = catalog.getAsJsonArray("kits").asList().stream().map(value -> value.getAsJsonObject())
                 .filter(choice -> choice.get("id").getAsString().equals(review.get("kit").getAsString())).findFirst().orElseThrow();
-        var narration = SelectionNarration.create(Minecraft.getInstance().player.getName(), review.getAsJsonObject("locations"), kit,
-                catalog.get("inventory_policy").getAsString());
+        var player = Minecraft.getInstance().player;
+        boolean hasBelongings = !player.getInventory().isEmpty()
+                || EquipmentCompat.slots(player).stream().anyMatch(slot -> !slot.get().get().isEmpty());
+        var narration = SelectionNarration.create(player.getName(), review.getAsJsonObject("locations"), kit,
+                catalog.get("inventory_policy").getAsString(), hasBelongings);
         timeline = narration.timeline();
         glyphs = IntroText.glyphs(narration.text(), 0);
     }
