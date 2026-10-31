@@ -2,7 +2,7 @@
 .mc-inventory canvas { display: block; position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; background: transparent; }
 .mc-inventory .mc-slot { position: absolute; min-height: 0; border: 0; border-radius: 0; padding: 0; margin: 0; background: transparent; cursor: pointer; }
 .mc-inventory .mc-slot:hover { background: transparent; }
-.mc-inventory .mc-slot .mc-validation-warning { position: absolute; top: 0; right: 0; width: 30%; height: 30%; min-width: 9px; min-height: 9px; max-width: 16px; max-height: 16px; color: #ffff55; pointer-events: none; }
+.mc-inventory .mc-slot .mc-validation-warning { position: absolute; top: 2px; right: 2px; width: 12px; height: 26px; image-rendering: pixelated; pointer-events: none; }
 .mc-inventory .mc-slot:focus-visible { outline: 2px solid #fff; outline-offset: -3px; }
 .mc-inventory .mc-control { position: absolute; min-width: 0; min-height: 0; border: 0; border-radius: 0; margin: 0; padding: 0; background: transparent; cursor: pointer; }
 .mc-inventory .mc-control:hover { background: transparent; }

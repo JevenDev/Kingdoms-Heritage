@@ -391,7 +391,7 @@ class Inventory {
       button.setAttribute('aria-label',HeritageEquipment.name(value)+(entry?': '+T.name(entry.item)+', '+(entry.item.count??1):': empty')+(warnings.length?'. '+warnings.join(' '):''));
       const marker=button.querySelector('.mc-validation-warning');
       if(warnings.length&&!marker){
-        const icon=HeritageIcons.create('triangle-alert');icon.classList.add('mc-validation-warning');button.append(icon);
+        const icon=document.createElement('img');icon.src=new URL('warning.png',assetBase).href;icon.alt='';icon.draggable=false;icon.className='mc-validation-warning';button.append(icon);
       }else if(!warnings.length)marker?.remove();
     }
   }
