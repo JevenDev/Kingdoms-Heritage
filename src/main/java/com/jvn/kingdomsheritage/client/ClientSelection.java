@@ -46,6 +46,7 @@ public final class ClientSelection {
         SpawnIntroOverlay.register();
         SelectionMusic.register();
         SelectionTransition.register();
+        ClientParty.register();
         NeoForge.EVENT_BUS.addListener(ClientSelection::hideHud);
         NeoForge.EVENT_BUS.addListener(ClientSelection::renderIntroAfterHud);
         NeoForge.EVENT_BUS.addListener(ClientSelection::hideHand);
@@ -53,7 +54,11 @@ public final class ClientSelection {
 
     private static void receive(String json) {
         JsonObject next = JsonParser.parseString(json).getAsJsonObject();
-        if (next.has("progress")) receiveProgress(next.get("progress").getAsString());
+        if (next.has("party")) ClientParty.receive(next.getAsJsonObject("party"));
+        else if (next.has("suggestion")) {
+            SelectionSounds.NOTICE.play();
+            if (selection != null) selection.suggestion(next.get("suggestion").getAsString(), next.get("sender").getAsString());
+        } else if (next.has("progress")) receiveProgress(next.get("progress").getAsString());
         else if (next.has("review")) receiveReview(next.getAsJsonObject("review"));
         else receiveCatalog(next);
     }
@@ -145,6 +150,20 @@ public final class ClientSelection {
         if (catalog != null || SelectionTransition.active()) event.setCanceled(true);
     }
 
+    static boolean selecting() { return catalog != null && Minecraft.getInstance().player != null; }
+
+    static long revision() { return catalog == null ? -1 : catalog.get("revision").getAsLong(); }
+
+    static void followPartySpawn(String spawn) {
+        if (catalog == null || Minecraft.getInstance().player == null) return;
+        closeKits();
+        finalReview = null;
+        progress = "";
+        selection.restoreSelection(spawn);
+        var allowed = allowedKits(catalog, spawn);
+        if (!allowed.isEmpty()) openKits(spawn);
+    }
+
     static void openKits(String spawn) {
         SelectionTransition.fadeOut(() -> {
             kits = new KitSelection(catalog, spawn);
@@ -228,6 +247,7 @@ public final class ClientSelection {
             minecraft.setScreen(selection);
         }
         if (SelectionTransition.joining()) SelectionTransition.reveal();
+        ClientParty.tick();
     }
 
     private static void movement(MovementInputUpdateEvent event) {
@@ -256,6 +276,8 @@ public final class ClientSelection {
         selection = null;
         finalReview = null;
         progress = "";
+        ClientParty.clear();
+        SelectionToasts.clear();
     }
 
     private static void login(ClientPlayerNetworkEvent.LoggingIn event) {

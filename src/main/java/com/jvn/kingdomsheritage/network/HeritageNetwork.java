@@ -12,6 +12,7 @@ import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 
 public final class HeritageNetwork {
     public static Consumer<String> clientReceiver = json -> {};
+    public static Consumer<Cursor> cursorReceiver = cursor -> {};
     public static Consumer<Boolean> joinReceiver = pending -> {};
 
     private HeritageNetwork() {}
@@ -63,8 +64,39 @@ public final class HeritageNetwork {
         @Override public Type<FinishIntro> type() { return TYPE; }
     }
 
+    public record PartyAction(int action, java.util.UUID target, String spawn, long revision) implements CustomPacketPayload {
+        public static final int INVITE = 0, ACCEPT = 1, DECLINE = 2, LEAVE = 3, SELECT = 4, SUGGEST = 5, STAGE = 6;
+        public static final Type<PartyAction> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(KingdomsHeritage.MOD_ID, "party_action"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, PartyAction> CODEC = StreamCodec.of(
+                (buffer, value) -> {
+                    buffer.writeByte(value.action);
+                    buffer.writeUUID(value.target);
+                    buffer.writeUtf(value.spawn, 256);
+                    buffer.writeLong(value.revision);
+                }, buffer -> new PartyAction(buffer.readUnsignedByte(), buffer.readUUID(), buffer.readUtf(256), buffer.readLong()));
+        @Override public Type<PartyAction> type() { return TYPE; }
+    }
+
+    public record Cursor(java.util.UUID player, int x, int y, int page) implements CustomPacketPayload {
+        public static final Type<Cursor> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(KingdomsHeritage.MOD_ID, "cursor"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, Cursor> CODEC = StreamCodec.of(
+                (buffer, value) -> {
+                    buffer.writeUUID(value.player);
+                    buffer.writeShort(value.x);
+                    buffer.writeShort(value.y);
+                    buffer.writeVarInt(value.page);
+                }, buffer -> new Cursor(buffer.readUUID(), buffer.readUnsignedShort(), buffer.readUnsignedShort(), buffer.readVarInt()));
+        @Override public Type<Cursor> type() { return TYPE; }
+    }
+
     public static void register(RegisterPayloadHandlersEvent event) {
-        var registrar = event.registrar("4");
+        var registrar = event.registrar("5");
+        registrar.playToServer(PartyAction.TYPE, PartyAction.CODEC, (packet, context) ->
+                com.jvn.kingdomsheritage.server.SelectionParty.action((ServerPlayer) context.player(), packet));
+        registrar.playBidirectional(Cursor.TYPE, Cursor.CODEC, (packet, context) -> {
+            if (context.player() instanceof ServerPlayer player) com.jvn.kingdomsheritage.server.SelectionParty.cursor(player, packet);
+            else cursorReceiver.accept(packet);
+        });
         registrar.playToServer(FinishIntro.TYPE, FinishIntro.CODEC, (packet, context) ->
                 com.jvn.kingdomsheritage.server.SpawnIntro.finish((ServerPlayer) context.player(), packet.token));
         registrar.playToClient(Catalog.TYPE, Catalog.CODEC, (packet, context) -> clientReceiver.accept(packet.json));

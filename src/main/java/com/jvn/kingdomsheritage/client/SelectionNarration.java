@@ -12,6 +12,10 @@ import net.minecraft.resources.ResourceLocation;
 
 record SelectionNarration(Component text, ToucanTextTimeline timeline) {
     static SelectionNarration create(Component player, JsonObject locations, JsonObject kit, String policy, boolean hasBelongings) {
+        return create(player, locations, kit, policy, hasBelongings, List.of());
+    }
+
+    static SelectionNarration create(Component player, JsonObject locations, JsonObject kit, String policy, boolean hasBelongings, List<String> companions) {
         boolean keepsBelongings = hasBelongings && (policy.equals("PRESERVE") || policy.equals("MERGE"));
         boolean receivesKit = !policy.equals("PRESERVE") && !kit.getAsJsonArray("items").isEmpty();
         Component equipment;
@@ -26,10 +30,20 @@ record SelectionNarration(Component text, ToucanTextTimeline timeline) {
         var opening = Component.translatable("screen.kingdomsheritage.review_player", aqua(player));
         var location = Component.translatable("screen.kingdomsheritage.review_location", place(locations));
         var question = Component.translatable("screen.kingdomsheritage.review_question");
-        var text = Component.empty().append(opening).append(location).append(equipment).append(question);
-        var timeline = new ToucanTextTimeline(List.of(segment(opening, 500), segment(location, 1000),
-                segment(equipment, 1000), segment(question, 0)), 40);
+        var party = companions.isEmpty() ? Component.empty() : Component.translatable("screen.kingdomsheritage.review_party",
+                aqua(companionNames(companions)));
+        var text = Component.empty().append(opening).append(location).append(equipment).append(party).append(question);
+        var segments = new java.util.ArrayList<>(List.of(segment(opening, 500), segment(location, 1000), segment(equipment, 1000)));
+        if (!companions.isEmpty()) segments.add(segment(party, 1000));
+        segments.add(segment(question, 0));
+        var timeline = new ToucanTextTimeline(segments, 40);
         return new SelectionNarration(text, timeline);
+    }
+
+    private static Component companionNames(List<String> names) {
+        if (names.size() == 1) return Component.literal(names.getFirst());
+        String key = names.size() == 2 ? "screen.kingdomsheritage.review_party_pair" : "screen.kingdomsheritage.review_party_list";
+        return Component.translatable(key, String.join(", ", names.subList(0, names.size() - 1)), names.getLast());
     }
 
     private static Component aqua(Component text) { return text.copy().withStyle(ChatFormatting.AQUA); }

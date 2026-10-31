@@ -43,7 +43,8 @@ final class FinalConfirmationScreen extends Screen {
         boolean hasBelongings = !player.getInventory().isEmpty()
                 || EquipmentCompat.slots(player).stream().anyMatch(slot -> !slot.get().get().isEmpty());
         var narration = SelectionNarration.create(player.getName(), review.getAsJsonObject("locations"), kit,
-                catalog.get("inventory_policy").getAsString(), hasBelongings);
+                catalog.get("inventory_policy").getAsString(), hasBelongings,
+                review.has("companions") ? review.getAsJsonArray("companions").asList().stream().map(value -> value.getAsString()).toList() : List.of());
         timeline = narration.timeline();
         glyphs = ToucanGlyphLayout.glyphs(narration.text(), 0);
     }

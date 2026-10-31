@@ -20,7 +20,7 @@ final class SelectionMusicToast implements Toast {
     public Visibility render(GuiGraphics graphics, ToastComponent toasts, long timeSinceLastVisible) {
         if (hidden) return Visibility.HIDE;
         var font = toasts.getMinecraft().font;
-        SelectionMusicToastBackground.render(graphics, width(), height(), timeSinceLastVisible / 1000F);
+        SelectionToasts.background(graphics, width(), height(), timeSinceLastVisible);
         graphics.renderFakeItem(icon, 8, 8);
         var title = IntroMarkup.style(Component.literal("<rainbow>")
                 .append(Component.translatable("toast.kingdomsheritage.now_playing")).append("</rainbow>"));

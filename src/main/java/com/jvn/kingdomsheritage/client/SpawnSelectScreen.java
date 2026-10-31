@@ -49,6 +49,17 @@ public final class SpawnSelectScreen extends Screen {
     private double descriptionScroll;
     private boolean submitted;
     private long renderedAt;
+    private Component suggestion;
+    private long suggestionUntil;
+
+    int page() { return page; }
+
+    void suggestion(String spawn, String player) {
+        var choice = choices.stream().filter(value -> value.get("id").getAsString().equals(spawn)).findFirst().orElse(null);
+        if (choice == null) return;
+        suggestion = Component.translatable("screen.kingdomsheritage.party_suggestion", player, DefinitionJson.component(choice, "title"));
+        suggestionUntil = net.minecraft.Util.getMillis() + 5000;
+    }
 
     public SpawnSelectScreen(JsonObject catalog) {
         super(Component.translatable("screen.kingdomsheritage.location"));
@@ -257,6 +268,10 @@ public final class SpawnSelectScreen extends Screen {
 
     private void choose(JsonObject choice) {
         if (confirming || submitted || SelectionTransition.active()) return;
+        if (ClientParty.follower()) {
+            ClientParty.select(choice.get("id").getAsString());
+            return;
+        }
         confirmationFrom = confirmationProgress(net.minecraft.Util.getMillis());
         confirmationStarted = net.minecraft.Util.getMillis();
         confirming = true;
@@ -285,6 +300,11 @@ public final class SpawnSelectScreen extends Screen {
     private void confirm() {
         if (!confirming || confirmationProgress(net.minecraft.Util.getMillis()) < 1
                 || selected == null || submitted || !next.active || SelectionTransition.active()) return;
+        if (ClientParty.grouped()) {
+            if (selectedId().equals(ClientParty.spawn())) ClientSelection.followPartySpawn(selectedId());
+            else ClientParty.select(selectedId());
+            return;
+        }
         if (automaticKit == null) {
             ClientSelection.openKits(selected.get("id").getAsString());
             return;
@@ -312,7 +332,7 @@ public final class SpawnSelectScreen extends Screen {
             button.active = index == 0 ? page > 0 : (page + 1) * PAGE_SIZE < choices.size();
         }
         next.setMessage(submitted ? ClientSelection.progress() : Component.translatable(
-                automaticKit == null ? "screen.kingdomsheritage.confirm_kit" : "screen.kingdomsheritage.confirm_begin"));
+                ClientParty.follower() ? "screen.kingdomsheritage.party_suggest" : automaticKit == null ? "screen.kingdomsheritage.confirm_kit" : "screen.kingdomsheritage.confirm_begin"));
     }
 
     @Override
@@ -373,6 +393,9 @@ public final class SpawnSelectScreen extends Screen {
                     Math.round(last.layout.x + last.layout.width * last.layout.scale / 2),
                     Math.round(last.layout.y + CARD_HEIGHT * last.layout.scale) + 8, 0xffffff);
         }
+        if (suggestion != null && now < suggestionUntil) SelectionText.centered(graphics, font, suggestion, width / 2, height - 62, 0xfff2cd83);
+        if (ClientParty.follower() && confirmation == 0) SelectionText.centered(graphics, font,
+                Component.translatable("screen.kingdomsheritage.party_suggest_hint"), width / 2, height - 28, 0xffcccccc);
         if (confirmation < 1) SelectionText.centered(graphics, font, title, width / 2, 12,
                 Math.max(4, Math.round((1 - confirmation) * 255)) << 24 | 0xffffff);
         String error = catalog.get("error").getAsString();

@@ -57,7 +57,11 @@ final class SelectionControls {
             protected void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
                 float brightness = active ? 1 : 0.35F;
                 graphics.setColor(brightness, brightness, brightness, alpha);
-                drawArrow(graphics, forward, active && isHoveredOrFocused(), getX() + 8, getY() + 4);
+                graphics.pose().pushPose();
+                graphics.pose().translate(getX(), getY(), 0);
+                graphics.pose().scale(getWidth() / 32F, getHeight() / 32F, 1);
+                drawArrow(graphics, forward, active && isHoveredOrFocused(), 8, 4);
+                graphics.pose().popPose();
                 graphics.setColor(1, 1, 1, 1);
             }
         };
