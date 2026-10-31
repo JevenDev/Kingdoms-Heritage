@@ -280,7 +280,8 @@ function commit(next,key=null,{replace=false,selected:nextSlot=selected,discard=
   if(!replace&&!canEdit(key?.split(':')[0]||''))return false;
   if(replace&&carried){notice('Place the held stack or press Escape before replacing this kit.');return false;}
   try {
-    const parsed=K.read(JSON.stringify(next));documentState=parsed.document;validDocument=K.copy(documentState);kitWarnings=parsed.warnings;rawInvalid=false;errorState=null;selected=nextSlot;carried=M.cursor(nextCursor);selectedSlots=new Set(nextSelection);
+    const parsed=K.read(JSON.stringify(next)),nextCarried=M.cursor(nextCursor);
+    documentState=parsed.document;validDocument=K.copy(documentState);kitWarnings=parsed.warnings;rawInvalid=false;errorState=null;selected=nextSlot;carried=nextCarried;selectedSlots=new Set(nextSelection);
     if(replace){selectedSlots.clear();selectionMode=false;selectionAnchor=null;drafts.clear();const first=(Array.isArray(documentState.items)?documentState.items:[]).find(entry=>entry&&['curios','accessories'].includes(entry.inventory));selected=first?E.id(first):0;preview.state.mode=first?.inventory??'player';}else for(const slot of discard)drafts.delete(slot);
     if(pendingDraft)drafts.set(selected,pendingDraft);
     const field=$('kit-json'),scroll=field.scrollTop,start=field.selectionStart,end=field.selectionEnd;
