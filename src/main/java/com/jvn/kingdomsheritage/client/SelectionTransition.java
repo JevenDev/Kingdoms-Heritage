@@ -23,10 +23,8 @@ import org.lwjgl.glfw.GLFW;
 
 final class SelectionTransition {
     private static final int DURATION_MILLIS = 300;
-    private static boolean active;
-    private static boolean joining;
-    private static boolean revealing;
-    private static boolean awaitingWorld;
+    private enum Phase { IDLE, JOINING, FADING_OUT, WAITING, ARRIVING, REVEALING }
+    private static Phase phase = Phase.IDLE;
     private static long started;
     private static float from;
     private static Runnable onBlack;
@@ -44,62 +42,59 @@ final class SelectionTransition {
         NeoForge.EVENT_BUS.addListener(SelectionTransition::opening);
     }
 
-    static boolean active() { return active; }
-    static boolean joining() { return joining; }
+    static boolean active() { return phase != Phase.IDLE; }
+    static boolean joining() { return phase == Phase.JOINING; }
 
     static void join() {
-        active = joining = true;
-        revealing = awaitingWorld = false;
+        phase = Phase.JOINING;
         from = 1;
         onBlack = null;
         started = Util.getMillis();
     }
 
     static void fadeOut(Runnable action) {
-        if (active) return;
-        active = true;
-        revealing = awaitingWorld = false;
+        if (active()) return;
+        phase = Phase.FADING_OUT;
         from = 0;
         started = Util.getMillis();
         onBlack = action;
     }
 
     static void reveal() {
-        if (!active) return;
+        if (!active()) return;
         from = opacity(Util.getMillis());
-        revealing = true;
-        joining = awaitingWorld = false;
+        phase = Phase.REVEALING;
         onBlack = null;
         started = Util.getMillis();
     }
 
     static void arrive() {
-        if (!active) return;
-        awaitingWorld = true;
-        joining = false;
+        if (!active()) return;
+        phase = Phase.ARRIVING;
         onBlack = null;
     }
 
     static void introReady() {
-        if (awaitingWorld) clear();
+        if (phase == Phase.ARRIVING) clear();
     }
 
     static void tick() {
-        if (!active) return;
+        if (!active()) return;
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.player != null && !minecraft.player.isAlive()) {
             clear();
             return;
         }
-        if (awaitingWorld && !SpawnIntroOverlay.active() && minecraft.level != null && minecraft.player != null
+        if (phase == Phase.ARRIVING && !SpawnIntroOverlay.active() && minecraft.level != null && minecraft.player != null
                 && !(minecraft.screen instanceof ReceivingLevelScreen)
                 && minecraft.level.hasChunkAt(minecraft.player.blockPosition())) {
             reveal();
         }
         if (Util.getMillis() - started < DURATION_MILLIS) return;
-        if (revealing) {
+        if (phase == Phase.REVEALING) {
             clear();
-        } else if (onBlack != null) {
+        } else if (phase == Phase.FADING_OUT) {
+            phase = Phase.WAITING;
             Runnable action = onBlack;
             onBlack = null;
             action.run();
@@ -107,7 +102,7 @@ final class SelectionTransition {
     }
 
     static void clear() {
-        active = joining = revealing = awaitingWorld = false;
+        phase = Phase.IDLE;
         from = 0;
         onBlack = null;
         disconnect = null;
@@ -116,16 +111,16 @@ final class SelectionTransition {
     private static float opacity(long now) {
         float progress = Mth.clamp((now - started) / (float) DURATION_MILLIS, 0, 1);
         float eased = progress * progress * (3 - 2 * progress);
-        return Mth.lerp(eased, from, revealing ? 0 : 1);
+        return Mth.lerp(eased, from, phase == Phase.REVEALING ? 0 : 1);
     }
 
     private static boolean waiting() {
-        return active && !joining && !revealing && !awaitingWorld && onBlack == null
+        return phase == Phase.WAITING
                 && Util.getMillis() - started >= DURATION_MILLIS + 400;
     }
 
     static void render(GuiGraphics graphics) {
-        if (!active) return;
+        if (!active()) return;
         long now = Util.getMillis();
         int alpha = Math.round(opacity(now) * 255);
         graphics.flush();
@@ -133,9 +128,9 @@ final class SelectionTransition {
         graphics.pose().translate(0, 0, 1000);
         graphics.fill(0, 0, graphics.guiWidth(), graphics.guiHeight(), alpha << 24);
         graphics.flush();
-        if (alpha >= 4 && (joining || awaitingWorld || waiting())) {
+        if (alpha >= 4 && (joining() || phase == Phase.ARRIVING || waiting())) {
             LoadingIndicator.render(graphics, graphics.guiWidth() / 2, graphics.guiHeight() / 2 - 8, now, alpha);
-            SelectionText.centered(graphics, Minecraft.getInstance().font, joining || awaitingWorld
+            SelectionText.centered(graphics, Minecraft.getInstance().font, joining() || phase == Phase.ARRIVING
                             ? Component.translatable("screen.kingdomsheritage.loading") : ClientSelection.progress(),
                     graphics.guiWidth() / 2, graphics.guiHeight() / 2 + 16, alpha << 24 | 0xffffff);
         }
@@ -155,7 +150,7 @@ final class SelectionTransition {
 
     private static void screen(ScreenEvent.Render.Post event) {
         render(event.getGuiGraphics());
-        if (joining && loadingScreen(event.getScreen())) {
+        if (joining() && loadingScreen(event.getScreen())) {
             GuiGraphics graphics = event.getGuiGraphics();
             graphics.pose().pushPose();
             graphics.pose().translate(0, 0, 1100);
@@ -168,13 +163,13 @@ final class SelectionTransition {
     }
 
     private static void mouse(ScreenEvent.MouseButtonPressed.Pre event) {
-        if (!active || joining && loadingScreen(event.getScreen())) return;
+        if (!active() || joining() && loadingScreen(event.getScreen())) return;
         if (waiting() && disconnect != null) disconnect.mouseClicked(event.getMouseX(), event.getMouseY(), event.getButton());
         event.setCanceled(true);
     }
 
     private static void key(ScreenEvent.KeyPressed.Pre event) {
-        if (!active || joining && loadingScreen(event.getScreen())) return;
+        if (!active() || joining() && loadingScreen(event.getScreen())) return;
         if (waiting() && disconnect != null) {
             if (event.getKeyCode() == GLFW.GLFW_KEY_TAB) disconnect.setFocused(true);
             else disconnect.keyPressed(event.getKeyCode(), event.getScanCode(), event.getModifiers());
@@ -183,12 +178,12 @@ final class SelectionTransition {
     }
 
     private static void input(ICancellableEvent event) {
-        if (active && !joining) event.setCanceled(true);
+        if (active() && !joining()) event.setCanceled(true);
     }
 
     private static boolean loadingScreen(Screen screen) {
         if (screen instanceof ConnectScreen || screen instanceof LevelLoadingScreen || screen instanceof ReceivingLevelScreen) return true;
-        if (screen instanceof ProgressScreen) return joining;
+        if (screen instanceof ProgressScreen) return joining();
         return screen instanceof GenericMessageScreen && screen.getTitle().getContents() instanceof TranslatableContents contents
                 && (contents.getKey().equals("selectWorld.data_read") || contents.getKey().equals("createWorld.preparing"));
     }
@@ -197,7 +192,7 @@ final class SelectionTransition {
         Screen screen = event.getNewScreen();
         if (screen instanceof DeathScreen || screen instanceof DisconnectedScreen) {
             clear();
-        } else if (joining && screen != null && !(screen instanceof SpawnSelectScreen) && !loadingScreen(screen)) {
+        } else if (joining() && screen != null && !(screen instanceof SpawnSelectScreen) && !loadingScreen(screen)) {
             clear();
         }
     }

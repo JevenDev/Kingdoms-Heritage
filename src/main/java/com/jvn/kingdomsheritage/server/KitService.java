@@ -24,10 +24,6 @@ import net.neoforged.neoforge.event.RegisterCommandsEvent;
 public final class KitService {
     private KitService() {}
 
-    public static void apply(ServerPlayer player, KitDefinition kit, List<KitDefinition.StackEntry> entries) {
-        apply(player, kit, entries, InventoryPolicy.REPLACE);
-    }
-
     public static void apply(ServerPlayer player, KitDefinition kit, List<KitDefinition.StackEntry> entries, InventoryPolicy policy) {
         com.jvn.kingdomsheritage.data.KitLoadout.apply(player, kit, entries, policy);
     }

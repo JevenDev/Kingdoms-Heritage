@@ -1,0 +1,433 @@
+package com.jvn.kingdomsheritage.client;
+
+import com.google.gson.JsonObject;
+import com.jvn.kingdomsheritage.data.DefinitionJson;
+import java.util.List;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.components.AbstractWidget;
+import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.Tooltip;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
+import net.minecraft.client.gui.screens.inventory.InventoryScreen;
+import net.minecraft.network.chat.Component;
+import net.minecraft.util.Mth;
+import net.neoforged.bus.api.EventPriority;
+import net.neoforged.neoforge.client.event.ScreenEvent;
+import net.neoforged.neoforge.common.NeoForge;
+import org.lwjgl.glfw.GLFW;
+
+final class KitSelectionView {
+    private static final int CONFIRMATION_DURATION = 550;
+    private final KitSelection model;
+    private final KitConfirmationPreview confirmationPreview = new KitConfirmationPreview();
+    private boolean confirming;
+    private float confirmationFrom;
+    private long confirmationStarted;
+    private float frameConfirmation;
+    private boolean capturingPreview;
+    private float previewYaw = Float.NaN;
+    private float previewPitch = Float.NaN;
+    private float previewMouseX;
+    private float previewMouseY;
+    private float previewResponse;
+    private long previewRenderedAt;
+    private Button previous;
+    private Button next;
+    private Button confirm;
+    private Button back;
+    private Button disconnect;
+    private net.minecraft.client.renderer.Rect2i bounds;
+    private int descriptionY;
+
+    KitSelectionView(KitSelection model) {
+        this.model = model;
+    }
+
+    private static KitSelectionView current() {
+        var selection = ClientSelection.kits();
+        return selection == null ? null : selection.view();
+    }
+
+    void reset() {
+        confirming = false;
+        confirmationFrom = 0;
+    }
+
+    void close() {
+        confirmationPreview.close();
+    }
+
+    static void register() {
+        NeoForge.EVENT_BUS.addListener(EventPriority.LOWEST, KitSelectionView::init);
+        NeoForge.EVENT_BUS.addListener(KitSelectionView::render);
+        NeoForge.EVENT_BUS.addListener(KitSelectionView::layout);
+        NeoForge.EVENT_BUS.addListener(KitSelectionView::hideCrafting);
+        NeoForge.EVENT_BUS.addListener(EventPriority.HIGHEST, KitSelectionView::mouse);
+        NeoForge.EVENT_BUS.addListener(EventPriority.HIGHEST, KitSelectionView::key);
+    }
+
+    static boolean isInventory(Screen screen) {
+        if (screen instanceof InventoryScreen) return true;
+        if (!(screen instanceof AbstractContainerScreen<?>)) return false;
+        String name = screen.getClass().getName();
+        return name.startsWith("top.theillusivec4.curios.") || name.startsWith("io.wispforest.accessories.");
+    }
+
+    static boolean isLayoutPicker(Screen screen) {
+        return screen != null && screen.getClass().getName().equals("io.wispforest.accessories.client.gui.ScreenVariantSelectionScreen");
+    }
+
+    static boolean capturingPreview() {
+        return current() != null && current().capturingPreview;
+    }
+
+    static float previewAngle(net.minecraft.world.entity.LivingEntity entity, float angle, float center, boolean horizontal) {
+        KitSelectionView view = current();
+        if (view == null || entity != view.model.player() || !isInventory(Minecraft.getInstance().screen)) return angle;
+        float mouse = horizontal ? view.previewMouseX : view.previewMouseY;
+        float target = (float) Math.atan((center - mouse) / 40);
+        if (view.capturingPreview) target *= 1 - view.frameConfirmation;
+        float previous = horizontal ? view.previewYaw : view.previewPitch;
+        float current = Float.isNaN(previous) ? target : Mth.lerp(view.previewResponse, previous, target);
+        if (horizontal) view.previewYaw = current;
+        else view.previewPitch = current;
+        return current;
+    }
+
+    void updateButtons() {
+        updateButtons(confirmationProgress());
+    }
+
+    private void updateButtons(float progress) {
+        if (confirm == null) return;
+        boolean reviewing = confirming || progress > 0;
+        previous.visible = next.visible = !reviewing;
+        previous.active = model.index() > 0 && !model.submitted() && !reviewing;
+        next.active = model.index() + 1 < model.choices().size() && !model.submitted() && !reviewing;
+        back.active = !model.submitted() && (confirming ? progress > 0.65F : progress == 0);
+        back.setMessage(Component.translatable(reviewing ? "screen.kingdomsheritage.choose_another" : "gui.back"));
+        confirm.active = !model.submitted() && model.problem().getString().isEmpty() && (confirming ? progress == 1 : progress == 0);
+        confirm.setMessage(model.submitted() ? ClientSelection.progress() : Component.translatable(
+                reviewing ? "screen.kingdomsheritage.confirm_begin" : "screen.kingdomsheritage.next"));
+        confirm.setTooltip(Tooltip.create(model.policyHint()));
+    }
+
+    private void confirm() {
+        if (model.submitted() || !confirm.active || !model.problem().getString().isEmpty() || SelectionTransition.active()) return;
+        if (!confirming) {
+            confirmationFrom = confirmationProgress();
+            confirmationStarted = net.minecraft.Util.getMillis();
+            confirming = true;
+            updateButtons();
+            Minecraft.getInstance().screen.setFocused(confirm);
+            return;
+        }
+        model.submit();
+    }
+
+    private void back() {
+        if (model.submitted() || SelectionTransition.active()) return;
+        if (!confirming) {
+            if (confirmationProgress() == 0) ClientSelection.back();
+            return;
+        }
+        confirmationFrom = confirmationProgress();
+        confirmationStarted = net.minecraft.Util.getMillis();
+        confirming = false;
+        updateButtons();
+        Minecraft.getInstance().screen.setFocused(confirm);
+    }
+
+    private static void init(ScreenEvent.Init.Post event) {
+        KitSelectionView view = current();
+        if (view == null || !isInventory(event.getScreen())) return;
+        Screen screen = event.getScreen();
+        if (net.neoforged.fml.ModList.get().isLoaded("accessories")) AccessoriesControls.hideCrafting(screen);
+        var container = (AbstractContainerScreen<?>) screen;
+        for (var child : List.copyOf(screen.children())) {
+            if (child instanceof net.minecraft.client.gui.components.ImageButton button
+                    && button.getX() == container.getGuiLeft() + 104) event.removeListener(child);
+        }
+        view.previous = SelectionControls.arrow(8, 8, false, Component.translatable("screen.kingdomsheritage.previous_kit"),
+                button -> view.model.select(view.model.index() - 1));
+        view.next = SelectionControls.arrow(screen.width - 28, 8, true, Component.translatable("screen.kingdomsheritage.next_kit"),
+                button -> view.model.select(view.model.index() + 1));
+        view.back = new SelectionControls.SoundButton(8, screen.height - 27, 70, 20,
+                Component.translatable("gui.back"), button -> view.back());
+        view.confirm = new SelectionControls.SoundButton(screen.width - 108, screen.height - 27, 100, 20,
+                Component.translatable("screen.kingdomsheritage.next"), button -> view.confirm());
+        view.disconnect = SelectionControls.disconnect(screen.height);
+        event.addListener(view.disconnect);
+        event.addListener(view.previous);
+        event.addListener(view.next);
+        event.addListener(view.back);
+        event.addListener(view.confirm);
+        view.updateButtons();
+        view.positionControls(screen, view.confirmationProgress());
+    }
+
+    private static void layout(ScreenEvent.Render.Pre event) {
+        KitSelectionView view = current();
+        if (view == null || !isInventory(event.getScreen())) return;
+        long now = net.minecraft.Util.getMillis();
+        float delta = Mth.clamp((now - view.previewRenderedAt) / 1000F, 0, 0.05F);
+        view.previewRenderedAt = now;
+        view.previewResponse = 1 - (float) Math.exp(-delta * 12);
+        view.previewMouseX = event.getMouseX();
+        view.previewMouseY = event.getMouseY();
+        view.frameConfirmation = view.confirmationProgress();
+        view.updateButtons(view.frameConfirmation);
+        view.positionControls(event.getScreen(), view.frameConfirmation);
+        if (view.confirming || view.frameConfirmation > 0) {
+            view.renderConfirmation(event, view.frameConfirmation);
+            event.setCanceled(true);
+        }
+    }
+
+    private void positionControls(Screen screen, float progress) {
+        var container = (AbstractContainerScreen<?>) screen;
+        bounds = net.neoforged.fml.ModList.get().isLoaded("accessories") ? AccessoriesControls.inventoryBounds(screen) : null;
+        if (bounds == null) {
+            int left = container.getGuiLeft();
+            int right = left + container.getXSize();
+            for (var slot : container.getMenu().slots) {
+                if (slot.isActive() && !(slot.container instanceof net.minecraft.world.inventory.CraftingContainer)
+                        && !(slot.container instanceof net.minecraft.world.inventory.ResultContainer)) {
+                    left = Math.min(left, container.getGuiLeft() + slot.x - 8);
+                    right = Math.max(right, container.getGuiLeft() + slot.x + 24);
+                }
+            }
+            bounds = new net.minecraft.client.renderer.Rect2i(left, container.getGuiTop(), right - left, container.getYSize());
+        }
+        int middle = bounds.getY() + (bounds.getHeight() - previous.getHeight()) / 2;
+        previous.setPosition(Math.max(4, bounds.getX() - previous.getWidth() - 10), middle);
+        next.setPosition(Math.min(screen.width - next.getWidth() - 4, bounds.getX() + bounds.getWidth() + 10), middle);
+        int center = bounds.getX() + bounds.getWidth() / 2;
+        int bottom = Math.min(screen.height - 24, bounds.getY() + bounds.getHeight() + 6);
+        int buttonWidth = Math.min(100, (bounds.getWidth() - 4) / 2);
+        back.setWidth(buttonWidth);
+        confirm.setWidth(buttonWidth);
+        back.setPosition(center - buttonWidth - 2, bottom);
+        confirm.setPosition(center + 2, bottom);
+        descriptionY = bottom + 25;
+        if (confirming || progress > 0) {
+            int x = confirmationLeft(screen) + Math.round((1 - progress) * 12);
+            int textHeight = confirmationTextHeight(screen);
+            int y = (screen.height - textHeight - 64) / 2 + textHeight + 18;
+            buttonWidth = Math.min(150, confirmationTextWidth(screen));
+            confirm.setWidth(buttonWidth);
+            back.setWidth(buttonWidth);
+            confirm.setPosition(x, y);
+            back.setPosition(x, y + 24);
+            float alpha = Mth.clamp((progress - 0.3F) / 0.7F, 0, 1);
+            confirm.setAlpha(alpha);
+            back.setAlpha(alpha);
+        } else {
+            confirm.setAlpha(1);
+            back.setAlpha(1);
+        }
+    }
+
+    private float confirmationProgress() {
+        float elapsed = Mth.clamp((net.minecraft.Util.getMillis() - confirmationStarted) / (float) CONFIRMATION_DURATION, 0, 1);
+        float eased = 1 - (1 - elapsed) * (1 - elapsed) * (1 - elapsed);
+        return Mth.lerp(eased, confirmationFrom, confirming ? 1 : 0);
+    }
+
+    private float confirmationScale(Screen screen) {
+        return Math.max(0.1F, Math.min(1, Math.min((screen.width - 32F) / (bounds.getWidth() + 216),
+                (screen.height - 96F) / bounds.getHeight())));
+    }
+
+    private int confirmationLeft(Screen screen) {
+        float scale = confirmationScale(screen);
+        return Math.round((screen.width - (bounds.getWidth() + 216) * scale) / 2 + (bounds.getWidth() + 24) * scale);
+    }
+
+    private int confirmationTextWidth(Screen screen) {
+        return Math.max(1, Math.round(192 * confirmationScale(screen)));
+    }
+
+    private int confirmationTextHeight(Screen screen) {
+        var font = Minecraft.getInstance().font;
+        int width = confirmationTextWidth(screen);
+        return (font.split(Component.translatable("screen.kingdomsheritage.confirm_choice"), width).size()
+                + Math.min(2, font.split(DefinitionJson.component(model.choices().get(model.index()), "title"), width).size())) * font.lineHeight;
+    }
+
+    private void renderConfirmation(ScreenEvent.Render.Pre event, float progress) {
+        var graphics = event.getGuiGraphics();
+        Screen screen = event.getScreen();
+        var font = Minecraft.getInstance().font;
+        long now = net.minecraft.Util.getMillis();
+        SelectionBackground.render(graphics, screen.width, screen.height);
+        float targetScale = confirmationScale(screen);
+        float scale = Mth.lerp(progress, 1, targetScale);
+        float phase = (now % 20000L) / 20000F * Mth.TWO_PI;
+        float left = (screen.width - (bounds.getWidth() + 216) * targetScale) / 2;
+        float x = Mth.lerp(progress, bounds.getX(), left);
+        float y = Mth.lerp(progress, bounds.getY(), (screen.height - bounds.getHeight() * targetScale) / 2)
+                - Mth.sin(phase * 5) * 2.5F * progress * scale;
+        float tilt = Mth.sin(phase * 4) * 0.35F * progress;
+        confirmationPreview.render(graphics, bounds, x, y, scale, tilt, () -> {
+            List<Button> buttons = List.of(previous, next, back, confirm, disconnect);
+            var visible = buttons.stream().map(button -> button.visible).toList();
+            capturingPreview = true;
+            try {
+                for (Button button : buttons) button.visible = false;
+                screen.render(graphics, bounds.getX() + 50, bounds.getY() + 43, event.getPartialTick());
+            } finally {
+                capturingPreview = false;
+                for (int i = 0; i < buttons.size(); i++) buttons.get(i).visible = visible.get(i);
+            }
+        });
+        graphics.pose().pushPose();
+        graphics.pose().translate(0, 0, 500);
+        if (progress < 1) {
+            int opacity = Math.max(4, Math.round((1 - progress) * 255)) << 24;
+            int center = bounds.getX() + bounds.getWidth() / 2;
+            int titleY = Math.max(2, bounds.getY() - 13);
+            if (titleY >= 16) SelectionText.centered(graphics, font, Component.translatable("screen.kingdomsheritage.kit"), center, titleY - 12, opacity | 0xffffff);
+            var title = DefinitionJson.component(model.choices().get(model.index()), "title").copy();
+            title.append(" (" + (model.index() + 1) + "/" + model.choices().size() + ")");
+            SelectionText.centered(graphics, font, font.plainSubstrByWidth(title.getString(), Math.min(screen.width - 24, bounds.getWidth() + 60)),
+                    center, titleY, opacity | 0xffffff);
+        }
+        float alpha = Mth.clamp((progress - 0.3F) / 0.7F, 0, 1);
+        if (alpha > 0) {
+            int textX = confirmationLeft(screen) + Math.round((1 - progress) * 12);
+            int textY = (screen.height - confirmationTextHeight(screen) - 64) / 2;
+            int opacity = Math.max(4, Math.round(alpha * 255)) << 24;
+            for (var line : font.split(Component.translatable("screen.kingdomsheritage.confirm_choice"), confirmationTextWidth(screen))) {
+                SelectionText.draw(graphics, font, line, textX, textY, opacity | 0xffffff);
+                textY += font.lineHeight;
+            }
+            textY += 6;
+            var names = font.split(DefinitionJson.component(model.choices().get(model.index()), "title"), confirmationTextWidth(screen));
+            for (var line : names.subList(0, Math.min(2, names.size()))) {
+                SelectionText.draw(graphics, font, line, textX, textY, opacity | 0xf2cd83);
+                textY += font.lineHeight;
+            }
+        }
+        confirm.render(graphics, event.getMouseX(), event.getMouseY(), event.getPartialTick());
+        back.render(graphics, event.getMouseX(), event.getMouseY(), event.getPartialTick());
+        disconnect.render(graphics, event.getMouseX(), event.getMouseY(), event.getPartialTick());
+        if (!model.error().getString().isEmpty()) {
+            var lines = font.split(model.error(), screen.width - 20);
+            for (int i = 0; i < Math.min(2, lines.size()); i++) {
+                SelectionText.centered(graphics, font, lines.get(i), screen.width / 2, screen.height - 51 + i * font.lineHeight, 0xffaaaa);
+            }
+        }
+        boolean keyboard = Minecraft.getInstance().getLastInputType().isKeyboard();
+        if (disconnect.isHovered() || keyboard && disconnect.isFocused()) {
+            graphics.renderTooltip(font, disconnect.getMessage(), disconnect.isHovered() ? event.getMouseX() : disconnect.getX() + disconnect.getWidth() / 2,
+                    disconnect.isHovered() ? event.getMouseY() : disconnect.getY() + disconnect.getHeight());
+        }
+        if (confirm.isHovered() || keyboard && confirm.isFocused()) {
+            var message = model.policyHint();
+            graphics.renderTooltip(font, font.split(message, Math.min(300, screen.width - 20)),
+                    confirm.isHovered() ? event.getMouseX() : confirm.getX() + confirm.getWidth() / 2,
+                    confirm.isHovered() ? event.getMouseY() : confirm.getY() + confirm.getHeight());
+        }
+        graphics.flush();
+        graphics.pose().popPose();
+    }
+
+    private static void render(ScreenEvent.Render.Post event) {
+        KitSelectionView view = current();
+        if (view == null || !isInventory(event.getScreen()) || view.confirming || view.frameConfirmation > 0) return;
+        var graphics = event.getGuiGraphics();
+        Screen screen = event.getScreen();
+        var font = Minecraft.getInstance().font;
+        int center = view.bounds.getX() + view.bounds.getWidth() / 2;
+        int titleY = Math.max(2, view.bounds.getY() - 13);
+        graphics.pose().pushPose();
+        graphics.pose().translate(0, 0, 500);
+        if (titleY >= 16) SelectionText.centered(graphics, font, Component.translatable("screen.kingdomsheritage.kit"), center, titleY - 12, 0xffffff);
+        JsonObject choice = view.model.choices().get(view.model.index());
+        var title = DefinitionJson.component(choice, "title").copy();
+        title.append(" (" + (view.model.index() + 1) + "/" + view.model.choices().size() + ")");
+        SelectionText.centered(graphics, font, font.plainSubstrByWidth(title.getString(), Math.min(screen.width - 24, view.bounds.getWidth() + 60)), center, titleY, 0xffffff);
+        boolean hasError = !view.model.problem().getString().isEmpty() || !view.model.error().getString().isEmpty();
+        Component detail = !view.model.problem().getString().isEmpty() ? view.model.problem()
+                : !view.model.error().getString().isEmpty()
+                ? view.model.error()
+                : DefinitionJson.component(choice, "description");
+        String description = detail.getString();
+        var lines = font.split(Component.literal(description), screen.width - 16);
+        boolean showDescription = view.descriptionY + font.lineHeight < screen.height;
+        if (showDescription && !lines.isEmpty()) SelectionText.centered(graphics, font, lines.getFirst(), center,
+                view.descriptionY, hasError ? 0xffffaaaa : 0xffcccccc);
+        boolean overTitle = event.getMouseY() >= titleY && event.getMouseY() < titleY + font.lineHeight;
+        boolean overDescription = showDescription && event.getMouseY() >= view.descriptionY
+                && event.getMouseY() < view.descriptionY + font.lineHeight;
+        if ((overTitle || overDescription) && !description.isEmpty()) {
+            graphics.renderTooltip(font, font.split(Component.literal(description), Math.min(300, screen.width - 20)),
+                    event.getMouseX(), event.getMouseY());
+        }
+        graphics.pose().popPose();
+    }
+
+    private static void hideCrafting(net.neoforged.neoforge.client.event.ContainerScreenEvent.Render.Foreground event) {
+        if (current() == null || !isInventory(event.getContainerScreen())
+                || event.getContainerScreen().getClass().getName().startsWith("io.wispforest.accessories.")) return;
+        boolean crafting = event.getContainerScreen().getMenu().slots.stream().anyMatch(slot ->
+                slot.container instanceof net.minecraft.world.inventory.CraftingContainer
+                        || slot.container instanceof net.minecraft.world.inventory.ResultContainer);
+        if (crafting) event.getGuiGraphics().fill(95, 4, 173, 78, 0xffc6c6c6);
+    }
+
+    private static void mouse(ScreenEvent.MouseButtonPressed.Pre event) {
+        if (SelectionTransition.active()) return;
+        if (current() == null || !isInventory(event.getScreen())) return;
+        KitSelectionView view = current();
+        if (view.confirming || view.frameConfirmation > 0) {
+            boolean overControl = List.of(view.confirm, view.back, view.disconnect).stream().anyMatch(button ->
+                    button.active && button.visible && button.isMouseOver(event.getMouseX(), event.getMouseY()));
+            if (!overControl || event.getButton() != 0) event.setCanceled(true);
+            return;
+        }
+        boolean overControl = event.getScreen().children().stream().anyMatch(child ->
+                child instanceof AbstractWidget widget && widget.active && widget.visible
+                        && widget.isMouseOver(event.getMouseX(), event.getMouseY()));
+        if (!overControl && net.neoforged.fml.ModList.get().isLoaded("accessories")) {
+            overControl = AccessoriesControls.isControl(event.getScreen(), event.getMouseX(), event.getMouseY());
+        }
+        if (!overControl || event.getButton() != 0) event.setCanceled(true);
+    }
+
+    private static void key(ScreenEvent.KeyPressed.Pre event) {
+        if (SelectionTransition.active()) return;
+        if (current() == null || !isInventory(event.getScreen())) return;
+        int key = event.getKeyCode();
+        if (key == GLFW.GLFW_KEY_ESCAPE || Minecraft.getInstance().options.keyInventory.matches(key, event.getScanCode())) {
+            if (!current().model.submitted()) {
+                SelectionSounds.CLICK.play();
+                current().back();
+            }
+            event.setCanceled(true);
+        } else if (current().confirming || current().frameConfirmation > 0) {
+            KitSelectionView view = current();
+            if (view.confirming && view.frameConfirmation == 1) {
+                var buttons = List.of(view.confirm, view.back, view.disconnect);
+                if (key == GLFW.GLFW_KEY_TAB || key == GLFW.GLFW_KEY_LEFT || key == GLFW.GLFW_KEY_RIGHT
+                        || key == GLFW.GLFW_KEY_UP || key == GLFW.GLFW_KEY_DOWN) {
+                    int direction = key == GLFW.GLFW_KEY_LEFT || key == GLFW.GLFW_KEY_UP
+                            || key == GLFW.GLFW_KEY_TAB && (event.getModifiers() & GLFW.GLFW_MOD_SHIFT) != 0 ? -1 : 1;
+                    int current = buttons.indexOf(event.getScreen().getFocused());
+                    event.getScreen().setFocused(buttons.get(Math.floorMod(current + direction, buttons.size())));
+                } else if (key == GLFW.GLFW_KEY_ENTER || key == GLFW.GLFW_KEY_SPACE) {
+                    for (Button button : buttons) if (event.getScreen().getFocused() == button && button.active) {
+                        button.keyPressed(key, event.getScanCode(), event.getModifiers());
+                        break;
+                    }
+                }
+            }
+            event.setCanceled(true);
+        } else if (key != GLFW.GLFW_KEY_TAB && key != GLFW.GLFW_KEY_ENTER && key != GLFW.GLFW_KEY_SPACE
+                && key != GLFW.GLFW_KEY_LEFT && key != GLFW.GLFW_KEY_RIGHT && key != GLFW.GLFW_KEY_UP && key != GLFW.GLFW_KEY_DOWN) {
+            event.setCanceled(true);
+        }
+    }
+}

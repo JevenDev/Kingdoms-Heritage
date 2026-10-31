@@ -58,7 +58,7 @@ public final class SpawnSelectScreen extends Screen {
 
     void retry() {
         submitted = false;
-        updateNext();
+        if (next != null) updateNext();
     }
 
     String selectedId() { return selected == null ? null : selected.get("id").getAsString(); }

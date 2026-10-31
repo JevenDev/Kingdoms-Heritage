@@ -53,49 +53,51 @@ public final class ClientSelection {
 
     private static void receive(String json) {
         JsonObject next = JsonParser.parseString(json).getAsJsonObject();
-        Minecraft minecraft = Minecraft.getInstance();
-        if (next.has("progress")) {
-            if (minecraft.screen instanceof DeathScreen || minecraft.player != null && !minecraft.player.isAlive()) return;
-            progress = next.get("progress").getAsString();
-            if (progress.equals("retry")) {
-                SelectionSounds.ERROR.play();
-                if (finalReview != null) finalReview.retry();
-                else if (kits != null) kits.retry();
-                else if (selection != null) selection.retry();
-                progress = "";
-                SelectionTransition.reveal();
-            }
-            return;
-        }
-        if (next.has("review")) {
-            var review = next.getAsJsonObject("review");
-            if (minecraft.screen instanceof DeathScreen || minecraft.player == null || !minecraft.player.isAlive() || catalog == null || review.get("revision").getAsLong() != catalog.get("revision").getAsLong()) {
-                net.neoforged.neoforge.network.PacketDistributor.sendToServer(new HeritageNetwork.ReviewDecision(
-                        java.util.UUID.fromString(review.get("token").getAsString()), false));
-                return;
-            }
+        if (next.has("progress")) receiveProgress(next.get("progress").getAsString());
+        else if (next.has("review")) receiveReview(next.getAsJsonObject("review"));
+        else receiveCatalog(next);
+    }
+
+    private static void receiveProgress(String value) {
+        if (interrupted()) return;
+        progress = value;
+        if (progress.equals("retry")) {
+            SelectionSounds.ERROR.play();
+            if (finalReview != null) finalReview.retry();
+            else if (kits != null) kits.retry();
+            else if (selection != null) selection.retry();
             progress = "";
-            if (kits != null) kits.close();
-            finalReview = new FinalConfirmationScreen(catalog, review);
-            minecraft.setScreen(finalReview);
             SelectionTransition.reveal();
+        }
+    }
+
+    private static void receiveReview(JsonObject review) {
+        Minecraft minecraft = Minecraft.getInstance();
+        if (interrupted() || minecraft.player == null || catalog == null || review.get("revision").getAsLong() != catalog.get("revision").getAsLong()) {
+            net.neoforged.neoforge.network.PacketDistributor.sendToServer(new HeritageNetwork.ReviewDecision(
+                    java.util.UUID.fromString(review.get("token").getAsString()), false));
             return;
         }
+        progress = "";
+        if (kits != null) kits.close();
+        finalReview = new FinalConfirmationScreen(catalog, review);
+        minecraft.setScreen(finalReview);
+        SelectionTransition.reveal();
+    }
+
+    private static void receiveCatalog(JsonObject next) {
+        Minecraft minecraft = Minecraft.getInstance();
         finalReview = null;
         SpawnIntroOverlay.clear();
         boolean confirmed = progress.equals("applying");
         progress = "";
         String spawnId = kits != null ? kits.spawnId() : selection == null ? null : selection.selectedId();
         String kitId = kits == null ? null : kits.kitId();
-        if (kits != null) {
-            kits.close();
-            if (minecraft.player != null) minecraft.player.closeContainer();
-        }
-        kits = null;
+        if (kits != null && minecraft.player != null) minecraft.player.closeContainer();
+        closeKits();
         if (!next.has("spawns")) {
             if (confirmed) SelectionSounds.CONFIRMATION.play();
-            catalog = null;
-            selection = null;
+            clearSelection();
             if (minecraft.player != null) minecraft.player.closeContainer();
             minecraft.setScreen(null);
             if (next.has("intro")) SpawnIntroOverlay.start(next);
@@ -108,7 +110,7 @@ public final class ClientSelection {
         catalog = next;
         selection = new SpawnSelectScreen(catalog);
         selection.restoreSelection(spawnId);
-        if (minecraft.level != null && minecraft.player != null && minecraft.player.isAlive() && !(minecraft.screen instanceof DeathScreen)) {
+        if (minecraft.level != null && minecraft.player != null && !interrupted()) {
             minecraft.setScreen(selection);
             if (kitId != null && selection.selectedId() != null && allowedKits(catalog, spawnId).size() > 1) {
                 kits = new KitSelection(catalog, spawnId);
@@ -195,8 +197,7 @@ public final class ClientSelection {
 
     static void back() {
         SelectionTransition.fadeOut(() -> {
-            if (kits != null) kits.close();
-            kits = null;
+            closeKits();
             Minecraft minecraft = Minecraft.getInstance();
             minecraft.player.closeContainer();
             minecraft.setScreen(selection);
@@ -210,9 +211,8 @@ public final class ClientSelection {
         SelectionMusic.tick(catalog != null && !progress.equals("applying"), finalReview != null);
         Minecraft minecraft = Minecraft.getInstance();
         if (catalog == null || minecraft.level == null || minecraft.player == null) return;
-        if (!minecraft.player.isAlive() || minecraft.screen instanceof DeathScreen) {
-            if (kits != null) kits.close();
-            kits = null;
+        if (interrupted()) {
+            closeKits();
             finalReview = null;
             selection.retry();
             progress = "";
@@ -240,6 +240,24 @@ public final class ClientSelection {
         input.up = input.down = input.left = input.right = false;
     }
 
+    private static boolean interrupted() {
+        Minecraft minecraft = Minecraft.getInstance();
+        return minecraft.screen instanceof DeathScreen || minecraft.player != null && !minecraft.player.isAlive();
+    }
+
+    private static void closeKits() {
+        if (kits != null) kits.close();
+        kits = null;
+    }
+
+    private static void clearSelection() {
+        closeKits();
+        catalog = null;
+        selection = null;
+        finalReview = null;
+        progress = "";
+    }
+
     private static void login(ClientPlayerNetworkEvent.LoggingIn event) {
         if (!NetworkRegistry.hasChannel(event.getConnection(), ConnectionProtocol.PLAY, HeritageNetwork.JoinState.TYPE.id())
                 && SelectionTransition.joining()) {
@@ -252,12 +270,7 @@ public final class ClientSelection {
         // starting an integrated server also fires a logout without a connection
         if (event.getConnection() != null || !SelectionTransition.joining()) SelectionTransition.clear();
         SpawnIntroOverlay.clear();
-        if (kits != null) kits.close();
-        kits = null;
-        catalog = null;
-        selection = null;
-        finalReview = null;
-        progress = "";
+        clearSelection();
     }
 
     static void disconnect() {
@@ -265,11 +278,7 @@ public final class ClientSelection {
         SelectionTransition.clear();
         SpawnIntroOverlay.clear();
         Minecraft minecraft = Minecraft.getInstance();
-        if (kits != null) kits.close();
-        kits = null;
-        catalog = null;
-        selection = null;
-        finalReview = null;
+        clearSelection();
         if (minecraft.level != null) minecraft.level.disconnect();
         if (minecraft.isLocalServer()) minecraft.disconnect(new GenericMessageScreen(Component.translatable("menu.savingLevel")));
         else minecraft.disconnect();

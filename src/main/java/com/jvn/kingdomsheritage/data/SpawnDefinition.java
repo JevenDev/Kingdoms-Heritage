@@ -25,38 +25,6 @@ public record SpawnDefinition(ResourceLocation id, String title, String descript
         }
     }
 
-    public SpawnDefinition(ResourceLocation id, String title, String description, ResourceLocation image,
-                           int order, Kind kind, ResourceLocation dimension, ResourceLocation target,
-                           int x, int y, int z, boolean targetTag, ResourceLocation piece,
-                           List<String> kits, int searchRadius, int randomRadius, String titleKey, String descriptionKey,
-                           IntroDefinition intro, List<SpawnDefinition> pool) {
-        this(id, title, description, image, order, kind, dimension, target, x, y, z, targetTag, piece,
-                kits, searchRadius, randomRadius, titleKey, descriptionKey, intro, pool, "", "");
-    }
-
-    public SpawnDefinition(ResourceLocation id, String title, String description, ResourceLocation image,
-                           int order, Kind kind, ResourceLocation dimension, ResourceLocation target,
-                           int x, int y, int z, boolean targetTag, ResourceLocation piece,
-                           List<String> kits, int searchRadius, int randomRadius, String titleKey, String descriptionKey, IntroDefinition intro) {
-        this(id, title, description, image, order, kind, dimension, target, x, y, z, targetTag, piece,
-                kits, searchRadius, randomRadius, titleKey, descriptionKey, intro, List.of());
-    }
-
-    public SpawnDefinition(ResourceLocation id, String title, String description, ResourceLocation image,
-                           int order, Kind kind, ResourceLocation dimension, ResourceLocation target,
-                           int x, int y, int z, boolean targetTag, ResourceLocation piece) {
-        this(id, title, description, image, order, kind, dimension, target, x, y, z, targetTag, piece,
-                List.of(), 0, 0, "", "", null);
-    }
-
-    public SpawnDefinition(ResourceLocation id, String title, String description, ResourceLocation image,
-                           int order, Kind kind, ResourceLocation dimension, ResourceLocation target,
-                           int x, int y, int z, boolean targetTag, ResourceLocation piece,
-                           List<String> kits, int searchRadius, int randomRadius, String titleKey, String descriptionKey) {
-        this(id, title, description, image, order, kind, dimension, target, x, y, z, targetTag, piece,
-                kits, searchRadius, randomRadius, titleKey, descriptionKey, null);
-    }
-
     public static SpawnDefinition parse(ResourceLocation id, JsonObject json) {
         String title = DefinitionJson.text(json, "title", 120, false);
         String description = DefinitionJson.text(json, "description", 4000, true);

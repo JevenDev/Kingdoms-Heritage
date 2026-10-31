@@ -64,60 +64,6 @@ public record IntroDefinition(Component text, Component subtitle, boolean title,
         }
     }
 
-    public IntroDefinition(Component text, Component subtitle, boolean title, Animation animation,
-                           Control control, boolean blip, int revealTicks, int holdTicks,
-                           int fadeOutTicks, int fadeFromBlackTicks) {
-        this(text, subtitle, title, animation, control, blip, revealTicks, holdTicks, fadeOutTicks,
-                fadeFromBlackTicks, false, BarStyle.RANDOM, 40, Position.MID_CENTER, Position.MID_CENTER);
-    }
-
-    public IntroDefinition(Component text, Component subtitle, boolean title, Animation animation,
-                           Control control, boolean blip, int revealTicks, int holdTicks,
-                           int fadeOutTicks, int fadeFromBlackTicks, boolean cinematicBars, BarStyle barStyle,
-                           int barTransitionTicks, Position titlePosition, Position subtitlePosition) {
-        this(text, subtitle, title, animation, control, blip, revealTicks, holdTicks, fadeOutTicks,
-                fadeFromBlackTicks, cinematicBars, barStyle, barTransitionTicks, titlePosition, subtitlePosition, 60);
-    }
-
-    public IntroDefinition(Component text, Component subtitle, boolean title, Animation animation,
-                           Control control, boolean blip, int revealTicks, int holdTicks,
-                           int fadeOutTicks, int fadeFromBlackTicks, boolean cinematicBars, BarStyle barStyle,
-                           int barTransitionTicks, Position titlePosition, Position subtitlePosition, int blackHoldTicks) {
-        this(text, subtitle, title, animation, control, blip, revealTicks, holdTicks, fadeOutTicks,
-                fadeFromBlackTicks, cinematicBars, barStyle, barTransitionTicks, titlePosition, subtitlePosition, blackHoldTicks, true);
-    }
-
-    public IntroDefinition(Component text, Component subtitle, boolean title, Animation animation,
-                           Control control, boolean blip, int revealTicks, int holdTicks,
-                           int fadeOutTicks, int fadeFromBlackTicks, boolean cinematicBars, BarStyle barStyle,
-                           int barTransitionTicks, Position titlePosition, Position subtitlePosition, int blackHoldTicks,
-                           boolean outline) {
-        this(text, subtitle, title, animation, control, blip, revealTicks, holdTicks, fadeOutTicks,
-                fadeFromBlackTicks, cinematicBars, barStyle, barTransitionTicks, titlePosition, subtitlePosition,
-                blackHoldTicks, outline, false);
-    }
-
-    public IntroDefinition(Component text, Component subtitle, boolean title, Animation animation,
-                           Control control, boolean blip, int revealTicks, int holdTicks,
-                           int fadeOutTicks, int fadeFromBlackTicks, boolean cinematicBars, BarStyle barStyle,
-                           int barTransitionTicks, Position titlePosition, Position subtitlePosition, int blackHoldTicks,
-                           boolean outline, boolean hideHudDuringBars) {
-        this(text, subtitle, title, animation, control, blip, revealTicks, holdTicks, fadeOutTicks,
-                fadeFromBlackTicks, cinematicBars, barStyle, barTransitionTicks, titlePosition, subtitlePosition,
-                blackHoldTicks, outline, hideHudDuringBars, null, null);
-    }
-
-    public IntroDefinition(Component text, Component subtitle, boolean title, Animation animation,
-                           Control control, boolean blip, int revealTicks, int holdTicks,
-                           int fadeOutTicks, int fadeFromBlackTicks, boolean cinematicBars, BarStyle barStyle,
-                           int barTransitionTicks, Position titlePosition, Position subtitlePosition, int blackHoldTicks,
-                           boolean outline, boolean hideHudDuringBars,
-                           Coordinates titleCoordinates, Coordinates subtitleCoordinates) {
-        this(text, subtitle, title, animation, control, blip, revealTicks, holdTicks, fadeOutTicks,
-                fadeFromBlackTicks, cinematicBars, barStyle, barTransitionTicks, titlePosition, subtitlePosition,
-                blackHoldTicks, outline, hideHudDuringBars, titleCoordinates, subtitleCoordinates, false);
-    }
-
     public static IntroDefinition parse(JsonObject json) {
         Component text = component(json, "text", false);
         Component subtitle = component(json, "subtitle", true);
