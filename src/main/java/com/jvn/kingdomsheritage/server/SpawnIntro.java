@@ -25,8 +25,14 @@ public final class SpawnIntro {
     private SpawnIntro() {}
 
     static JsonObject prepare(SpawnDefinition spawn, SpawnResolver.Destination destination) {
-        if (spawn.intro() == null) return new JsonObject();
         JsonObject message = new JsonObject();
+        JsonObject arrival = new JsonObject();
+        arrival.addProperty("dimension", destination.level().dimension().location().toString());
+        arrival.addProperty("x", destination.position().getX());
+        arrival.addProperty("y", destination.position().getY());
+        arrival.addProperty("z", destination.position().getZ());
+        message.add("arrival", arrival);
+        if (spawn.intro() == null) return message;
         message.add("intro", spawn.intro().json(destination.level().registryAccess()));
         message.addProperty("token", UUID.randomUUID().toString());
         message.add("locations", locations(spawn, destination));

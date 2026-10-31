@@ -1,5 +1,6 @@
 package com.jvn.kingdomsheritage.client;
 
+import com.google.gson.JsonObject;
 import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -12,8 +13,10 @@ import net.minecraft.client.gui.screens.LevelLoadingScreen;
 import net.minecraft.client.gui.screens.ProgressScreen;
 import net.minecraft.client.gui.screens.ReceivingLevelScreen;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.contents.TranslatableContents;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 import net.neoforged.bus.api.EventPriority;
 import net.neoforged.bus.api.ICancellableEvent;
@@ -29,6 +32,8 @@ final class SelectionTransition {
     private static float from;
     private static Runnable onBlack;
     private static Button disconnect;
+    private static ResourceLocation dimension;
+    private static BlockPos destination;
 
     private SelectionTransition() {}
 
@@ -68,10 +73,41 @@ final class SelectionTransition {
         started = Util.getMillis();
     }
 
-    static void arrive() {
-        if (!active()) return;
+    static void arrive(JsonObject message) {
+        if (!active() && !message.has("arrival")) return;
+        if (message.has("arrival")) {
+            var arrival = message.getAsJsonObject("arrival");
+            dimension = ResourceLocation.parse(arrival.get("dimension").getAsString());
+            destination = new BlockPos(arrival.get("x").getAsInt(), arrival.get("y").getAsInt(), arrival.get("z").getAsInt());
+        }
         phase = Phase.ARRIVING;
+        from = 1;
+        started = Util.getMillis();
         onBlack = null;
+        Minecraft.getInstance().setScreen(new ArrivalScreen());
+    }
+
+    static boolean terrainReady() {
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft.level == null || minecraft.player == null) return false;
+        BlockPos position = minecraft.player.blockPosition();
+        if (dimension != null && (!minecraft.level.dimension().location().equals(dimension)
+                || !position.closerThan(destination, 4))) return false;
+        for (int x = -1; x <= 1; x++) {
+            for (int z = -1; z <= 1; z++) {
+                if (!minecraft.level.hasChunkAt(position.offset(x * 16, 0, z * 16))) return false;
+            }
+        }
+        return minecraft.levelRenderer.isSectionCompiled(position)
+                && minecraft.levelRenderer.isSectionCompiled(position.below());
+    }
+
+    static final class ArrivalScreen extends Screen {
+        private ArrivalScreen() { super(Component.translatable("screen.kingdomsheritage.preparing_terrain")); }
+
+        @Override public boolean isPauseScreen() { return false; }
+        @Override public boolean shouldCloseOnEsc() { return false; }
+        @Override public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {}
     }
 
     static void introReady() {
@@ -85,10 +121,9 @@ final class SelectionTransition {
             clear();
             return;
         }
-        if (phase == Phase.ARRIVING && !SpawnIntroOverlay.active() && minecraft.level != null && minecraft.player != null
-                && !(minecraft.screen instanceof ReceivingLevelScreen)
-                && minecraft.level.hasChunkAt(minecraft.player.blockPosition())) {
-            reveal();
+        if (phase == Phase.ARRIVING && terrainReady()) {
+            if (minecraft.screen instanceof ArrivalScreen) minecraft.setScreen(null);
+            if (!SpawnIntroOverlay.active()) reveal();
         }
         if (Util.getMillis() - started < DURATION_MILLIS) return;
         if (phase == Phase.REVEALING) {
@@ -106,6 +141,8 @@ final class SelectionTransition {
         from = 0;
         onBlack = null;
         disconnect = null;
+        dimension = null;
+        destination = null;
     }
 
     private static float opacity(long now) {
@@ -115,7 +152,7 @@ final class SelectionTransition {
     }
 
     private static boolean waiting() {
-        return phase == Phase.WAITING
+        return (phase == Phase.WAITING || phase == Phase.ARRIVING)
                 && Util.getMillis() - started >= DURATION_MILLIS + 400;
     }
 
@@ -130,8 +167,9 @@ final class SelectionTransition {
         graphics.flush();
         if (alpha >= 4 && (joining() || phase == Phase.ARRIVING || waiting())) {
             LoadingIndicator.render(graphics, graphics.guiWidth() / 2, graphics.guiHeight() / 2 - 8, now, alpha);
-            SelectionText.centered(graphics, Minecraft.getInstance().font, joining() || phase == Phase.ARRIVING
-                            ? Component.translatable("screen.kingdomsheritage.loading") : ClientSelection.progress(),
+            SelectionText.centered(graphics, Minecraft.getInstance().font, phase == Phase.ARRIVING
+                            ? Component.translatable("screen.kingdomsheritage.preparing_terrain")
+                            : joining() ? Component.translatable("screen.kingdomsheritage.loading") : ClientSelection.progress(),
                     graphics.guiWidth() / 2, graphics.guiHeight() / 2 + 16, alpha << 24 | 0xffffff);
         }
         if (waiting()) {

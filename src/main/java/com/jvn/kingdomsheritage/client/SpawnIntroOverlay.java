@@ -94,7 +94,7 @@ public final class SpawnIntroOverlay {
             return;
         }
         if (minecraft.isPaused() || minecraft.screen instanceof ReceivingLevelScreen
-                || !minecraft.level.hasChunkAt(minecraft.player.blockPosition())) return;
+                || !ready && !SelectionTransition.terrainReady()) return;
         ready = true;
         SelectionTransition.introReady();
         if (++age >= intro.durationTicks()) {
@@ -208,7 +208,8 @@ public final class SpawnIntroOverlay {
         if (event.getNewScreen() instanceof DeathScreen || event.getNewScreen() instanceof DisconnectedScreen) {
             finish();
         } else if (Minecraft.getInstance().screen == null && event.getNewScreen() != null
-                && !(event.getNewScreen() instanceof PauseScreen) && !(event.getNewScreen() instanceof ReceivingLevelScreen)) {
+                && !(event.getNewScreen() instanceof PauseScreen) && !(event.getNewScreen() instanceof ReceivingLevelScreen)
+                && !(event.getNewScreen() instanceof SelectionTransition.ArrivalScreen)) {
             event.setCanceled(true);
             if (event.getNewScreen() instanceof net.minecraft.client.gui.screens.inventory.AbstractContainerScreen<?>
                     && Minecraft.getInstance().player != null) Minecraft.getInstance().player.closeContainer();

@@ -106,7 +106,7 @@ public final class ClientSelection {
             if (minecraft.player != null) minecraft.player.closeContainer();
             minecraft.setScreen(null);
             if (next.has("intro")) SpawnIntroOverlay.start(next);
-            SelectionTransition.arrive();
+            SelectionTransition.arrive(next);
             return;
         }
         if (!SelectionTransition.joining()) SelectionTransition.reveal();
