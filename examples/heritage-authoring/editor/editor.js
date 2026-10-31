@@ -54,7 +54,7 @@ function activateIntro(id) {
 }
 function openIntro(raw=JSON.stringify({intro:{text:'A new journey begins.',subtitle:''}},null,2),name='My intro') {
   let parsed=P.readJson(JSON.stringify({intro:{text:'A new journey begins.',subtitle:''}})),error=null;
-  try{parsed=P.readJson(raw);}catch(failure){error={message:failure.message};}
+  try{parsed=P.readJson(raw);}catch(failure){error={message:failure.message,field:failure.field,path:failure.path};}
   const state={
     name,source:raw,document:parsed.document,validation:{error,fromJson:!!error},
     values:fields.map(field=>{const value=configValue(parsed.config,field.dataset.field);return field.type==='checkbox'?value:P.componentText(value)||String(value);}),
@@ -84,7 +84,7 @@ function updateHistoryButtons() {
 function historySnapshot() {
   return {
     name:$('intro-name').value,source:$('json').value,document:jsonState.document,
-    validation:{...currentValidation,error:currentValidation.error?{message:currentValidation.error.message,field:currentValidation.error.field}:null},
+    validation:{...currentValidation,error:currentValidation.error?{message:currentValidation.error.message,field:currentValidation.error.field,path:currentValidation.error.path}:null},
     values:fields.map(field=>field.type==='checkbox'?field.checked:field.value),
     selection:[$('json').selectionStart,$('json').selectionEnd],
     preview:Object.fromEntries(previewFields.map(id=>[id,$(id).type==='checkbox'?$(id).checked:$(id).value]))
@@ -114,7 +114,7 @@ function restoreHistory(direction) {
   let restoredValidation=snapshot.validation,recovered=false;
   if(restoredValidation?.error&&restoredValidation.fromJson) {
     try{jsonState=P.readJson(snapshot.source);config=jsonState.config;restoredValidation={error:null,fromJson:false};recovered=true;}
-    catch(error){restoredValidation={error:{message:error.message,field:error.field},fromJson:true};}
+    catch(error){restoredValidation={error:{message:error.message,field:error.field,path:error.path},fromJson:true};}
   }
   $('intro-name').value=typeof snapshot.name==='string'?snapshot.name:'Untitled intro';
   $('json').value=snapshot.source;
@@ -263,7 +263,7 @@ function rebuild() {
 function validation(error=null,fromJson=false) {
   currentValidation={error,fromJson};
   for(const field of fields) {
-    const invalid=!fromJson&&error?.field===field.dataset.field;
+    const invalid=error?.field===field.dataset.field;
     field.setAttribute('aria-invalid',String(invalid));
     const id='field-error-'+field.dataset.field;
     let message=document.getElementById(id);
@@ -272,7 +272,7 @@ function validation(error=null,fromJson=false) {
     if(!message){message=document.createElement('p');message.id=id;message.className='field-error';label.append(message);}
     message.textContent=invalid?error.message:'';message.hidden=!invalid;
     field.setAttribute('aria-describedby',id);
-    if(invalid) {
+    if(invalid&&!fromJson) {
       const panel=field.closest('[role=tabpanel]');
       if(panel)document.querySelector('[aria-controls="'+panel.id+'"]')?.click();
     }
@@ -282,16 +282,17 @@ function validation(error=null,fromJson=false) {
   valid=!error;
   syncCode();
   $('json-state').textContent=error?'Check '+(fromJson?'JSON':'options'):'JSON ready';
-  $('text-tab').disabled=!!error&&fromJson;
-  if(error&&fromJson&&$('text-tab').getAttribute('aria-selected')==='true')$('json-tab').click();
+  $('text-tab').disabled=false;
   $('error').hidden=valid;
-  $('error').textContent=error?error.message+' Showing the last valid preview.':'';
+  const location=code.setError(error&&fromJson?error:null);
+  $('error').textContent=error?(location?'Line '+location.line+', column '+location.column+': ':'')+error.message+' Showing the last valid preview.':'';
   $('json').setAttribute('aria-invalid',String(!!error&&fromJson));
   $('restore-json').hidden=valid;
   $('copy-status').textContent='';
   $('download-intro').disabled=!valid;
-  for(const id of ['copy','format-json','play','restart']) $(id).disabled=!valid;
-  for(const control of [...fields,$('title-custom'),$('subtitle-custom'),...document.querySelectorAll('.text-editor button, .text-editor select')]) control.disabled=!!error&&fromJson;
+  $('copy').disabled=false;$('format-json').disabled=!!error&&fromJson&&error.message.startsWith('Invalid JSON:');
+  for(const id of ['play','restart'])$(id).disabled=!font.size;
+  for(const control of [...fields,$('title-custom'),$('subtitle-custom'),...document.querySelectorAll('.text-editor button, .text-editor select')]) control.disabled=false;
 }
 function refreshPreview() {
   rebuild();
@@ -314,9 +315,12 @@ function applyJson(event) {
 }
 function editing(event) {
   pause();
+  const invalidSource=!!currentValidation.error&&currentValidation.fromJson;
+  let sourceUpdated=false;
   try {
-    const changes={};
-    for(const field of fields) {
+    const base=invalidSource?P.readJson($('json').value,{validate:false}):jsonState;
+    const changes={},changedFields=invalidSource?(event?.target?.dataset.field?[event.target]:[]):fields;
+    for(const field of changedFields) {
       if(field.readOnly)continue;
       const [key,part]=field.dataset.field.split('.');
       if(part&&!$(key.replace('_coordinates','')+'-custom').checked)continue;
@@ -327,19 +331,21 @@ function editing(event) {
         value=Number(field.value);
       }
       if(part) {
-        changes[key]??={...config[key]};
+        changes[key]??={...base.config[key]};
         changes[key][part]=value;
-      } else if(value!==config[key]) changes[key]=value;
+      } else if(value!==base.config[key]) changes[key]=value;
     }
-    for(const kind of ['title','subtitle'])if(!$(kind+'-custom').checked)changes[kind+'_coordinates']=undefined;
-    const next=P.updateJson(jsonState,changes);
+    for(const kind of ['title','subtitle'])if(!$(kind+'-custom').checked&&(!invalidSource||event?.target?.id===kind+'-custom'))changes[kind+'_coordinates']=undefined;
+    const draft=P.updateJson(base,changes,{validate:false});
+    $('json').value=JSON.stringify(draft.document,null,2);sourceUpdated=true;
+    const next=P.readJson($('json').value);
     jsonState=next;
     config=next.config;
     $('json').value=JSON.stringify(jsonState.document,null,2);
     updateCoordinateControls();
     validation();
     refreshPreview();
-  } catch(error) { validation(error); }
+  } catch(error) { validation(error,invalidSource||sourceUpdated); }
   recordHistory(event);
 }
 function coordinatesFor(kind) {
@@ -352,11 +358,14 @@ function coordinatesFor(kind) {
 }
 function setCoordinates(kind,coordinates) {
   pause();
-  jsonState=P.updateJson(jsonState,{[kind+'_coordinates']:coordinates});
-  config=jsonState.config;
-  $('json').value=JSON.stringify(jsonState.document,null,2);
-  $('preset').value='custom';
-  fillFields();validation();refreshPreview();
+  try {
+    const base=currentValidation.error&&currentValidation.fromJson?P.readJson($('json').value,{validate:false}):jsonState;
+    const draft=P.updateJson(base,{[kind+'_coordinates']:coordinates},{validate:false});
+    $('json').value=JSON.stringify(draft.document,null,2);
+    jsonState=P.readJson($('json').value);config=jsonState.config;
+    $('preset').value='custom';
+    fillFields();validation();refreshPreview();
+  }catch(error){validation(error,true);}
 }
 function selectBlock(kind) {
   pause();
@@ -564,7 +573,7 @@ function frame(now) {
 }
 async function play(restart=false) {
   if(playing&&!restart) {pause();return;}
-  if(!valid) return;
+  if(!font.size)return;
   if(config.blip&&!muted) {
     try {await prepareAudio();$('audio-status').textContent='';}
     catch(error) {$('audio-status').textContent='Preview audio could not load: '+error.message;}
@@ -582,7 +591,7 @@ function wrapSelection(open,close) {
   const a=start===end?0:start,b=start===end?field.value.length:end;
   field.setRangeText(open+field.value.slice(a,b)+close,a,b,'select');
   field.focus();field.setSelectionRange(a+open.length,b+open.length);
-  $('preset').value='custom';editing();
+  $('preset').value='custom';editing({target:field});
 }
 for(const provider of HeritageAssets.providers) {
   const image=new Image();
@@ -660,11 +669,12 @@ setupTabs('data-editor-tab','-panel');
 setupTabs('data-options-tab','-panel');
 $('undo').addEventListener('click',()=>restoreHistory(-1));
 $('redo').addEventListener('click',()=>restoreHistory(1));
-$('format-json').addEventListener('click',()=>{
-  if(!valid) return;
-  $('json').value=JSON.stringify(jsonState.document,null,2);
-  syncCode();
-  recordHistory();
+$('format-json').addEventListener('click',event=>{
+  const source=$('json').value;
+  try{
+    $('json').value=JSON.stringify(JSON.parse(/^\s*"intro"\s*:/.test(source)?'{'+source+'}':source),null,2);
+    applyJson(event);
+  }catch(error){validation(new Error('Invalid JSON: '+error.message),true);}
 });
 $('restore-json').addEventListener('click',()=>{
   $('json').value=JSON.stringify(jsonState.document,null,2);
@@ -678,7 +688,7 @@ $('apply-gradient').addEventListener('click',()=>wrapSelection('<gradient:'+$('c
 document.querySelectorAll('[data-token]').forEach(button=>button.addEventListener('click',()=>{
   if(activeField.readOnly){$('copy-status').textContent='Edit structured text in JSON. Your component has been kept.';return;}
   activeField.setRangeText('<'+button.dataset.token+'>',activeField.selectionStart,activeField.selectionEnd,'end');
-  activeField.focus();editing();
+  activeField.focus();editing({target:activeField});
 }));
 $('preset').addEventListener('change',()=>{
   const value=$('preset').value;if(value==='custom')return;
@@ -695,8 +705,7 @@ $('preset').addEventListener('change',()=>{
   openIntro(JSON.stringify({intro:example},null,2),name);$('preset').value='custom';
 });
 $('copy').addEventListener('click',async()=>{
-  if(!valid) return;
-  const text=JSON.stringify(jsonState.document,null,2);
+  const text=$('json').value;
   try {
     await navigator.clipboard.writeText(text);
     $('copy-status').textContent='';HeritageIcons.copied($('copy'));

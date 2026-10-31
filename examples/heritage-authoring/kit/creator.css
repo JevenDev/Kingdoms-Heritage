@@ -122,3 +122,5 @@
   .kit-preview-column { grid-template-rows: auto 300px; }
   .kit-workspace { gap: 20px; }
 }
+
+.stack-limit-option { margin: 8px 0; }

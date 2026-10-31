@@ -213,27 +213,31 @@ function renderLocation() {
   if(output){$('export-file').value='data/'+state.namespace+'/heritage/spawns/'+entry.path+'.json';previewFile();}
 }
 function previewFile() {
-  const file=output.files.find(entry=>entry.path===$('export-file').value);
+  const file=output.previewFiles.find(entry=>entry.path===$('export-file').value);
   $('copy').disabled=!file;$('copy-status').textContent='';
-  $('export-json').value=file?.content??'';code.sync();$('export-json').scrollTop=0;
+  $('export-json').value=file?.content??'';code.setError(file?output.issues.find(issue=>issue.filePath===file.path):null);$('export-json').scrollTop=0;
   if(!file)$('line-count').textContent='';
 }
 function renderOutput() {
   output=P.build(state,catalog);renderOverview();
-  for(const field of document.querySelectorAll('[data-location-field],[data-destination-field]')) {
-    const issue=output.issues.find(issue=>issue.locationId===state.active&&issue.field===(field.dataset.destinationField??field.dataset.locationField)&&(issue.destination===undefined?!field.hasAttribute('data-destination'):issue.destination===Number(field.dataset.destination)));
+  for(const field of document.querySelectorAll('[data-location-field],[data-destination-field],[data-kit-path],#namespace,#pack-name,#pack-description,#location-id,#kit-mode')) {
+    const property=field.dataset.destinationField??field.dataset.locationField??({'pack-name':'name','pack-description':'description','namespace':'namespace','location-id':'path','kit-mode':'kits'})[field.id]??'path';
+    const location=field.hasAttribute('data-location-field')||field.hasAttribute('data-destination-field')||['location-id','kit-mode'].includes(field.id);
+    const issue=output.issues.find(issue=>issue.field===property&&(field.dataset.kitPath?issue.kitId===field.dataset.kitPath:location?issue.locationId===state.active&&(issue.destination===undefined?!field.hasAttribute('data-destination'):issue.destination===Number(field.dataset.destination)):!issue.locationId&&!issue.kitId));
     field.setAttribute('aria-invalid',String(!!issue));
-    const errorId='location-error-'+(field.dataset.destination??'main')+'-'+(field.dataset.destinationField??field.dataset.locationField);
+    const errorId='validation-error-'+(field.id??'')+'-'+(field.dataset.kitPath??field.dataset.destination??'main')+'-'+property;
     let message=document.getElementById(errorId);
     const label=field.closest('label');
     field.setAttribute('aria-label',[...label.childNodes].filter(node=>node.nodeType===3||node.nodeName==='SPAN').map(node=>node.textContent).join('').trim());
     if(!message){message=element('p',{class:'field-error',id:errorId});label.append(message);}
     message.textContent=issue?.message??'';message.hidden=!issue;
-    field.setAttribute('aria-describedby',(field.dataset.locationField==='target'?'target-help ':'')+message.id);
+    if(issue)for(let parent=field.parentElement;parent;parent=parent.parentElement)if(parent.tagName==='DETAILS')parent.open=true;
+    const help=field.dataset.locationField==='target'?'target-help':field.id==='namespace'?'namespace-help':field.id==='location-id'?'location-id-help':'';
+    field.setAttribute('aria-describedby',(help?help+' ':'')+message.id);
   }
   $('export-pack').disabled=!!output.errors.length;
-  $('export-file').disabled=!!output.errors.length;
-  $('preview-state').textContent=output.errors.length?'Complete the fields to see JSON':'Read-only preview';
+  $('export-file').disabled=!output.previewFiles.length;
+  $('preview-state').textContent=output.errors.length?'Draft preview. Fix the highlighted issues before downloading.':'Read-only preview';
   $('pack-summary').textContent=output.locationCount+' starting location'+(output.locationCount===1?'':'s')+' · '+output.kitCount+' kit'+(output.kitCount===1?'':'s');
   $('export-readiness').textContent=output.errors.length?'A few things need fixing before you download.':'Files checked for Minecraft 1.21.1. Test the installed pack in-game.';
   const errors=$('export-errors');errors.replaceChildren();
@@ -243,10 +247,12 @@ function renderOutput() {
   }
   $('export-warnings').replaceChildren(...output.warnings.map(warning=>element('li',{},warning)));
   const select=$('export-file'),previous=select.value;
-  select.replaceChildren(...output.files.map(file=>option(file.path,file.path)));
+  select.replaceChildren(...output.previewFiles.map(file=>option(file.path,file.path)));
   const current='data/'+state.namespace+'/heritage/spawns/'+active()?.path+'.json';
-  if(output.files.some(file=>file.path===previous))select.value=previous;
-  else if(output.files.some(file=>file.path===current))select.value=current;
+  const problem=output.issues.find(issue=>output.previewFiles.some(file=>file.path===issue.filePath));
+  if(output.previewFiles.some(file=>file.path===previous))select.value=previous;
+  else if(problem)select.value=problem.filePath;
+  else if(output.previewFiles.some(file=>file.path===current))select.value=current;
   previewFile();
 }
 function render() {
@@ -341,7 +347,7 @@ $('pool-destinations').addEventListener('click',event=>{
 $('export-file').addEventListener('change',previewFile);
 $('copy').addEventListener('click',async()=>{
   if($('copy').disabled)return;
-  const file=output.files.find(entry=>entry.path===$('export-file').value);if(!file)return;
+  const file=output.previewFiles.find(entry=>entry.path===$('export-file').value);if(!file)return;
   try{await navigator.clipboard.writeText(file.content);HeritageIcons.copied($('copy'));}
   catch(failure){$('export-json').focus();$('export-json').select();$('copy-status').textContent='Copy the selected JSON with Ctrl+C.';}
 });

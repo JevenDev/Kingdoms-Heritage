@@ -14,7 +14,7 @@ const fields=['title','subtitle','description','title_key','subtitle_key','descr
 const destinationFields=['type','dimension','target','piece','x','y','z','search_radius','random_radius','intro'];
 const slug=value=>String(value).toLowerCase().replace(/[^a-z0-9_-]+/g,'_').replace(/^_+|_+$/g,'')||'untitled';
 function fileId(value,label) {
-  if(typeof value!=='string'||!value||!/^[a-z0-9/._-]+$/.test(value)||value.split('/').some(part=>!part||/^\.+$/.test(part)))throw new Error(label+' must use lowercase letters, numbers, _, - or /, without empty or dot-only path segments.');
+  if(typeof value!=='string'||!value||!/^[a-z0-9/._-]+$/.test(value)||value.split('/').some(part=>!part||/^\.+$/.test(part)))throw fieldError('path',label+' must use lowercase letters, numbers, _, - or /, without empty or dot-only path segments.');
   return value;
 }
 function resource(value,label,tags=false) {
@@ -36,12 +36,13 @@ function drafts(raw,kind,validators) {
     if(!entry||typeof entry.id!=='string'||ids.has(entry.id)||!object(entry.state))return {entries:result,error:'Saved '+kind+' contain an invalid or duplicate draft.'};
     ids.add(entry.id);
     const state=entry.state,previous=state.document;
-    const draft={id:entry.id,name:kind==='kits'?(previous?.title||previous?.title_key||'Untitled kit'):(state.name||previous?.title||'Untitled intro'),document:null,error:'',warnings:[]};
+    const draft={id:entry.id,name:kind==='kits'?(previous?.title||previous?.title_key||'Untitled kit'):(state.name||previous?.title||'Untitled intro'),document:previous?copy(kind==='kits'?previous:previous.intro??previous):null,source:state.source,error:'',issue:null,warnings:[]};
     try {
       if(typeof state.source!=='string')throw new Error('This draft has no saved JSON.');
+      const rawDocument=JSON.parse(state.source);draft.document=kind==='kits'?rawDocument:rawDocument?.intro??rawDocument;
       if(kind==='kits') {
         const parsed=validators.kit(state.source);draft.document=parsed.document;draft.warnings=parsed.warnings;
-        if(state.error)throw new Error(state.error.message||'Fix the draft error in the kit creator.');
+        if(state.error&&!state.error.validation&&state.error.target!=='kit-json')throw Object.assign(new Error(state.error.message||'Fix the draft error in the kit creator.'),{path:state.error.path});
         if(state.drafts?.length)throw new Error('Apply or revert pending item edits in the kit creator.');
         if(state.cursor)throw new Error('Place or return the held item in the kit creator.');
         if(parsed.document.enabled===false)throw new Error('This kit is disabled. Enable it in the kit creator.');
@@ -51,7 +52,7 @@ function drafts(raw,kind,validators) {
         if(parsed.wrapped&&parsed.document.type)draft.spawn=copy(parsed.document);
         if(state.validation?.error&&!state.validation.fromJson)throw new Error(state.validation.error.message||'Fix the draft error in the intro editor.');
       }
-    } catch(error) {draft.error=error.message;}
+    } catch(error) {draft.error=error.message;draft.issue={path:error.path,field:error.field};}
     result.push(draft);
   }
   return {entries:result,error:''};
@@ -67,13 +68,16 @@ function importSpawn(entry,draft) {
   result.destinations=copy(spawn.pool??[]);
   return result;
 }
-function settings(values,allowed) {
+function settings(values,allowed,strict=true) {
   const result={};
   for(const field of allowed) {
     const value=values[field];
     if(value===undefined||value==='')continue;
     if(numericFields.includes(field)) {
-      if(typeof value==='string'&&!/^-?\d+$/.test(value))throw fieldError(field,(labels[field]??field.toUpperCase())+' must be a whole number.');
+      if(typeof value==='string'&&!/^-?\d+$/.test(value)){
+        if(strict)throw fieldError(field,(labels[field]??field.toUpperCase())+' must be a whole number.');
+        result[field]=value;continue;
+      }
       result[field]=typeof value==='number'?value:Number(value);
     } else result[field]=value;
   }
@@ -92,56 +96,89 @@ function knownResource(value,kind,allowUnknown=false) {
 function validateSpawn(document,allowUnknown=false) {
   if(!object(document))throw new Error('A location must be an object.');
   const title=document.title??document.title_key;
-  if(typeof title!=='string'||!title.trim()||title.length>120)throw new Error('Enter a location title or title key from 1 to 120 characters.');
-  for(const [key,max] of [['subtitle',120],['description',4000],['title_key',256],['subtitle_key',256],['description_key',256]])if(document[key]!==undefined&&(typeof document[key]!=='string'||document[key].length>max))throw new Error(key+' must be text up to '+max+' characters.');
+  if(typeof title!=='string'||!title.trim()||title.length>120)throw fieldError(document.title===undefined&&document.title_key!==undefined?'title_key':'title','Enter a location title or title key from 1 to 120 characters.');
+  for(const [key,max] of [['subtitle',120],['description',4000],['title_key',256],['subtitle_key',256],['description_key',256]])if(document[key]!==undefined&&(typeof document[key]!=='string'||document[key].length>max))throw fieldError(key,key+' must be text up to '+max+' characters.');
   const type=typeof document.type==='string'?document.type.toLowerCase():'';
-  if(!types.includes(type))throw new Error('Choose a location type.');
-  if(document.enabled===false)throw new Error('This location is disabled.');
+  if(!types.includes(type))throw fieldError('type','Choose a location type.');
+  if(document.enabled===false)throw fieldError('enabled','This location is disabled.');
   if(document.intro!==undefined) {
     try{preview.readJson(JSON.stringify({intro:document.intro}));}
-    catch(error){throw fieldError('intro',error.message);}
+    catch(error){throw Object.assign(fieldError('intro',error.message),{path:error.path});}
   }
   if(document.dimension!==undefined)knownResource(document.dimension,'dimension',allowUnknown);
-  if(document.image!==undefined)resource(document.image,'Image');
-  if(document.order!==undefined)integer(document.order,-2147483648,2147483647,'Order');
+  if(document.image!==undefined)try{resource(document.image,'Image');}catch(error){throw fieldError('image',error.message);}
+  if(document.order!==undefined)try{integer(document.order,-2147483648,2147483647,'Order');}catch(error){throw fieldError('order',error.message);}
   for(const key of ['search_radius','random_radius'])if(document[key]!==undefined) {try{integer(document[key],16,30000,labels[key]);}catch(error){throw fieldError(key,error.message);}}
-  for(const key of ['x','y','z'])if(document[key]!==undefined)integer(document[key],key==='y'?-2147483648:-29999984,key==='y'?2147483647:29999984,key.toUpperCase());
-  if(type==='fixed'&&['x','y','z'].some(key=>document[key]===undefined))throw new Error('Fixed locations require X, Y and Z coordinates.');
+  for(const key of ['x','y','z'])if(document[key]!==undefined)try{integer(document[key],key==='y'?-2147483648:-29999984,key==='y'?2147483647:29999984,key.toUpperCase());}catch(error){throw fieldError(key,error.message);}
+  if(type==='fixed'&&['x','y','z'].some(key=>document[key]===undefined))throw fieldError(['x','y','z'].find(key=>document[key]===undefined),'Fixed locations require X, Y and Z coordinates.');
   if(type==='biome'||type==='structure')knownResource(document.target,type,allowUnknown);
   if(document.piece!==undefined) {
-    if(type!=='structure')throw new Error('Only structures support a preferred piece.');
-    resource(document.piece,'Preferred piece');
+    if(type!=='structure')throw fieldError('piece','Only structures support a preferred piece.');
+    try{resource(document.piece,'Preferred piece');}catch(error){throw fieldError('piece',error.message);}
   }
   if(type==='pool') {
-    if(['target','x','y','z'].some(key=>Object.hasOwn(document,key)))throw new Error('Coordinates and targets belong inside pool destinations.');
-    if(!Array.isArray(document.pool)||document.pool.length<1||document.pool.length>128)throw new Error('A pool needs 1 to 128 destinations.');
+    if(['target','x','y','z'].some(key=>Object.hasOwn(document,key)))throw fieldError(['target','x','y','z'].find(key=>Object.hasOwn(document,key)),'Coordinates and targets belong inside pool destinations.');
+    if(!Array.isArray(document.pool)||document.pool.length<1||document.pool.length>128)throw fieldError('pool','A pool needs 1 to 128 destinations.');
     document.pool.forEach((entry,index)=>{
       try {
         if(!object(entry)||Object.keys(entry).some(key=>!destinationFields.includes(key)))throw new Error('Unsupported destination field.');
-        if(typeof entry.type!=='string'||entry.type.toLowerCase()==='pool')throw new Error('Choose a destination type other than pool.');
+        if(typeof entry.type!=='string'||entry.type.toLowerCase()==='pool')throw fieldError('type','Choose a destination type other than pool.');
         const inherited={...document,...entry};delete inherited.pool;
         if(entry.intro===null)delete inherited.intro;
         validateSpawn(inherited,allowUnknown);
-      }catch(error){throw Object.assign(new Error('Place '+(index+1)+': '+error.message),{field:error.field,destination:index});}
+      }catch(error){throw Object.assign(new Error('Place '+(index+1)+': '+error.message),{field:error.field,path:error.path,destination:index});}
     });
-  } else if(document.pool!==undefined)throw new Error('Only pools support destinations.');
+  } else if(document.pool!==undefined)throw fieldError('pool','Only pools support destinations.');
   return document;
 }
 function linkedIntro(id,catalog) {
   const intro=catalog.intros.find(draft=>draft.id===id);
   if(!intro)throw fieldError('intro','The linked intro is missing. Restore it or choose another intro.');
-  if(intro.error)throw fieldError('intro','Intro '+intro.name+': '+intro.error);
+  if(intro.error)throw Object.assign(fieldError('intro','Intro '+intro.name+': '+intro.error),{path:['intro',...(intro.issue?.path?.[0]==='intro'?intro.issue.path.slice(1):intro.issue?.path??[])]});
   return copy(intro.document);
+}
+function previewFiles(state,catalog) {
+  const files=[],kitIds=new Map(),namespace=state.namespace??'';
+  for(const selected of state.kits.filter(entry=>entry.included)) {
+    const draft=catalog.kits.find(entry=>entry.id===selected.id);
+    kitIds.set(selected.id,namespace+':'+selected.path);
+    if(draft)files.push({path:'data/'+namespace+'/heritage/kits/'+selected.path+'.json',content:typeof draft.source==='string'?draft.source:JSON.stringify(draft.document,null,2)});
+  }
+  for(const entry of state.locations) {
+    const document=copy(entry.document??{}),type=entry.fields?.type;
+    for(const key of [...fields,'pool','intro','kits','enabled'])delete document[key];
+    const relevant=fields.filter(key=>key!=='piece'||type==='structure').filter(key=>key!=='target'||['biome','structure'].includes(type)).filter(key=>!['x','y','z'].includes(key)||type==='fixed');
+    Object.assign(document,settings(entry.fields??{},relevant,false));
+    if(entry.fields?.title==='')document.title='';
+    const intro=id=>catalog.intros.find(draft=>draft.id===id)?.document??null;
+    if(entry.intro)document.intro=copy(intro(entry.intro));
+    if(type==='pool')document.pool=entry.destinations.map(destination=>{
+      const value=settings(destination,destinationFields,false);
+      if(typeof value.intro==='string')value.intro=copy(intro(value.intro));
+      return value;
+    });
+    const ids=entry.kitMode==='selected'?entry.kits:[...kitIds.keys()];
+    document.kits=ids.map(id=>id==='bundled-empty'?'kingdomsheritage:default':kitIds.get(id)??id);
+    if(entry.kitMode!=='selected'&&state.keepKits)document.kits.push('kingdomsheritage:default');
+    files.push({path:'data/'+namespace+'/heritage/spawns/'+entry.path+'.json',content:JSON.stringify(document,null,2)+'\n'});
+  }
+  files.push({path:'pack.mcmeta',content:JSON.stringify({pack:{pack_format:48,description:state.description}},null,2)+'\n'});
+  return files;
 }
 function build(state,catalog) {
   const errors=[],warnings=[],files=[],issues=[];
-  const report=(label,action,locationId)=>{try{return action();}catch(error){errors.push(label+': '+error.message);issues.push({locationId,field:error.field,destination:error.destination,message:error.message});return null;}};
+  const report=(label,action,locationId,filePath,kitId)=>{try{return action();}catch(error){
+    errors.push(label+': '+error.message);
+    const path=error.path??error.field?.split('.')??[];
+    issues.push({locationId,kitId,filePath,field:error.field,destination:error.destination,path:error.destination===undefined?path:['pool',error.destination,...path],message:error.message});
+    return null;
+  }};
   const namespace=report('Pack ID',()=>{
-    if(typeof state.namespace!=='string'||!/^[a-z0-9_.-]+$/.test(state.namespace)||/^\.+$/.test(state.namespace))throw new Error('Use lowercase letters, numbers, _, - or .');
+    if(typeof state.namespace!=='string'||!/^[a-z0-9_.-]+$/.test(state.namespace)||/^\.+$/.test(state.namespace))throw fieldError('namespace','Use lowercase letters, numbers, _, - or .');
     return state.namespace;
   });
-  if(typeof state.name!=='string'||!state.name.trim())errors.push('Pack name: Enter a name for the download.');
-  if(typeof state.description!=='string'||!state.description.trim())errors.push('Pack description: Enter a description.');
+  report('Pack name',()=>{if(typeof state.name!=='string'||!state.name.trim())throw fieldError('name','Enter a name for the download.');});
+  report('Pack description',()=>{if(typeof state.description!=='string'||!state.description.trim())throw fieldError('description','Enter a description.');});
   const paths=new Set(),kitIds=new Map(),documents=new Map();
   const add=(path,document)=>{
     if(paths.has(path))throw new Error('Duplicate export path: '+path);
@@ -151,13 +188,13 @@ function build(state,catalog) {
   for(const selection of selected)report('Kit '+(selection.path||selection.id),()=>{
     const draft=catalog.kits.find(entry=>entry.id===selection.id);
     if(!draft)throw new Error('The saved draft is missing. Restore it or remove it from this pack.');
-    if(draft.error)throw new Error(draft.error);
+    if(draft.error)throw Object.assign(new Error(draft.error),draft.issue);
     const path=fileId(selection.path,'Kit file name'),id=namespace+':'+path;
     if(kitIds.has(selection.id))throw new Error('This kit is selected more than once.');
     add('data/'+namespace+'/heritage/kits/'+path+'.json',copy(draft.document));
     kitIds.set(selection.id,id);documents.set(id,draft.document);
     warnings.push(...draft.warnings);
-  });
+  },undefined,'data/'+namespace+'/heritage/kits/'+selection.path+'.json',selection.id);
   if(state.keepKits)documents.set('kingdomsheritage:default',emptyKit.document);
   const count=documents.size;
   if(count<1)errors.push('Include at least one kit, or keep the bundled Empty-handed kit.');
@@ -177,27 +214,27 @@ function build(state,catalog) {
         const values=settings(destination,destinationFields);
         if(typeof values.intro==='string')values.intro=linkedIntro(values.intro,catalog);
         return values;
-      }catch(error){throw Object.assign(new Error('Place '+(index+1)+': '+error.message),{field:error.field,destination:index});}
+      }catch(error){throw Object.assign(new Error('Place '+(index+1)+': '+error.message),{field:error.field,path:error.path,destination:index});}
     });
     if(entry.intro)document.intro=linkedIntro(entry.intro,catalog);
     const ids=entry.kitMode==='selected'?entry.kits:[...kitIds.keys()];
-    if(!Array.isArray(ids))throw new Error('Choose allowed kits.');
+    if(!Array.isArray(ids))throw fieldError('kits','Choose allowed kits.');
     const allowed=ids.map(id=>{
       if(id==='bundled-empty'&&state.keepKits)return 'kingdomsheritage:default';
-      if(!kitIds.has(id))throw new Error('An assigned kit is missing or excluded. Include it or change this location’s kits.');
+      if(!kitIds.has(id))throw fieldError('kits','An assigned kit is missing or excluded. Include it or change this location’s kits.');
       return kitIds.get(id);
     });
     if(entry.kitMode!=='selected'&&state.keepKits)allowed.push('kingdomsheritage:default');
-    if(!allowed.length)throw new Error('Choose at least one allowed kit.');
+    if(!allowed.length)throw fieldError('kits','Choose at least one allowed kit.');
     document.kits=[...new Set(allowed)];
-    if(document.kits.length>128)throw new Error('A location can allow at most 128 kits.');
+    if(document.kits.length>128)throw fieldError('kits','A location can allow at most 128 kits.');
     validateSpawn(document,state.allowCustomTargets===true);
     for(const place of [document,...(document.pool??[])]) {
       if(place.dimension&&knownResource(place.dimension,'dimension',true))warnings.push('Custom dimensions must be installed and checked in-game with /heritage validate @s.');
       if(['biome','structure'].includes(place.type)&&knownResource(place.target,place.type,true))warnings.push('Custom biomes, structures and groups must be installed and checked in-game with /heritage validate @s.');
     }
     add('data/'+namespace+'/heritage/spawns/'+path+'.json',document);spawnIds.add(namespace+':'+path);
-  },entry.id);
+  },entry.id,'data/'+namespace+'/heritage/spawns/'+entry.path+'.json');
   if(spawnIds.size>50)errors.push('A datapack can contain at most 50 starting locations, including bundled locations.');
   add('pack.mcmeta',{pack:{pack_format:48,description:state.description}});
   if(!state.keepLocations)for(const id of bundledSpawns) {
@@ -206,7 +243,7 @@ function build(state,catalog) {
   }
   if(!state.keepKits&&!paths.has('data/kingdomsheritage/heritage/kits/default.json'))add('data/kingdomsheritage/heritage/kits/default.json',{enabled:false});
   files.sort((a,b)=>a.path==='pack.mcmeta'?-1:b.path==='pack.mcmeta'?1:a.path.localeCompare(b.path));
-  return {files:errors.length?[]:files,errors,issues,warnings:[...new Set(warnings)],kitCount:count,locationCount:spawnIds.size};
+  return {files:errors.length?[]:files,previewFiles:errors.length?previewFiles(state,catalog):files,errors,issues,warnings:[...new Set(warnings)],kitCount:count,locationCount:spawnIds.size};
 }
 const api={copy,slug,fileId,resource,drafts,location,importSpawn,knownResource,validateSpawn,build,emptyKit,types,fields,destinationFields};
 if(typeof module!=='undefined')module.exports=api;

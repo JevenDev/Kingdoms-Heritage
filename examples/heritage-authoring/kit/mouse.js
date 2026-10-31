@@ -7,7 +7,7 @@ function canonical(value) {
   return value;
 }
 function identity(entry) {
-  const next=K.copy(entry);for(const key of ['inventory','slot','index','cosmetic'])delete next[key];
+  const next=K.copy(entry);for(const key of ['inventory','slot','index','cosmetic','ignore_stack_limit'])delete next[key];
   delete next.item.count;next.item.id=K.normalize(next.item.id);
   if(!Object.keys(next.item.components??{}).length)delete next.item.components;
   return JSON.stringify(canonical(next));
@@ -35,7 +35,7 @@ function click(document,held,slot,button=0) {
     return result(E.putEntry(document,slot,amount(entry,placed)),quantity>placed?{...held,entry:amount(entry,quantity-placed)}:null);
   }
   if(compatible(entry,existing)){
-    const placed=Math.min(button===1?1:quantity,K.maxCount(existing.item)-count(existing));
+    const placed=Math.min(button===1?1:quantity,K.maxCount(existing)-count(existing));
     if(!placed)return result(document,held);
     return result(E.putEntry(document,slot,amount(existing,count(existing)+placed)),quantity>placed?{...held,entry:amount(entry,quantity-placed)}:null);
   }
@@ -45,20 +45,20 @@ function distribute(document,held,slots,button=0) {
   if(!held)return result(document,null);
   const destinations=[...new Set(slots)].filter(slot=>{
     const existing=E.entryAt(document,slot);
-    return !existing||compatible(existing,held.entry)&&count(existing)<K.maxCount(existing.item);
+    return !existing||compatible(existing,held.entry)&&count(existing)<K.maxCount(existing);
   }).slice(0,count(held.entry));
   if(!destinations.length)return result(document,held);
   const share=button===1?1:Math.floor(count(held.entry)/destinations.length);
   let next=document,remaining=count(held.entry);
   for(const slot of destinations){
-    const existing=E.entryAt(next,slot),before=existing?count(existing):0,taken=Math.min(share,K.maxCount((existing??held.entry).item)-before,remaining);
+    const existing=E.entryAt(next,slot),before=existing?count(existing):0,taken=Math.min(share,K.maxCount(existing??held.entry)-before,remaining);
     if(taken){next=E.putEntry(next,slot,amount(existing??held.entry,before+taken));remaining-=taken;}
   }
   return result(next,remaining?{...held,entry:amount(held.entry,remaining)}:null);
 }
 function collect(document,held) {
   if(!held)return result(document,null);
-  let next=document,total=count(held.entry),maximum=K.maxCount(held.entry.item);
+  let next=document,total=count(held.entry),maximum=K.maxCount(held.entry);
   for(const entry of document.items){
     if(!compatible(entry,held.entry)||total>=maximum)continue;
     const taken=Math.min(count(entry),maximum-total),slot=E.id(entry);
@@ -74,7 +74,7 @@ function insert(document,entry,slots) {
     if(!remaining)break;
     const existing=E.entryAt(next,slot);
     if(empty?!!existing:!existing||!compatible(existing,entry))continue;
-    const before=existing?count(existing):0,taken=Math.min(remaining,K.maxCount((existing??entry).item)-before);
+    const before=existing?count(existing):0,taken=Math.min(remaining,K.maxCount(existing??entry)-before);
     if(taken){next=E.putEntry(next,slot,amount(existing??entry,before+taken));remaining-=taken;}
   }
   return {document:next,remaining};

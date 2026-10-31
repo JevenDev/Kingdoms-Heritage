@@ -122,6 +122,11 @@
           "minimum": 0,
           "maximum": 255
         },
+        "ignore_stack_limit": {
+          "type": "boolean",
+          "default": false,
+          "description": "Skip the vanilla stack limit for this item in the authoring tools. Minecraft still checks the actual stack limit in the installed modpack."
+        },
         "cosmetic": {
           "type": "boolean",
           "default": false

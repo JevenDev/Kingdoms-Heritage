@@ -3,7 +3,7 @@
 const K=HeritageKit,E=HeritageEquipment,M=HeritageKitMouse,V=HeritageInventory,T=HeritageItemText,$=id=>document.getElementById(id),storageKey='heritage.kitCreator.v1';
 if(!await HeritageSession.acquire(storageKey))return;
 const searchIndex=HeritageItems.items.map(item=>({item,search:(item.name+' '+item.id).toLowerCase()})),itemButtons=new Map();
-let documentState={title:'My kit',items:[]},selected=0,page=0,rawInvalid=false,errorState=null,drafts=new Map(),loreSources=new Map(),slotClipboard=null;
+let documentState={title:'My kit',items:[]},validDocument={title:'My kit',items:[]},selected=0,page=0,rawInvalid=false,errorState=null,drafts=new Map(),loreSources=new Map(),slotClipboard=null;
 let kitWarnings=[],activeItemButton,carried=null,pendingDelete=null,selectedSlots=new Set(),selectionMode=false,selectionAnchor=null;
 let pageSize=90,pageCount=1,wheelPageTime=-Infinity;
 let history=[],historyIndex=-1,historyGroup=null,historyTime=0,saveTimer,saveUnavailable=false,saveBlocked=false,workspace;
@@ -26,7 +26,7 @@ const view=new V.Inventory($('inventory'),{
 const preview=new HeritageEquipmentEditor({getDocument:()=>documentState,getSelection:()=>selected,onSelect:selectSlot,onUpdate:(saveHistory=false)=>{display();if(saveHistory)record();else scheduleSave();},notice,canSwitch:()=>{if(errorState?.target==='count'){notice('Fix the count before changing inventory views.');return false;}return true;}});
 const fingerprint=stack=>JSON.stringify(stack?[K.normalize(stack.id),stack.components??{}]:null);
 const source=()=>$('kit-json').value,code=new HeritageJsonEditor($('kit-json'),$('line-count'));
-const snapshot=()=>({source:source(),document:K.copy(documentState),cursor:K.copy(carried),selected,selection:[...selectedSlots],selectionMode,drafts:K.copy([...drafts]),loreSources:K.copy([...loreSources]),error:errorState?K.copy(errorState):null,preview:preview.snapshot()});
+const snapshot=()=>({source:source(),document:K.copy(documentState),validDocument:K.copy(validDocument),cursor:K.copy(carried),selected,selection:[...selectedSlots],selectionMode,drafts:K.copy([...drafts]),loreSources:K.copy([...loreSources]),error:errorState?K.copy(errorState):null,preview:preview.snapshot()});
 function saveDraft() {
   clearTimeout(saveTimer);
   if(saveBlocked)return;
@@ -50,10 +50,13 @@ function record(key=null) {
 }
 function restore(direction) {
   const next=historyIndex+direction;if(next<0||next>=history.length)return;
-  historyIndex=next;const state=history[next];documentState=K.copy(state.document);carried=M.cursor(state.cursor);kitWarnings=K.read(JSON.stringify(documentState)).warnings;selected=state.selected;drafts=new Map(K.copy(state.drafts));loreSources=readLoreSources(state.loreSources);errorState=state.error;rawInvalid=false;preview.restore(state.preview);
+  historyIndex=next;const state=history[next];
+  documentState=K.copy(state.document);validDocument=K.copy(state.validDocument??{title:'My kit',items:[]});
+  carried=M.cursor(state.cursor);kitWarnings=K.inspect(state.source).warnings;selected=state.selected;drafts=new Map(K.copy(state.drafts));loreSources=readLoreSources(state.loreSources);errorState=state.error;rawInvalid=false;preview.restore(state.preview);
   selectedSlots=new Set((state.selection??[]).filter(E.valid));selectionMode=state.selectionMode===true;selectionAnchor=null;
   $('kit-json').value=state.source;
-  try{K.read(state.source);}catch(failure){rawInvalid=true;}
+  const parsed=K.inspect(state.source);rawInvalid=!!parsed.error&&!parsed.previewable;
+  if(parsed.error)errorState=sourceError(parsed.error,state.source);
   historyGroup=null;display();if(errorState?.target&&$(errorState.target))$(errorState.target).value=errorState.value;
   scheduleSave();feedback();V.hideTooltip();
 }
@@ -75,19 +78,19 @@ function draftOptions() {
 function activateKit(id) {
   if(id===workspace.active)return;
   attempt(()=>{
-    const entry=workspace.get(id);K.read(JSON.stringify(entry.state.document));M.cursor(entry.state.cursor);
+    const entry=workspace.get(id);M.cursor(entry.state.cursor);
     workspace.capture(snapshot(),history,historyIndex);workspace.select(id);
     history=entry.history;historyIndex=entry.historyIndex;history[historyIndex]=entry.state;
     restore(0);notice('');saveDraft();draftOptions();
   });
 }
 function openKit(raw=JSON.stringify({title:'My kit',items:[]},null,2)) {
-  let kit={title:'My kit',items:[]},error=null;
-  try{kit=K.read(raw).document;}catch(failure){error={message:failure.message,target:'kit-json',value:raw};}
+  const parsed=K.inspect(raw),kit=parsed.previewable||!parsed.error?parsed.document:{title:'My kit',items:[]},error=parsed.error?sourceError(parsed.error,raw):null;
   const first=(Array.isArray(kit.items)?kit.items:[]).find(entry=>['curios','accessories'].includes(entry.inventory));
-  const state={source:raw,document:kit,cursor:null,selected:first?E.id(first):0,selection:[],selectionMode:false,drafts:[],loreSources:[],error,preview:null};
+  const state={source:raw,document:kit,validDocument:parsed.error?{title:'My kit',items:[]}:K.copy(kit),cursor:null,selected:first?E.id(first):0,selection:[],selectionMode:false,drafts:[],loreSources:[],error,preview:null};
   activateKit(workspace.add(state));
 }
+function sourceError(error,value=source()) {return {message:error.message,path:error.path,target:'kit-json',value,validation:true};}
 function notice(message){$('status').textContent=message;}
 function fail(message,target='') {
   if(!target){notice(message);return;}
@@ -99,14 +102,14 @@ function attempt(action,target='') {
 function canEdit(target='') {
   if(rawInvalid){notice('Fix the JSON or restore the last valid version.');return false;}
   if(documentState.enabled===false){notice('This kit is disabled. Set enabled to true in JSON to edit it.');return false;}
-  if(errorState&&errorState.target!==target){notice('Fix the highlighted field or restore the last valid JSON.');return false;}
+  if(errorState&&!errorState.validation&&errorState.target!==target){notice('Fix the highlighted field or restore the last valid JSON.');return false;}
   return true;
 }
 function heldLabel(stack) {return stack?'Holding '+(stack.count??1)+' × '+T.name(stack):'';}
 function feedback() {
   const pending=drafts.size,blocked=rawInvalid||!!errorState||pending>0||!!carried;
-  $('copy').disabled=$('download').disabled=blocked;
-  $('format').disabled=rawInvalid||!!errorState;
+  $('download').disabled=blocked;$('copy').disabled=!!carried||pending>0;
+  $('format').disabled=!!carried||rawInvalid&&errorState?.message.startsWith('Invalid JSON:');
   $('kit-json').readOnly=!!carried;
   $('carried-stack').hidden=!carried;
   $('return-carried').textContent=carried?.source==='library'?'Cancel pickup':'Return';
@@ -115,24 +118,34 @@ function feedback() {
   $('undo').disabled=historyIndex<=0;$('redo').disabled=historyIndex>=history.length-1;
   $('error').hidden=!errorState;$('error').textContent=errorState?.message||'';
   $('restore').hidden=!rawInvalid&&!errorState;
-  $('kit-json').setAttribute('aria-invalid',String(rawInvalid));
-  for(const id of ['count','title','order','tags','description','item-id','components'])$(id).setAttribute('aria-invalid',String(errorState?.target===id));
+  $('kit-json').setAttribute('aria-invalid',String(rawInvalid||!!errorState?.validation));
+  const issueIndex=errorState?.path?.[0]==='items'?errorState.path[1]:null,issueEntry=issueIndex===null?null:documentState.items?.[issueIndex];
+  const issueSlot=issueEntry?E.id(issueEntry):null;
+  for(const id of ['count','title','order','tags','description','item-id','components']){
+    const invalid=errorState?.target===id||errorState?.validation&&(errorState.path?.[0]===id||issueSlot===selected&&errorState.path?.at(-1)===id);
+    $(id).setAttribute('aria-invalid',String(!!invalid));
+  }
+  for(const [slot,button] of view.buttons)button.setAttribute('aria-invalid',String(issueSlot===slot));
+  $('ignore-stack-limits').checked=view.entry(selected)?.ignore_stack_limit===true;
+  $('ignore-stack-limits').setAttribute('aria-invalid',String(issueSlot===selected&&errorState?.path?.at(-1)==='ignore_stack_limit'));
+  $('ignore-stack-limits').disabled=rawInvalid||!view.entry(selected)||!!carried||drafts.has(selected);
   $('json-state').textContent=rawInvalid?'Fix JSON to update the preview.':errorState?'Fix the field error':pending?'Apply slot edits':carried?'Place or return the held item before exporting':'JSON ready';
-  code.sync();
+  const location=code.setError(errorState?.target==='kit-json'?errorState:null);
+  if(location)$('error').textContent='Line '+location.line+', column '+location.column+': '+errorState.message;
   $('pending-edits').hidden=!pending;
   $('pending-message').textContent=pending?pending+' slot'+(pending===1?' has':'s have')+' edits to apply. ':'';
   const locked=rawInvalid||documentState.enabled===false;
   for(const id of ['title','description','order','tags','selected-slot','add-equipment','item-id','apply-id','components','apply-components','count','fill-stack','clear-slot','set-start','paste-slot'])$(id).disabled=locked;
   $('count').disabled=locked||!view.entry(selected);
-  $('fill-stack').disabled=locked||!view.entry(selected)||(view.entry(selected).item.count??1)>=K.maxCount(view.entry(selected).item)||(!K.items.has(K.normalize(view.entry(selected).item.id))&&view.entry(selected).item.components?.['minecraft:max_stack_size']===undefined);
+  $('fill-stack').disabled=locked||!view.entry(selected)||view.entry(selected).ignore_stack_limit===true||(view.entry(selected).item.count??1)>=K.maxCount(view.entry(selected))||(!K.items.has(K.normalize(view.entry(selected).item.id))&&view.entry(selected).item.components?.['minecraft:max_stack_size']===undefined&&!view.entry(selected).ignore_stack_limit);
   $('set-start').disabled=locked||typeof selected!=='number'||selected>8;
   $('copy-slot').disabled=!view.entry(selected);
   $('paste-slot').disabled=locked||!slotClipboard;
   $('clear-slot').disabled=locked||(!view.entry(selected)&&!drafts.has(selected));
   $('apply-components').disabled=locked||!view.entry(selected);
   const lore=view.entry(selected)?.item.components?.['minecraft:lore'],invalidLore=lore!==undefined&&!Array.isArray(lore);
-  const loreLocked=locked||!view.entry(selected)||!!errorState||!!carried||drafts.has(selected)||invalidLore;
-  $('item-name').disabled=$('apply-name').disabled=locked||!view.entry(selected)||!!errorState||!!carried||drafts.has(selected);
+  const loreLocked=locked||!view.entry(selected)||!!errorState&&!errorState.validation||!!carried||drafts.has(selected)||invalidLore;
+  $('item-name').disabled=$('apply-name').disabled=locked||!view.entry(selected)||!!errorState&&!errorState.validation||!!carried||drafts.has(selected);
   $('add-lore-line').disabled=loreLocked;
   for(const control of $('lore-lines').querySelectorAll('input,textarea,select,button'))control.disabled=loreLocked;
   $('lore-status').textContent=invalidLore?'Lore must be a list. Fix it in Item components.':drafts.has(selected)?"Apply or revert this item's pending edits to edit lore.":!view.entry(selected)?'Choose an item to add lore.':'';
@@ -152,7 +165,7 @@ function slotFields() {
   $('selected-name').textContent=stack?T.name(stack):'Empty slot';
   $('item-name').value=stack?.components?.['minecraft:custom_name']?T.name(stack):'';
   $('selected-icon').replaceChildren(...(stack?[V.icon(stack.id)]:[]));
-  $('count').value=stack?.count??1;$('count').max=stack?K.maxCount(stack):99;
+  $('count').value=stack?.count??1;$('count').max=stack?K.maxCount(view.entry(selected)):99;
   $('item-id').value=draft?.id??stack?.id??'';
   $('components').value=draft?.components??JSON.stringify(stack?.components||{},null,2);
   $('component-state').textContent=draft?'Not applied':'';
@@ -255,16 +268,19 @@ function selectAllSlots() {
 function parse(replace=false,save=true) {
   if(carried){$('kit-json').value=JSON.stringify(documentState,null,2);notice('Place the held stack or press Escape before editing JSON.');return;}
   try {
-    const parsed=K.read(source());documentState=parsed.document;kitWarnings=parsed.warnings;rawInvalid=false;errorState=null;
+    const parsed=K.inspect(source());kitWarnings=parsed.warnings;rawInvalid=!!parsed.error&&!parsed.previewable;
+    errorState=parsed.error?sourceError(parsed.error):null;
+    if(!parsed.error||parsed.previewable)documentState=parsed.document;
+    if(!parsed.error)validDocument=K.copy(documentState);
     if(replace){selectedSlots.clear();selectionMode=false;selectionAnchor=null;drafts.clear();const first=(Array.isArray(documentState.items)?documentState.items:[]).find(entry=>entry&&['curios','accessories'].includes(entry.inventory));selected=first?E.id(first):0;preview.state.mode=first?.inventory??'player';}display();
-  }catch(failure){rawInvalid=true;errorState={message:failure.message,target:'kit-json',value:source()};feedback();}
+  }catch(failure){rawInvalid=true;errorState=sourceError(failure);feedback();}
   if(save)record('json');
 }
 function commit(next,key=null,{replace=false,selected:nextSlot=selected,discard=[],pendingDraft=null,cursor:nextCursor=carried,selection:nextSelection=selectedSlots}={}) {
   if(!replace&&!canEdit(key?.split(':')[0]||''))return false;
   if(replace&&carried){notice('Place the held stack or press Escape before replacing this kit.');return false;}
   try {
-    const parsed=K.read(JSON.stringify(next));documentState=parsed.document;kitWarnings=parsed.warnings;rawInvalid=false;errorState=null;selected=nextSlot;carried=M.cursor(nextCursor);selectedSlots=new Set(nextSelection);
+    const parsed=K.read(JSON.stringify(next));documentState=parsed.document;validDocument=K.copy(documentState);kitWarnings=parsed.warnings;rawInvalid=false;errorState=null;selected=nextSlot;carried=M.cursor(nextCursor);selectedSlots=new Set(nextSelection);
     if(replace){selectedSlots.clear();selectionMode=false;selectionAnchor=null;drafts.clear();const first=(Array.isArray(documentState.items)?documentState.items:[]).find(entry=>entry&&['curios','accessories'].includes(entry.inventory));selected=first?E.id(first):0;preview.state.mode=first?.inventory??'player';}else for(const slot of discard)drafts.delete(slot);
     if(pendingDraft)drafts.set(selected,pendingDraft);
     const field=$('kit-json'),scroll=field.scrollTop,start=field.selectionStart,end=field.selectionEnd;
@@ -309,7 +325,7 @@ function collectSlot(slot) {
   });
 }
 function cloneSlot(slot) {
-  attempt(()=>{if(!canEdit()||carried)return;checkDraft(slot);const entry=E.entryAt(documentState,slot);if(!entry)return;const next=K.copy(entry);next.item.count=K.maxCount(next.item);commit(documentState,null,{selected:slot,cursor:{entry:next,origin:slot,source:'library'}});});
+  attempt(()=>{if(!canEdit()||carried)return;checkDraft(slot);const entry=E.entryAt(documentState,slot);if(!entry)return;const next=K.copy(entry);next.item.count=next.ignore_stack_limit?next.item.count??1:K.maxCount(next);commit(documentState,null,{selected:slot,cursor:{entry:next,origin:slot,source:'library'}});});
 }
 function returnHeld() {
   attempt(()=>{
@@ -399,7 +415,7 @@ function applySlotDraft(componentsOnly=false) {
     else {
       const id=$('item-id').value.trim(),same=stack&&K.normalize(stack.id)===K.normalize(id);
       next=same?K.copy(stack):{id:K.normalize(id)};
-      next.count=Math.min(stack?.count??1,K.maxCount(next));next.components=JSON.parse($('components').value);
+      next.count=Math.min(stack?.count??1,K.maxCount({...view.entry(selected),item:next}));next.components=JSON.parse($('components').value);
     }
     const pendingDraft=componentsOnly&&draft&&draft.id!==next.id?{id:draft.id,components:JSON.stringify(next.components||{},null,2),base:fingerprint(next)}:null;
     if(commit(E.setSlot(documentState,selected,next),target,{discard:[selected],pendingDraft}))notice('Slot updated.');
@@ -420,15 +436,18 @@ function equipment() {
   equipmentDocument.items.forEach((entry,n)=>{
     if((entry.inventory??'player')==='player')return;
     const row=document.createElement('div');row.className='equipment-entry';row.dataset.entry=n;
-    row.innerHTML='<label>Inventory<select data-property="inventory"><option value="curios">Curios</option><option value="accessories">Accessories</option></select></label><label>Slot name<input data-property="slot"></label><label>Index<input data-property="index" type="number" min="0" max="255"></label><label class="equipment-id">Item ID<input data-property="id" spellcheck="false"></label><label>Count<input data-property="count" type="number" min="1" max="99"></label><label class="check"><input data-property="cosmetic" type="checkbox"> Cosmetic</label><button type="button" aria-label="Remove equipment slot">Remove</button>';
+    row.innerHTML='<label>Inventory<select data-property="inventory"><option value="curios">Curios</option><option value="accessories">Accessories</option></select></label><label>Slot name<input data-property="slot"></label><label>Index<input data-property="index" type="number" min="0" max="255"></label><label class="equipment-id">Item ID<input data-property="id" spellcheck="false"></label><label>Count<input data-property="count" type="number" min="1" max="99"></label><label class="check"><input data-property="ignore_stack_limit" type="checkbox"> Ignore stack limit</label><label class="check"><input data-property="cosmetic" type="checkbox"> Cosmetic</label><button type="button" aria-label="Remove equipment slot">Remove</button>';
     for(const field of row.querySelectorAll('[data-property]')) {
       const name=field.dataset.property;
-      if(name==='cosmetic')field.checked=entry.cosmetic??false;
+      field.setAttribute('aria-invalid',String(errorState?.path?.[0]==='items'&&errorState.path[1]===n&&errorState.path.at(-1)===name));
+      if(name==='count')field.max=K.maxCount(entry);
+      if(field.type==='checkbox')field.checked=entry[name]??false;
       else field.value=name==='id'?entry.item.id:name==='count'?entry.item.count??1:entry[name]??'';
       field.addEventListener(field.matches('input:not([type=checkbox])')?'input':'change',()=>{
         if(!canEdit('equipment'))return;
         const next=K.copy(errorState?.target==='equipment'&&errorState.pending?errorState.pending:documentState),value=field.type==='checkbox'?field.checked:field.type==='number'?Number(field.value):field.value;
         if(name==='id'||name==='count')next.items[n].item[name]=value;else next.items[n][name]=value;
+        if(name==='ignore_stack_limit'){$('kit-json').value=JSON.stringify(next,null,2);parse(false,false);record();scheduleSave();return;}
         const previousId=JSON.stringify([entry.inventory,entry.slot,entry.index,entry.cosmetic??false]),updated=next.items[n],updatedId=JSON.stringify([updated.inventory,updated.slot,updated.index,updated.cosmetic??false]);
         commit(next,'equipment',{selected:selected===previousId&&E.valid(updatedId)?updatedId:selected});
       });
@@ -511,6 +530,12 @@ for(const name of ['json','details']){
   $(name+'-tab').addEventListener('keydown',event=>{if(event.key==='ArrowLeft'||event.key==='ArrowRight'){event.preventDefault();const next=name==='json'?'details':'json';tab(next);$(next+'-tab').focus();}});
 }
 $('kit-json').addEventListener('input',()=>parse());
+$('ignore-stack-limits').addEventListener('change',()=>{
+  if(rawInvalid||carried)return;
+  const next=K.copy(documentState),entry=E.entryAt(next,selected);if(!entry)return;
+  if($('ignore-stack-limits').checked)entry.ignore_stack_limit=true;else delete entry.ignore_stack_limit;
+  $('kit-json').value=JSON.stringify(next,null,2);parse(false,false);record();scheduleSave();
+});
 $('undo').addEventListener('click',()=>restore(-1));$('redo').addEventListener('click',()=>restore(1));
 document.addEventListener('keydown',event=>{
   if(document.querySelector('dialog[open]'))return;
@@ -531,9 +556,9 @@ document.addEventListener('keydown',event=>{
   if(event.key==='Escape'){V.hideTooltip();$('search-items').value='';page=0;browser();$('component-details').open=false;document.querySelector('.kit-help').open=false;}
 });
 $('format').addEventListener('click',()=>{
-  const field=$('kit-json'),scroll=field.scrollTop;field.value=JSON.stringify(documentState,null,2);field.scrollTop=scroll;record();notice('JSON formatted.');
+  const field=$('kit-json'),scroll=field.scrollTop;field.value=JSON.stringify(JSON.parse(source()),null,2);field.scrollTop=scroll;parse(false,false);record();notice('JSON formatted.');
 });
-$('restore').addEventListener('click',()=>commit(documentState,null,{replace:true}));
+$('restore').addEventListener('click',()=>commit(validDocument,null,{replace:true}));
 for(const id of ['title','description','order','selected-slot','tags'])$(id).addEventListener('input',()=>{
   if(!canEdit(id))return;
   const next=K.copy(documentState);
@@ -598,7 +623,7 @@ $('count').addEventListener('input',()=>attempt(()=>{
 },'count'));
 $('fill-stack').addEventListener('click',()=>attempt(()=>{
   if(!canEdit())return;const stack=view.entry(selected)?.item;if(!stack)return;
-  const next=K.copy(stack);next.count=K.maxCount(next);commit(E.setSlot(documentState,selected,next));
+  const next=K.copy(stack);next.count=K.maxCount(view.entry(selected));commit(E.setSlot(documentState,selected,next));
 }));
 $('set-start').addEventListener('click',()=>{if(typeof selected!=='number'||selected===(documentState.selected_slot??0))return;const next=K.copy(documentState);next.selected_slot=selected;commit(next);});
 $('add-equipment').addEventListener('click',()=>{
@@ -630,7 +655,7 @@ $('import').addEventListener('change',async()=>{
 });
 $('copy').addEventListener('click',async()=>{
   if($('copy').disabled)return;
-  try{await navigator.clipboard.writeText(JSON.stringify(documentState,null,2));HeritageIcons.copied($('copy'));}
+  try{await navigator.clipboard.writeText(source());HeritageIcons.copied($('copy'));}
   catch(failure){tab('json');$('kit-json').focus();$('kit-json').select();notice('Copy the selected JSON with Ctrl+C.');}
 });
 $('download').addEventListener('click',()=>{
@@ -653,7 +678,8 @@ try{
 saved=workspace.get().state;
 if(saved&&typeof saved.source==='string') {
   try {
-    const parsed=K.read(JSON.stringify(saved.document));documentState=parsed.document;kitWarnings=parsed.warnings;
+    const parsed=K.inspect(saved.source);documentState=parsed.previewable||!parsed.error?parsed.document:K.copy(saved.validDocument??saved.document);
+    validDocument=K.copy(saved.validDocument??(!parsed.error?documentState:{title:'My kit',items:[]}));kitWarnings=parsed.warnings;
     initialSource=saved.source;selected=E.valid(saved.selected)?saved.selected:0;selectedSlots=new Set((Array.isArray(saved.selection)?saved.selection:[]).filter(E.valid));selectionMode=saved.selectionMode===true;preview.restore(saved.preview);carried=M.cursor(saved.cursor);
     drafts=new Map(Array.isArray(saved.drafts)?saved.drafts.filter(entry=>Array.isArray(entry)&&E.valid(entry[0])&&entry[1]&&typeof entry[1].id==='string'&&typeof entry[1].components==='string'):[]);
     loreSources=readLoreSources(saved.loreSources);

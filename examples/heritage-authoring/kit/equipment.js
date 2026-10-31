@@ -47,8 +47,8 @@ function moveSlot(document,from,to) {
   K.read(JSON.stringify(result));return result;
 }
 function placeItem(document,value,itemId,{fill=false}={}) {
-  const previous=entryAt(document,value)?.item,same=previous&&K.normalize(previous.id)===K.normalize(itemId),stack=same?K.copy(previous):{id:K.normalize(itemId)};
-  stack.count=fill?K.maxCount(stack):same?previous.count??1:1;
+  const entry=entryAt(document,value),previous=entry?.item,same=previous&&K.normalize(previous.id)===K.normalize(itemId),stack=same?K.copy(previous):{id:K.normalize(itemId)};
+  stack.count=fill?(same&&entry.ignore_stack_limit?previous.count??1:K.maxCount(same?entry:stack)):same?previous.count??1:1;
   return setSlot(document,value,stack);
 }
 function slotMeta(inventory,name) {

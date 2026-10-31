@@ -232,3 +232,8 @@ legend { color: var(--muted); font-size: calc(12px + var(--reading-increase)); p
 @media(max-width:700px) {
   .assembler .assembly-workspace { grid-template-rows: repeat(3,minmax(0,1fr)); }
 }
+
+.code-highlight .json-line-error { background: #ff929212; }
+.code-highlight .json-error-token { background: #ff929230; text-decoration: underline wavy #ff9292; text-underline-offset: 3px; }
+.code-line-numbers .json-line-error { color: #ff9292; background: #ff929218; }
+.mc-slot[aria-invalid=true] { outline: 2px solid #ff9292; outline-offset: -2px; }

@@ -6,15 +6,15 @@ const positions = {mid_center:[1,1],top_center:[1,0],bottom_center:[1,2],left_ce
 const defaults = {text:'You woke up in <wave><gold><biome></gold></wave>...',subtitle:'<italic>A new journey begins.</italic>',title:false,large_subtitle:false,outline:true,animation:'word_by_word',control:'after_title',blip:true,black_hold_ticks:60,fade_from_black_ticks:60,reveal_ticks:40,hold_ticks:60,fade_out_ticks:20,cinematic_bars:true,bar_style:'random',bar_transition_ticks:40,hide_hud_during_bars:true,title_position:'left_center',subtitle_position:'left_center'};
 const packDefaults = {...defaults,text:'',subtitle:'',animation:'fade_in',blip:false,cinematic_bars:false,hide_hud_during_bars:false,title_position:'mid_center',subtitle_position:'mid_center'};
 const positionAliases = {center:'mid_center',mc:'mid_center',mid_c:'mid_center',tc:'top_center',top_c:'top_center',bc:'bottom_center',bottom_c:'bottom_center',lc:'left_center',left_c:'left_center',rc:'right_center',right_c:'right_center',tl:'top_left',tr:'top_right',bl:'bottom_left',br:'bottom_right'};
-function readJson(source) {
+function readJson(source,{validate:check=true}={}) {
   let document;
   try { document=JSON.parse(/^\s*"intro"\s*:/.test(source)?'{'+source+'}':source); }
   catch(error) { throw new Error('Invalid JSON: '+error.message); }
   const object=value=>value!==null && typeof value==='object' && !Array.isArray(value);
   if(!object(document)) throw new Error('Paste an intro object or a spawn definition containing intro.');
   const wrapped=Object.hasOwn(document,'intro'), intro=wrapped?document.intro:document;
-  if(!object(intro)) throw new Error('intro must be a JSON object.');
-  if(!Object.hasOwn(intro,'text')) throw new Error('intro requires text.');
+  if(!object(intro)) throw Object.assign(new Error('intro must be a JSON object.'),{path:wrapped?['intro']:[]});
+  if(check&&!Object.hasOwn(intro,'text')) throw Object.assign(new Error('intro requires text.'),{field:'text',path:wrapped?['intro','text']:['text']});
   const config=Object.fromEntries(Object.entries(packDefaults).map(([key,fallback])=>[key,Object.hasOwn(intro,key)?intro[key]:fallback]));
   for(const key of ['animation','control','bar_style']) if(typeof config[key]==='string') config[key]=config[key].toLowerCase();
   for(const key of ['title_position','subtitle_position']) if(typeof config[key]==='string') {
@@ -25,12 +25,16 @@ function readJson(source) {
     config[key]=Object.hasOwn(intro,key)?intro[key]:null;
     if(config[key]&&typeof config[key]==='object'&&!Array.isArray(config[key]))config[key]={width:50,...config[key]};
   }
-  validate(config);
+  if(check)try{validate(config);}catch(error){
+    error.path??=error.field?.split('.')??[];
+    if(wrapped)error.path=['intro',...error.path];
+    throw error;
+  }
   return {document,wrapped,config};
 }
-function updateJson(state,changes) {
+function updateJson(state,changes,options) {
   const intro={...(state.wrapped?state.document.intro:state.document),...changes};
-  return readJson(JSON.stringify(state.wrapped?{...state.document,intro}:intro));
+  return readJson(JSON.stringify(state.wrapped?{...state.document,intro}:intro),options);
 }
 const clamp = (v, a=0, b=1) => Math.max(a, Math.min(b,v));
 const canonical = tag => Object.hasOwn(aliases,tag)?aliases[tag]:tag;
@@ -72,21 +76,22 @@ function componentText(value) {
   }
   return String(text)+(value.extra??[]).map(componentText).join('');
 }
-function validateComponent(value,depth=0) {
-  if(depth>64)throw new Error('Text components are nested too deeply.');
+function validateComponent(value,depth=0,path=[]) {
+  const invalid=(message,part=[])=>Object.assign(new Error(message),{path:[...path,...part],field:path[0]});
+  if(depth>64)throw invalid('Text components are nested too deeply.');
   if(typeof value==='string')return;
   if(Array.isArray(value)) {
-    if(!value.length)throw new Error('A text component array needs at least one entry.');
-    value.forEach(entry=>validateComponent(entry,depth+1));return;
+    if(!value.length)throw invalid('A text component array needs at least one entry.');
+    value.forEach((entry,index)=>validateComponent(entry,depth+1,[...path,index]));return;
   }
-  if(!value||typeof value!=='object'||!['text','translate','score','selector','keybind','nbt'].some(key=>Object.hasOwn(value,key)))throw new Error('Use text or a Minecraft text component.');
-  for(const key of ['text','translate','fallback','selector','keybind','nbt'])if(value[key]!==undefined&&typeof value[key]!=='string')throw new Error(key+' in a text component must be text.');
-  for(const key of ['bold','italic','underlined','strikethrough','obfuscated'])if(value[key]!==undefined&&typeof value[key]!=='boolean')throw new Error(key+' in a text component must be true or false.');
+  if(!value||typeof value!=='object'||!['text','translate','score','selector','keybind','nbt'].some(key=>Object.hasOwn(value,key)))throw invalid('Use text or a Minecraft text component.');
+  for(const key of ['text','translate','fallback','selector','keybind','nbt'])if(value[key]!==undefined&&typeof value[key]!=='string')throw invalid(key+' in a text component must be text.',[key]);
+  for(const key of ['bold','italic','underlined','strikethrough','obfuscated'])if(value[key]!==undefined&&typeof value[key]!=='boolean')throw invalid(key+' in a text component must be true or false.',[key]);
   for(const key of ['extra','with'])if(value[key]!==undefined) {
-    if(!Array.isArray(value[key]))throw new Error(key+' in a text component must be a list.');
-    value[key].forEach(entry=>validateComponent(entry,depth+1));
+    if(!Array.isArray(value[key]))throw invalid(key+' in a text component must be a list.',[key]);
+    value[key].forEach((entry,index)=>validateComponent(entry,depth+1,[...path,key,index]));
   }
-  if(value.score!==undefined&&(!value.score||typeof value.score.name!=='string'||typeof value.score.objective!=='string'))throw new Error('A score component needs a name and objective.');
+  if(value.score!==undefined&&(!value.score||typeof value.score.name!=='string'||typeof value.score.objective!=='string'))throw invalid('A score component needs a name and objective.',['score']);
 }
 function parse(text, names={}, offset=0, inherited={}) {
   if(typeof text!=='string') {
@@ -306,15 +311,15 @@ function glyphFrame(g,tick,alpha) {
   return {x:e.shake?Math.sin(tick*1.7+i*1.31)*1.15:0,y:(e.wave?Math.sin((tick+i*6*.55)*.24)*1.75:0)-(e.jump?Math.abs(Math.sin(tick*.28-i*.55))*2.4:0),tint,alpha};
 }
 function validate(cfg) {
-  for(const field of ['text','subtitle'])validateComponent(cfg[field]);
-  for(const key of ['title','large_subtitle','outline','blip','cinematic_bars','hide_hud_during_bars']) if(typeof cfg[key]!=='boolean') throw new Error(key+' must be true or false.');
-  if(!componentText(cfg.text).trim()) throw new Error('Enter some main text.');
-  if(JSON.stringify({text:cfg.text}).length+JSON.stringify({text:cfg.subtitle}).length>16384) throw new Error('Text and subtitle exceed the 16,384-character limit.');
+  for(const field of ['text','subtitle'])validateComponent(cfg[field],0,[field]);
+  for(const key of ['title','large_subtitle','outline','blip','cinematic_bars','hide_hud_during_bars']) if(typeof cfg[key]!=='boolean') throw Object.assign(new Error(key+' must be true or false.'),{field:key});
+  if(!componentText(cfg.text).trim()) throw Object.assign(new Error('Enter some main text.'),{field:'text'});
+  if(JSON.stringify({text:cfg.text}).length+JSON.stringify({text:cfg.subtitle}).length>16384) throw Object.assign(new Error('Text and subtitle exceed the 16,384-character limit.'),{field:'text'});
   for(const field of ['black_hold_ticks','fade_from_black_ticks','reveal_ticks','hold_ticks','fade_out_ticks','bar_transition_ticks']) {
     const min=field==='black_hold_ticks'?0:1;
     if(!Number.isInteger(cfg[field])||cfg[field]<min||cfg[field]>1200) throw Object.assign(new Error(({black_hold_ticks:'Black screen',fade_from_black_ticks:'World fade',reveal_ticks:'Text reveal',hold_ticks:'Text hold',fade_out_ticks:'Text fade out',bar_transition_ticks:'Bar movement'})[field]+' must be a whole number from '+min+' to 1200.'),{field});
   }
-  for(const key of ['title_position','subtitle_position']) if(!Object.hasOwn(positions,cfg[key])) throw new Error('Unknown text position.');
+  for(const key of ['title_position','subtitle_position']) if(!Object.hasOwn(positions,cfg[key])) throw Object.assign(new Error('Unknown text position.'),{field:key});
   for(const key of ['title_coordinates','subtitle_coordinates'])if(cfg[key]!=null) {
     const value=cfg[key];
     if(typeof value!=='object'||Array.isArray(value))throw Object.assign(new Error(key+' must contain x and y percentages.'),{field:key});
@@ -323,9 +328,9 @@ function validate(cfg) {
       if(typeof number!=='number'||!Number.isFinite(number)||number<min||number>100)throw Object.assign(new Error(key+'.'+field+' must be a number from '+min+' to 100.'),{field:key+'.'+field});
     }
   }
-  if(!['fade_in','word_by_word','letter_by_letter','immediate'].includes(cfg.animation)) throw new Error('Unknown reveal mode.');
-  if(!['after_title','during_title'].includes(cfg.control)) throw new Error('Unknown control setting.');
-  if(!['random','straight'].includes(cfg.bar_style)) throw new Error('Unknown bar style.');
+  if(!['fade_in','word_by_word','letter_by_letter','immediate'].includes(cfg.animation)) throw Object.assign(new Error('Unknown reveal mode.'),{field:'animation'});
+  if(!['after_title','during_title'].includes(cfg.control)) throw Object.assign(new Error('Unknown control setting.'),{field:'control'});
+  if(!['random','straight'].includes(cfg.bar_style)) throw Object.assign(new Error('Unknown bar style.'),{field:'bar_style'});
   return cfg;
 }
 const api={componentText,validateComponent,colors,positions,defaults,packDefaults,readJson,updateJson,parse,wrap,padding,bounds,guiViewport,layout,presentation,duration,wordEnds,visible,glyphFrame,validate,clamp,active};
