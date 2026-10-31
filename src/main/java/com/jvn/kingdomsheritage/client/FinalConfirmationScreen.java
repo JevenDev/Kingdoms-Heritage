@@ -3,6 +3,7 @@ package com.jvn.kingdomsheritage.client;
 import com.google.gson.JsonObject;
 import com.jvn.kingdomsheritage.compat.EquipmentCompat;
 import com.jvn.kingdomsheritage.network.HeritageNetwork;
+import com.jvn.toucanlib.client.ToucanGlyphLayout;
 import com.jvn.toucanlib.client.ToucanGuiText;
 import com.jvn.toucanlib.client.ToucanTextRenderer;
 import com.jvn.toucanlib.client.ToucanTextTimeline;
@@ -20,8 +21,8 @@ import org.lwjgl.glfw.GLFW;
 final class FinalConfirmationScreen extends Screen {
     private final UUID token;
     private final ToucanTextTimeline timeline;
-    private final List<IntroText.Glyph> glyphs;
-    private List<IntroText.Line> lines = List.of();
+    private final List<ToucanGlyphLayout.Glyph> glyphs;
+    private List<ToucanGlyphLayout.Line> lines = List.of();
     private long started = -1;
     private boolean skipped;
     private boolean submitted;
@@ -44,7 +45,7 @@ final class FinalConfirmationScreen extends Screen {
         var narration = SelectionNarration.create(player.getName(), review.getAsJsonObject("locations"), kit,
                 catalog.get("inventory_policy").getAsString(), hasBelongings);
         timeline = narration.timeline();
-        glyphs = IntroText.glyphs(narration.text(), 0);
+        glyphs = ToucanGlyphLayout.glyphs(narration.text(), 0);
     }
 
     @Override
@@ -53,7 +54,7 @@ final class FinalConfirmationScreen extends Screen {
         int available = Math.min(560, width - margin * 2);
         textScale = 1.5F;
         do {
-            lines = IntroText.wrap(font, glyphs, ToucanGuiText.scaledWrapWidth(available, textScale));
+            lines = ToucanGlyphLayout.wrap(font, glyphs, ToucanGuiText.scaledWrapWidth(available, textScale));
             if (lines.size() * (font.lineHeight + 5) * textScale <= Math.max(24, height - 136) || textScale <= 0.6F) break;
             textScale -= 0.1F;
         } while (true);

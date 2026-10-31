@@ -1,24 +1,25 @@
 package com.jvn.kingdomsheritage.client;
 
 import com.jvn.kingdomsheritage.data.IntroDefinition;
+import com.jvn.toucanlib.client.ToucanGlyphLayout;
 import java.util.List;
 import java.util.function.DoubleFunction;
 import net.minecraft.client.gui.Font;
 import net.minecraft.util.Mth;
 
 record IntroLayout(IntroLayout.Block title, IntroLayout.Block subtitle) {
-    record Block(List<IntroText.Line> lines, float anchorX, float top, float scale,
+    record Block(List<ToucanGlyphLayout.Line> lines, float anchorX, float top, float scale,
                  IntroDefinition.Position position, int lineHeight) {
-        float width() { return lines.stream().mapToInt(IntroText.Line::width).max().orElse(0) * scale; }
+        float width() { return lines.stream().mapToInt(ToucanGlyphLayout.Line::width).max().orElse(0) * scale; }
         float height() { return lines.size() * lineHeight * scale; }
         float left() { return anchorX - width() * position.column() / 2; }
-        float lineLeft(IntroText.Line line) { return -line.width() * position.column() / 2F; }
+        float lineLeft(ToucanGlyphLayout.Line line) { return -line.width() * position.column() / 2F; }
     }
 
     static IntroLayout create(Font font, int width, int height, IntroDefinition intro,
-                              List<IntroText.Glyph> text, List<IntroText.Glyph> subtitle, float slant) {
-        int horizontalPadding = Math.max(IntroText.effectPadding(text, false), IntroText.effectPadding(subtitle, false));
-        int verticalPadding = Math.max(IntroText.effectPadding(text, true), IntroText.effectPadding(subtitle, true));
+                              List<ToucanGlyphLayout.Glyph> text, List<ToucanGlyphLayout.Glyph> subtitle, float slant) {
+        int horizontalPadding = Math.max(ToucanGlyphLayout.effectPadding(text, false), ToucanGlyphLayout.effectPadding(subtitle, false));
+        int verticalPadding = Math.max(ToucanGlyphLayout.effectPadding(text, true), ToucanGlyphLayout.effectPadding(subtitle, true));
         float margin = Math.min(20 + Math.max(horizontalPadding, verticalPadding) * 1.5F, Math.min(width, height) / 4F);
         float top = margin;
         float bottom = height - margin;
@@ -35,9 +36,9 @@ record IntroLayout(IntroLayout.Block title, IntroLayout.Block subtitle) {
         var subtitlePosition = intro.subtitlePosition();
         if (intro.titleCoordinates() == null && intro.subtitleCoordinates() == null
                 && (subtitle.isEmpty() || titlePosition == subtitlePosition)) {
-            var titleLines = IntroText.wrap(font, text, Math.max(1, (int) (availableWidth / titleScale)));
-            var subtitleLines = subtitle.isEmpty() ? List.<IntroText.Line>of()
-                    : IntroText.wrap(font, subtitle, Math.max(1, (int) (availableWidth / subtitleScale)));
+            var titleLines = ToucanGlyphLayout.wrap(font, text, Math.max(1, (int) (availableWidth / titleScale)));
+            var subtitleLines = subtitle.isEmpty() ? List.<ToucanGlyphLayout.Line>of()
+                    : ToucanGlyphLayout.wrap(font, subtitle, Math.max(1, (int) (availableWidth / subtitleScale)));
             float titleHeight = titleLines.size() * lineHeight * titleScale;
             float subtitleHeight = subtitleLines.size() * lineHeight * subtitleScale;
             float gap = subtitleLines.isEmpty() ? 0 : 8;
@@ -128,13 +129,13 @@ record IntroLayout(IntroLayout.Block title, IntroLayout.Block subtitle) {
         return false;
     }
 
-    private static Block positioned(Font font, List<IntroText.Glyph> glyphs, float scale, IntroDefinition.Position position,
+    private static Block positioned(Font font, List<ToucanGlyphLayout.Glyph> glyphs, float scale, IntroDefinition.Position position,
                                     IntroDefinition.Coordinates coordinates, int lineHeight, int width, int height,
                                     float margin, float top, float availableWidth, float availableHeight, float widthLimit) {
         if (coordinates == null) {
             float maxWidth = Math.max(1, Math.min(availableWidth, widthLimit));
-            var lines = glyphs.isEmpty() ? List.<IntroText.Line>of()
-                    : IntroText.wrap(font, glyphs, Math.max(1, (int) (maxWidth / scale)));
+            var lines = glyphs.isEmpty() ? List.<ToucanGlyphLayout.Line>of()
+                    : ToucanGlyphLayout.wrap(font, glyphs, Math.max(1, (int) (maxWidth / scale)));
             return place(lines, scale, position, lineHeight, margin, top, availableWidth, availableHeight, maxWidth, availableHeight);
         }
         float x = (float) (width * coordinates.x() / 100);
@@ -142,7 +143,7 @@ record IntroLayout(IntroLayout.Block title, IntroLayout.Block subtitle) {
         // configured widths only constrain text when another block would overlap
         float maxWidth = Math.max(1, Math.min(widthLimit, span(x, width, position.column())));
         float maxHeight = Math.max(1, span(y, height, position.row()));
-        var lines = glyphs.isEmpty() ? List.<IntroText.Line>of() : IntroText.wrap(font, glyphs, Math.max(1, (int) (maxWidth / scale)));
+        var lines = glyphs.isEmpty() ? List.<ToucanGlyphLayout.Line>of() : ToucanGlyphLayout.wrap(font, glyphs, Math.max(1, (int) (maxWidth / scale)));
         scale *= Math.min(1, Math.min(maxHeight / Math.max(1, lines.size() * lineHeight * scale),
                 maxWidth / Math.max(1, maxWidth(lines) * scale)));
         return new Block(lines, x, y - lines.size() * lineHeight * scale * position.row() / 2, scale, position, lineHeight);
@@ -152,7 +153,7 @@ record IntroLayout(IntroLayout.Block title, IntroLayout.Block subtitle) {
         return alignment == 0 ? size - anchor : alignment == 2 ? anchor : 2 * Math.min(anchor, size - anchor);
     }
 
-    private static Block place(List<IntroText.Line> lines, float scale, IntroDefinition.Position position, int lineHeight,
+    private static Block place(List<ToucanGlyphLayout.Line> lines, float scale, IntroDefinition.Position position, int lineHeight,
                                float left, float top, float width, float height, float maxWidth, float maxHeight) {
         float fit = Math.min(1, Math.min(maxHeight / Math.max(1, lines.size() * lineHeight * scale),
                 maxWidth / Math.max(1, maxWidth(lines) * scale)));
@@ -161,7 +162,7 @@ record IntroLayout(IntroLayout.Block title, IntroLayout.Block subtitle) {
                 top + (height - lines.size() * lineHeight * scale) * position.row() / 2, scale, position, lineHeight);
     }
 
-    private static int maxWidth(List<IntroText.Line> lines) {
-        return lines.stream().mapToInt(IntroText.Line::width).max().orElse(0);
+    private static int maxWidth(List<ToucanGlyphLayout.Line> lines) {
+        return lines.stream().mapToInt(ToucanGlyphLayout.Line::width).max().orElse(0);
     }
 }

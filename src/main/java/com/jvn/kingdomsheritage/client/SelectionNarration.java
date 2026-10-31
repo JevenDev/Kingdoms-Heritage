@@ -2,6 +2,7 @@ package com.jvn.kingdomsheritage.client;
 
 import com.google.gson.JsonObject;
 import com.jvn.kingdomsheritage.data.DefinitionJson;
+import com.jvn.toucanlib.client.ToucanGlyphLayout;
 import com.jvn.toucanlib.client.ToucanTextTimeline;
 import java.util.List;
 import java.util.Locale;
@@ -35,7 +36,7 @@ record SelectionNarration(Component text, ToucanTextTimeline timeline) {
 
     private static ToucanTextTimeline.Segment segment(Component text, long pause) {
         var plain = new StringBuilder();
-        for (var glyph : IntroText.glyphs(text, 0)) plain.appendCodePoint(glyph.codePoint());
+        for (var glyph : ToucanGlyphLayout.glyphs(text, 0)) plain.appendCodePoint(glyph.codePoint());
         return new ToucanTextTimeline.Segment(plain.toString(), pause);
     }
 

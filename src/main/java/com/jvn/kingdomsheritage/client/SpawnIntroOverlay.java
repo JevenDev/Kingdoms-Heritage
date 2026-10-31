@@ -3,6 +3,7 @@ package com.jvn.kingdomsheritage.client;
 import com.google.gson.JsonObject;
 import com.jvn.kingdomsheritage.data.IntroDefinition;
 import com.jvn.kingdomsheritage.network.HeritageNetwork;
+import com.jvn.toucanlib.client.ToucanGlyphLayout;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -28,9 +29,9 @@ public final class SpawnIntroOverlay {
     private static IntroDefinition intro;
     private static UUID token;
     private static ResourceLocation dimension;
-    private static List<IntroText.Glyph> text = List.of();
-    private static List<IntroText.Glyph> subtitle = List.of();
-    private static List<IntroText.Glyph> all = List.of();
+    private static List<ToucanGlyphLayout.Glyph> text = List.of();
+    private static List<ToucanGlyphLayout.Glyph> subtitle = List.of();
+    private static List<ToucanGlyphLayout.Glyph> all = List.of();
     private static List<Integer> wordEnds = List.of();
     private static IntroLayout layout;
     private static int layoutWidth;
@@ -62,13 +63,13 @@ public final class SpawnIntroOverlay {
                 "dimension", IntroText.location("dimension", id(locations, "dimension")));
         var styledText = IntroMarkup.style(IntroText.resolve(intro.text(), names));
         var styledSubtitle = IntroMarkup.style(IntroText.resolve(intro.subtitle(), names));
-        text = IntroText.glyphs(styledText, 0);
-        subtitle = IntroText.glyphs(styledSubtitle, text.size() + 1);
+        text = ToucanGlyphLayout.glyphs(styledText, 0);
+        subtitle = ToucanGlyphLayout.glyphs(styledSubtitle, text.size() + 1);
         var combined = new ArrayList<>(text);
-        combined.add(new IntroText.Glyph('\n', net.minecraft.network.chat.Style.EMPTY, text.size()));
+        combined.add(new ToucanGlyphLayout.Glyph('\n', net.minecraft.network.chat.Style.EMPTY, text.size()));
         combined.addAll(subtitle);
         all = List.copyOf(combined);
-        wordEnds = IntroText.wordEnds(all);
+        wordEnds = ToucanGlyphLayout.wordEnds(all);
         Minecraft.getInstance().getNarrator().sayNow(
                 styledText.copy().append("\n").append(styledSubtitle));
     }
