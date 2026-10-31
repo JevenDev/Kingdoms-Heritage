@@ -27,7 +27,7 @@ side="BOTH"
 [[dependencies."${mod_id}"]]
 modId="toucanlib"
 type="required"
-versionRange="[0.6.0,0.7.0)"
+versionRange="[0.6.1,0.7.0)"
 ordering="AFTER"
 side="BOTH"
 

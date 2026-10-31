@@ -12,7 +12,8 @@ enum SelectionSounds {
     CONFIRMATION("ui_confirmation"),
     CLICK("ui_click"),
     HOVER("ui_hover"),
-    DISSOLVE("ui_dissolve");
+    DISSOLVE("ui_dissolve"),
+    DIALOGUE("dialogue");
 
     private static final RandomSource RANDOM = RandomSource.create();
 
@@ -23,6 +24,10 @@ enum SelectionSounds {
     }
 
     void play() {
-        Minecraft.getInstance().getSoundManager().play(SimpleSoundInstance.forUI(sound, 0.95F + RANDOM.nextFloat() * 0.1F));
+        play(1);
+    }
+
+    void play(float volume) {
+        Minecraft.getInstance().getSoundManager().play(SimpleSoundInstance.forUI(sound, 0.95F + RANDOM.nextFloat() * 0.1F, volume));
     }
 }

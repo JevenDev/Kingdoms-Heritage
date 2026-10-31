@@ -25,6 +25,7 @@ public final class ClientSelection {
     private static JsonObject catalog;
     private static SpawnSelectScreen selection;
     private static KitSelection kits;
+    private static FinalConfirmationScreen finalReview;
     private static String progress = "";
 
     private ClientSelection() {}
@@ -56,13 +57,29 @@ public final class ClientSelection {
             progress = next.get("progress").getAsString();
             if (progress.equals("retry")) {
                 SelectionSounds.ERROR.play();
-                if (kits != null) kits.retry();
+                if (finalReview != null) finalReview.retry();
+                else if (kits != null) kits.retry();
                 else if (selection != null) selection.retry();
                 progress = "";
                 SelectionTransition.reveal();
             }
             return;
         }
+        if (next.has("review")) {
+            var review = next.getAsJsonObject("review");
+            if (catalog == null || review.get("revision").getAsLong() != catalog.get("revision").getAsLong()) {
+                net.neoforged.neoforge.network.PacketDistributor.sendToServer(new HeritageNetwork.ReviewDecision(
+                        java.util.UUID.fromString(review.get("token").getAsString()), false));
+                return;
+            }
+            progress = "";
+            if (kits != null) kits.close();
+            finalReview = new FinalConfirmationScreen(catalog, review);
+            minecraft.setScreen(finalReview);
+            SelectionTransition.reveal();
+            return;
+        }
+        finalReview = null;
         SpawnIntroOverlay.clear();
         boolean confirmed = progress.equals("applying");
         progress = "";
@@ -132,6 +149,24 @@ public final class ClientSelection {
         });
     }
 
+    static void review(String spawn, String kit) {
+        var request = new HeritageNetwork.Choose(spawn, kit, catalog.get("revision").getAsLong());
+        SelectionTransition.fadeOut(() -> net.neoforged.neoforge.network.PacketDistributor.sendToServer(new HeritageNetwork.Review(request)));
+    }
+
+    static void cancelReview(java.util.UUID token) {
+        net.neoforged.neoforge.network.PacketDistributor.sendToServer(new HeritageNetwork.ReviewDecision(token, false));
+        finalReview = null;
+        progress = "";
+        if (kits != null) {
+            kits.retry();
+            kits.openInventory();
+        } else {
+            selection.retry();
+            Minecraft.getInstance().setScreen(selection);
+        }
+    }
+
     static Component progress() {
         return Component.translatable("screen.kingdomsheritage."
                 + (progress.isEmpty() ? "wait" : progress));
@@ -163,10 +198,12 @@ public final class ClientSelection {
     private static void tick(ClientTickEvent.Post event) {
         SelectionTransition.tick();
         SpawnIntroOverlay.tick();
-        SelectionMusic.tick(catalog != null && progress.isEmpty());
+        SelectionMusic.tick(catalog != null && !progress.equals("applying"));
         Minecraft minecraft = Minecraft.getInstance();
         if (catalog == null || minecraft.level == null || minecraft.player == null) return;
-        if (kits != null) {
+        if (finalReview != null) {
+            if (minecraft.screen != finalReview) minecraft.setScreen(finalReview);
+        } else if (kits != null) {
             kits.tick();
             if (!KitSelection.isInventory(minecraft.screen) && !KitSelection.isLayoutPicker(minecraft.screen)) kits.openInventory();
         } else if (!(minecraft.screen instanceof SpawnSelectScreen)) {
@@ -202,6 +239,7 @@ public final class ClientSelection {
         kits = null;
         catalog = null;
         selection = null;
+        finalReview = null;
         progress = "";
     }
 
@@ -214,6 +252,7 @@ public final class ClientSelection {
         kits = null;
         catalog = null;
         selection = null;
+        finalReview = null;
         if (minecraft.level != null) minecraft.level.disconnect();
         if (minecraft.isLocalServer()) minecraft.disconnect(new GenericMessageScreen(Component.translatable("menu.savingLevel")));
         else minecraft.disconnect();

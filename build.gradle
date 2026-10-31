@@ -21,7 +21,7 @@ repositories {
 }
 
 dependencies {
-    implementation 'com.jvn.toucanlib:toucanlib-neoforge-1.21.1:0.6.0'
+    implementation 'com.jvn.toucanlib:toucanlib-neoforge-1.21.1:0.6.1'
     compileOnly('top.theillusivec4.curios:curios-neoforge:9.5.1+1.21.1') {
         transitive = false
     }

@@ -37,8 +37,10 @@ import net.neoforged.neoforge.network.PacketDistributor;
 import net.neoforged.neoforge.network.registration.NetworkRegistry;
 
 public final class SelectionManager {
-    private record Preparation(ServerPlayer player, HeritageNetwork.Choose request, SpawnResolver.Search search) {}
+    private record Preparation(ServerPlayer player, HeritageNetwork.Choose request, SpawnResolver.Search search, boolean review) {}
+    private record Review(UUID token, Preparation preparation) {}
     private static final Map<UUID, Preparation> PREPARATIONS = new LinkedHashMap<>();
+    private static final Map<UUID, Review> REVIEWS = new HashMap<>();
     private static final String KEY = KingdomsHeritage.MOD_ID;
     private static final Map<UUID, Long> LAST_REQUEST = new HashMap<>();
     private static final Map<UUID, Long> SENT_REVISION = new HashMap<>();
@@ -127,13 +129,32 @@ public final class SelectionManager {
         hold(player);
         if (player.tickCount >= 20 && (SENT_REVISION.getOrDefault(player.getUUID(), -1L) != HeritageCatalog.revision())) {
             PREPARATIONS.remove(player.getUUID());
+            REVIEWS.remove(player.getUUID());
             sendChoices(player, SENT_REVISION.containsKey(player.getUUID())
                     ? Component.translatable("error.kingdomsheritage.reloaded") : Component.empty());
         }
     }
 
     public static void choose(ServerPlayer player, HeritageNetwork.Choose request) {
-        if (!pending(player) || PREPARATIONS.containsKey(player.getUUID())) return;
+        prepare(player, request, false);
+    }
+
+    public static void review(ServerPlayer player, HeritageNetwork.Choose request) {
+        prepare(player, request, true);
+    }
+
+    public static void reviewDecision(ServerPlayer player, HeritageNetwork.ReviewDecision decision) {
+        var review = REVIEWS.get(player.getUUID());
+        if (review == null || !pending(player) || !review.token().equals(decision.token())) return;
+        REVIEWS.remove(player.getUUID());
+        if (!decision.accepted()) return;
+        var preparation = review.preparation();
+        PREPARATIONS.put(player.getUUID(), new Preparation(player, preparation.request(), preparation.search(), false));
+        sendProgress(player, "queued");
+    }
+
+    private static void prepare(ServerPlayer player, HeritageNetwork.Choose request, boolean review) {
+        if (!pending(player) || PREPARATIONS.containsKey(player.getUUID()) || REVIEWS.containsKey(player.getUUID())) return;
         long now = player.server.overworld().getGameTime();
         if (now - LAST_REQUEST.getOrDefault(player.getUUID(), -100L) < 20) {
             sendProgress(player, "retry");
@@ -156,7 +177,7 @@ public final class SelectionManager {
             var stacks = kit.decode(player.registryAccess());
             if (inventoryPolicy(player) != HeritageConfig.InventoryPolicy.PRESERVE) EquipmentCompat.validate(player, stacks);
             var search = new SpawnResolver.Search(player, spawn, BlockPos.of(state(player).getLong("spawn")));
-            PREPARATIONS.put(player.getUUID(), new Preparation(player, request, search));
+            PREPARATIONS.put(player.getUUID(), new Preparation(player, request, search, review));
             sendProgress(player, "queued");
         } catch (IllegalArgumentException error) {
             sendChoices(player, HeritageException.component(error));
@@ -186,6 +207,20 @@ public final class SelectionManager {
             var destination = preparation.search().destination();
             if (!SpawnResolver.safe(destination.level(), destination.position())) {
                 throw new HeritageException("changed", "The destination changed during preparation. Please try again");
+            }
+            if (preparation.review()) {
+                UUID token = UUID.randomUUID();
+                JsonObject review = new JsonObject();
+                review.addProperty("token", token.toString());
+                review.addProperty("spawn", preparation.request().spawn());
+                review.addProperty("kit", preparation.request().kit());
+                review.addProperty("revision", preparation.request().revision());
+                review.add("locations", SpawnIntro.locations(preparation.search().definition(), destination));
+                JsonObject message = new JsonObject();
+                message.add("review", review);
+                REVIEWS.put(player.getUUID(), new Review(token, preparation));
+                PacketDistributor.sendToPlayer(player, new HeritageNetwork.Catalog(message.toString()));
+                return;
             }
             var spawn = HeritageCatalog.spawns().get(ResourceLocation.parse(preparation.request().spawn()));
             var kit = HeritageCatalog.kits().get(ResourceLocation.parse(preparation.request().kit()));
@@ -260,6 +295,7 @@ public final class SelectionManager {
                 .orElseThrow(() -> new HeritageException("original_ground", "No safe ground near the original position"));
         player.teleportTo(level, position.getX() + 0.5, position.getY(), position.getZ() + 0.5, state.getFloat("yaw"), 0);
         PREPARATIONS.remove(player.getUUID());
+        REVIEWS.remove(player.getUUID());
         state.putBoolean("pending", false);
         state.putBoolean("complete", true);
         state.remove("reset");
@@ -378,6 +414,7 @@ public final class SelectionManager {
     public static void logout(PlayerEvent.PlayerLoggedOutEvent event) {
         if (event.getEntity() instanceof ServerPlayer player) SpawnIntro.release(player);
         PREPARATIONS.remove(event.getEntity().getUUID());
+        REVIEWS.remove(event.getEntity().getUUID());
         LAST_REQUEST.remove(event.getEntity().getUUID());
         SENT_REVISION.remove(event.getEntity().getUUID());
     }
@@ -387,6 +424,7 @@ public final class SelectionManager {
         if (event.getEntity() instanceof ServerPlayer player) SpawnIntro.release(player);
         if (event.getEntity() instanceof ServerPlayer player && pending(player)) {
             PREPARATIONS.remove(player.getUUID());
+            REVIEWS.remove(player.getUUID());
             hold(player);
             SENT_REVISION.remove(player.getUUID());
         }
@@ -395,6 +433,7 @@ public final class SelectionManager {
     @SubscribeEvent
     public static void stop(ServerStoppedEvent event) {
         PREPARATIONS.clear();
+        REVIEWS.clear();
         SpawnIntro.clear();
         SpawnResolver.clearCache();
         LAST_REQUEST.clear();

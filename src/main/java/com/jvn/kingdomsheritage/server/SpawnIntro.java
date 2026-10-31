@@ -26,11 +26,16 @@ public final class SpawnIntro {
 
     static JsonObject prepare(SpawnDefinition spawn, SpawnResolver.Destination destination) {
         if (spawn.intro() == null) return new JsonObject();
+        JsonObject message = new JsonObject();
+        message.add("intro", spawn.intro().json(destination.level().registryAccess()));
+        message.addProperty("token", UUID.randomUUID().toString());
+        message.add("locations", locations(spawn, destination));
+        return message;
+    }
+
+    static JsonObject locations(SpawnDefinition spawn, SpawnResolver.Destination destination) {
         var level = destination.level();
         var position = destination.position();
-        JsonObject message = new JsonObject();
-        message.add("intro", spawn.intro().json(level.registryAccess()));
-        message.addProperty("token", UUID.randomUUID().toString());
         JsonObject locations = new JsonObject();
         level.getBiome(position).unwrapKey().ifPresent(key -> locations.addProperty("biome", key.location().toString()));
         locations.addProperty("dimension", level.dimension().location().toString());
@@ -43,8 +48,7 @@ public final class SpawnIntro {
                 .sorted(Comparator.comparing((ResourceLocation id) -> !matchesStructure(spawn, id, registry))
                         .thenComparing(ResourceLocation::toString))
                 .findFirst().ifPresent(id -> locations.addProperty("structure", id.toString()));
-        message.add("locations", locations);
-        return message;
+        return locations;
     }
 
     private static boolean matchesStructure(SpawnDefinition spawn, ResourceLocation id,

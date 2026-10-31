@@ -7,7 +7,6 @@ import com.jvn.kingdomsheritage.data.DefinitionJson;
 import com.jvn.kingdomsheritage.data.HeritageException;
 import com.jvn.kingdomsheritage.data.KitDefinition;
 import com.jvn.kingdomsheritage.data.KitLoadout;
-import com.jvn.kingdomsheritage.network.HeritageNetwork;
 import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.client.Minecraft;
@@ -25,7 +24,6 @@ import net.minecraft.world.item.ItemStack;
 import net.neoforged.bus.api.EventPriority;
 import net.neoforged.neoforge.client.event.ScreenEvent;
 import net.neoforged.neoforge.common.NeoForge;
-import net.neoforged.neoforge.network.PacketDistributor;
 import org.lwjgl.glfw.GLFW;
 
 public final class KitSelection {
@@ -203,8 +201,7 @@ public final class KitSelection {
         }
         submitted = true;
         updateButtons();
-        var request = new HeritageNetwork.Choose(spawn, kitId(), catalog.get("revision").getAsLong());
-        SelectionTransition.fadeOut(() -> PacketDistributor.sendToServer(request));
+        ClientSelection.review(spawn, kitId());
     }
 
     private void back() {

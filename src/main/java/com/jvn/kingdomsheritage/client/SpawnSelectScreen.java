@@ -2,7 +2,6 @@ package com.jvn.kingdomsheritage.client;
 
 import com.google.gson.JsonObject;
 import com.jvn.kingdomsheritage.data.DefinitionJson;
-import com.jvn.kingdomsheritage.network.HeritageNetwork;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.math.Axis;
 import java.util.ArrayList;
@@ -15,7 +14,6 @@ import net.minecraft.client.gui.screens.inventory.tooltip.DefaultTooltipPosition
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
-import net.neoforged.neoforge.network.PacketDistributor;
 import org.lwjgl.glfw.GLFW;
 
 public final class SpawnSelectScreen extends Screen {
@@ -284,9 +282,7 @@ public final class SpawnSelectScreen extends Screen {
         }
         submitted = true;
         updateNext();
-        var request = new HeritageNetwork.Choose(selected.get("id").getAsString(),
-                automaticKit.get("id").getAsString(), catalog.get("revision").getAsLong());
-        SelectionTransition.fadeOut(() -> PacketDistributor.sendToServer(request));
+        ClientSelection.review(selected.get("id").getAsString(), automaticKit.get("id").getAsString());
     }
 
     private void updateNext() {
