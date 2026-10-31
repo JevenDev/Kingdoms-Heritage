@@ -25,8 +25,6 @@ public final class SpawnSelectScreen extends Screen {
     private static final int PAGE_SIZE = 10;
     private static final ResourceLocation CARD = texture("campaign_select_screen_card");
     private static final ResourceLocation EXPANDED = texture("campaign_select_screen_card_expanded");
-    private static final ResourceLocation CARET = texture("campaign_select_screen_card_caret_expand");
-    private static final ResourceLocation COLLAPSE = texture("campaign_select_screen_card_caret_expanded");
     private static final ResourceLocation FALLBACK = texture("campaign_select_screen_card_fallback");
     private final JsonObject catalog;
     private final List<JsonObject> choices;
@@ -99,25 +97,24 @@ public final class SpawnSelectScreen extends Screen {
                 graphics.pose().pushPose();
                 card.applyPose(graphics);
                 graphics.pose().translate((getX() - card.layout.x) / card.layout.scale, 80, 0);
-                blit(graphics, expanded == null ? CARET : COLLAPSE, 5, 9, 7, 10);
+                SelectionControls.drawArrow(graphics, expanded == null, active && isHoveredOrFocused(), 1, 4);
                 graphics.pose().popPose();
             }
         });
         updateDescription();
         int buttonWidth = Math.min(130, (width - 100) / 2);
-        addRenderableWidget(Button.builder(Component.translatable("menu.disconnect"), button -> ClientSelection.disconnect())
-                .bounds(width / 2 - buttonWidth - 4, height - 28, buttonWidth, 20).build());
+        addRenderableWidget(SelectionControls.disconnect(height));
         next = addRenderableWidget(Button.builder(Component.empty(), button -> confirm())
-                .bounds(width / 2 + 4, height - 28, buttonWidth, 20).build());
+                .bounds((width - buttonWidth) / 2, height - 28, buttonWidth, 20).build());
         updateNext();
         if (choices.size() > PAGE_SIZE) {
-            var previous = addRenderableWidget(Button.builder(Component.literal("<"), button -> { page--; rebuildWidgets(); })
-                    .bounds(8, height - 28, 20, 20).build());
+            var previous = addRenderableWidget(SelectionControls.arrow((width - buttonWidth) / 2 - 40, height - 34, false,
+                    Component.translatable("spectatorMenu.previous_page"), button -> { page--; rebuildWidgets(); }));
             previous.active = page > 0;
             previous.visible = expanded == null;
             pageButtons.add(previous);
-            var forward = addRenderableWidget(Button.builder(Component.literal(">"), button -> { page++; rebuildWidgets(); })
-                    .bounds(width - 28, height - 28, 20, 20).build());
+            var forward = addRenderableWidget(SelectionControls.arrow((width + buttonWidth) / 2 + 8, height - 34, true,
+                    Component.translatable("spectatorMenu.next_page"), button -> { page++; rebuildWidgets(); }));
             forward.active = (page + 1) * PAGE_SIZE < choices.size();
             forward.visible = expanded == null;
             pageButtons.add(forward);
@@ -283,8 +280,10 @@ public final class SpawnSelectScreen extends Screen {
             setTooltipForNextRenderPass(hovered.getTooltip(), DefaultTooltipPositioner.INSTANCE, true);
         }
         if (expanded == null && choices.size() > PAGE_SIZE) {
+            Card last = cards.getLast();
             graphics.drawCenteredString(font, Component.literal((page + 1) + " / " + ((choices.size() + PAGE_SIZE - 1) / PAGE_SIZE)),
-                    width - 18, height - 43, 0xffffff);
+                    Math.round(last.layout.x + last.layout.width * last.layout.scale / 2),
+                    Math.round(last.layout.y + CARD_HEIGHT * last.layout.scale) + 8, 0xffffff);
         }
         graphics.drawCenteredString(font, title, width / 2, 12, 0xffffff);
         String error = catalog.get("error").getAsString();

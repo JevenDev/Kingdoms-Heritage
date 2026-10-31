@@ -8,6 +8,8 @@
   "structure.minecraft.village_taiga": "Taiga Village",
   "screen.kingdomsheritage.location": "Choose your starting location",
   "screen.kingdomsheritage.kit": "Choose your starting kit",
+  "screen.kingdomsheritage.previous_kit": "Previous kit",
+  "screen.kingdomsheritage.next_kit": "Next kit",
   "screen.kingdomsheritage.next": "Choose kit",
   "screen.kingdomsheritage.begin": "Begin",
   "screen.kingdomsheritage.wait": "Preparing...",

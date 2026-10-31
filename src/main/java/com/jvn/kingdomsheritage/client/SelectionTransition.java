@@ -146,12 +146,13 @@ final class SelectionTransition {
         }
         if (waiting()) {
             Minecraft minecraft = Minecraft.getInstance();
-            if (disconnect == null) disconnect = Button.builder(Component.translatable("menu.disconnect"),
-                    button -> ClientSelection.disconnect()).bounds(0, 0, 130, 20).build();
-            disconnect.setPosition((graphics.guiWidth() - disconnect.getWidth()) / 2, graphics.guiHeight() - 28);
+            if (disconnect == null) disconnect = SelectionControls.disconnect(graphics.guiHeight());
+            disconnect.setPosition(8, graphics.guiHeight() - disconnect.getHeight() - 8);
             double scale = minecraft.getWindow().getGuiScale();
-            disconnect.render(graphics, (int) (minecraft.mouseHandler.xpos() / scale),
-                    (int) (minecraft.mouseHandler.ypos() / scale), 0);
+            int mouseX = (int) (minecraft.mouseHandler.xpos() / scale);
+            int mouseY = (int) (minecraft.mouseHandler.ypos() / scale);
+            disconnect.render(graphics, mouseX, mouseY, 0);
+            if (disconnect.isHoveredOrFocused()) graphics.renderTooltip(minecraft.font, disconnect.getMessage(), mouseX, mouseY);
         }
         graphics.flush();
         graphics.pose().popPose();

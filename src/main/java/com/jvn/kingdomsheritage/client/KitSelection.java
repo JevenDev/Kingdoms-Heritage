@@ -177,10 +177,10 @@ public final class KitSelection {
             if (child instanceof net.minecraft.client.gui.components.ImageButton button
                     && button.getX() == container.getGuiLeft() + 104) event.removeListener(child);
         }
-        selection.previous = Button.builder(Component.literal("<"), button -> selection.select(selection.index - 1))
-                .bounds(8, 8, 20, 20).build();
-        selection.next = Button.builder(Component.literal(">"), button -> selection.select(selection.index + 1))
-                .bounds(screen.width - 28, 8, 20, 20).build();
+        selection.previous = SelectionControls.arrow(8, 8, false, Component.translatable("screen.kingdomsheritage.previous_kit"),
+                button -> selection.select(selection.index - 1));
+        selection.next = SelectionControls.arrow(screen.width - 28, 8, true, Component.translatable("screen.kingdomsheritage.next_kit"),
+                button -> selection.select(selection.index + 1));
         selection.back = Button.builder(Component.translatable("gui.back"), button -> ClientSelection.back())
                 .bounds(8, screen.height - 27, 70, 20).build();
         selection.confirm = Button.builder(Component.translatable("screen.kingdomsheritage.begin"), button -> {
@@ -191,6 +191,7 @@ public final class KitSelection {
                     selection.choices.get(selection.index).get("id").getAsString(), selection.catalog.get("revision").getAsLong());
             SelectionTransition.fadeOut(() -> PacketDistributor.sendToServer(request));
         }).bounds(screen.width - 108, screen.height - 27, 100, 20).build();
+        event.addListener(SelectionControls.disconnect(screen.height));
         event.addListener(selection.previous);
         event.addListener(selection.next);
         event.addListener(selection.back);
@@ -211,20 +212,24 @@ public final class KitSelection {
             int left = container.getGuiLeft();
             int right = left + container.getXSize();
             for (var slot : container.getMenu().slots) {
-                if (slot.isActive()) {
+                if (slot.isActive() && !(slot.container instanceof net.minecraft.world.inventory.CraftingContainer)
+                        && !(slot.container instanceof net.minecraft.world.inventory.ResultContainer)) {
                     left = Math.min(left, container.getGuiLeft() + slot.x - 8);
                     right = Math.max(right, container.getGuiLeft() + slot.x + 24);
                 }
             }
             bounds = new net.minecraft.client.renderer.Rect2i(left, container.getGuiTop(), right - left, container.getYSize());
         }
-        int middle = bounds.getY() + (bounds.getHeight() - 20) / 2;
-        previous.setPosition(Math.max(4, bounds.getX() - 30), middle);
-        next.setPosition(Math.min(screen.width - 24, bounds.getX() + bounds.getWidth() + 10), middle);
+        int middle = bounds.getY() + (bounds.getHeight() - previous.getHeight()) / 2;
+        previous.setPosition(Math.max(4, bounds.getX() - previous.getWidth() - 10), middle);
+        next.setPosition(Math.min(screen.width - next.getWidth() - 4, bounds.getX() + bounds.getWidth() + 10), middle);
         int center = bounds.getX() + bounds.getWidth() / 2;
         int bottom = Math.min(screen.height - 24, bounds.getY() + bounds.getHeight() + 6);
-        back.setPosition(center - 86, bottom);
-        confirm.setPosition(center - 12, bottom);
+        int buttonWidth = Math.min(100, (bounds.getWidth() - 4) / 2);
+        back.setWidth(buttonWidth);
+        confirm.setWidth(buttonWidth);
+        back.setPosition(center - buttonWidth - 2, bottom);
+        confirm.setPosition(center + 2, bottom);
         descriptionY = bottom + 25;
     }
 
