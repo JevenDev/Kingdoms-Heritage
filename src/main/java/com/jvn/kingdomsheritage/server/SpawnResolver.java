@@ -10,6 +10,7 @@ import java.util.Optional;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.tags.BlockTags;
@@ -20,7 +21,8 @@ import net.minecraft.world.phys.AABB;
 
 public final class SpawnResolver {
     public record Destination(ServerLevel level, BlockPos position) {}
-    private record CacheKey(ServerLevel level, SpawnDefinition definition, BlockPos origin, int radius) {}
+    private record CacheKey(ServerLevel level, SpawnDefinition.Kind kind, ResourceLocation target, boolean tag,
+                            ResourceLocation piece, BlockPos origin, int radius) {}
     private static final LinkedHashMap<CacheKey, BlockPos> CACHE = new LinkedHashMap<>();
     private static long cachedRevision = -1;
 
@@ -56,7 +58,8 @@ public final class SpawnResolver {
             if (level == null) throw new HeritageException("dimension", "Dimension is unavailable: %s", this.definition.dimension().toString());
             chunks = new SpawnChunks(level);
             origin = level.getSharedSpawnPos();
-            cacheKey = new CacheKey(level, this.definition, origin, searchRadius(this.definition));
+            cacheKey = new CacheKey(level, this.definition.kind(), this.definition.target(), this.definition.targetTag(),
+                    this.definition.piece(), origin, searchRadius(this.definition));
         }
 
         public SpawnDefinition definition() { return definition; }
@@ -82,7 +85,12 @@ public final class SpawnResolver {
                             double distance = Math.sqrt(level.random.nextDouble()) * radius;
                             pendingColumn = origin.offset((int) (Math.cos(angle) * distance), 0, (int) (Math.sin(angle) * distance));
                         } else {
-                            if (!columns.hasNext()) throw new HeritageException("ground", "No safe ground found at this location. Choose another location or ask an administrator to check its terrain");
+                            if (!columns.hasNext()) {
+                                if (biomeSearch == null) throw new HeritageException("ground", "No safe ground found at this location. Choose another location or ask an administrator to check its terrain");
+                                biomeSearch.next();
+                                located = false;
+                                return false;
+                            }
                             pendingColumn = columns.next();
                         }
                     }
@@ -139,14 +147,18 @@ public final class SpawnResolver {
                 complete(structureSearch.result());
             } else if (definition.kind() == SpawnDefinition.Kind.BIOME) {
                 if (biomeSearch == null) biomeSearch = new BiomeSpawnSearch(level, definition, origin);
-                if (!biomeSearch.step(deadline)) return false;
+                if (!biomeSearch.step()) return false;
                 columns = columns(biomeSearch.result(), 48);
             }
             return true;
         }
 
         @Override
-        public void close() { chunks.close(); }
+        public void close() {
+            if (biomeSearch != null) biomeSearch.close();
+            if (structureSearch != null) structureSearch.close();
+            chunks.close();
+        }
 
         private void complete(BlockPos position) {
             destination = new Destination(level, position);

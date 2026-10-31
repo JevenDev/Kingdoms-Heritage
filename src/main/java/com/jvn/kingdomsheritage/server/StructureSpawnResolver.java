@@ -59,7 +59,7 @@ final class StructureSpawnResolver {
         return false;
     }
 
-    static final class Search {
+    static final class Search implements AutoCloseable {
         private final ServerLevel level;
         private final SpawnDefinition definition;
         private final SpawnChunks chunks;
@@ -132,6 +132,9 @@ final class StructureSpawnResolver {
             }
             return false;
         }
+
+        @Override
+        public void close() { locator.close(); }
 
         private void begin(StructurePiece next) {
             piece = next;
