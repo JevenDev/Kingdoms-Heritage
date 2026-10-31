@@ -20,7 +20,7 @@
     "sounds": [{ "name": "kingdomsheritage:ui/error", "volume": 0.62 }]
   },
   "ui_confirmation": {
-    "sounds": [{ "name": "kingdomsheritage:ui/confirmation", "volume": 0.39 }]
+    "sounds": [{ "name": "kingdomsheritage:ui/confirmation", "volume": 1 }]
   },
   "ui_click": {
     "sounds": [{ "name": "kingdomsheritage:ui/click", "volume": 0.4 }]
