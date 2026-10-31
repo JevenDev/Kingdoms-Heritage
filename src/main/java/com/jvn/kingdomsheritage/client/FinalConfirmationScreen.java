@@ -164,7 +164,7 @@ final class FinalConfirmationScreen extends Screen {
                     i * (font.lineHeight + 5), 0xffeeeae0, (int) (elapsed() / 50));
         }
         graphics.pose().popPose();
-        if (!complete()) graphics.drawCenteredString(font, Component.translatable("screen.kingdomsheritage.review_skip"),
+        if (!complete()) SelectionText.centered(graphics, font, Component.translatable("screen.kingdomsheritage.review_skip"),
                 width / 2, height - 27, 0xffaaaaaa);
     }
 }

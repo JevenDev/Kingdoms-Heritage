@@ -23,7 +23,7 @@ final class SelectionMusic {
         NeoForge.EVENT_BUS.addListener(EventPriority.LOWEST, SelectionMusic::select);
     }
 
-    static void tick(boolean selecting) {
+    static void tick(boolean selecting, boolean ducked) {
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.player == null || minecraft.level == null || !minecraft.player.isAlive()
                 || minecraft.options.getSoundSourceVolume(SoundSource.MUSIC) <= 0
@@ -43,6 +43,7 @@ final class SelectionMusic {
         }
         if (track != null) {
             track.playing = playing;
+            track.ducked = ducked;
             if (!playing && track.toast != null) track.toast.hide();
             if (playing && track.toast == null && track.getVolume() > 0) {
                 track.toast = new SelectionMusicToast();
@@ -67,6 +68,8 @@ final class SelectionMusic {
         private static final int FADE_OUT_TICKS = 40;
         private SelectionMusicToast toast;
         private boolean playing = true;
+        private boolean ducked;
+        private float duck = 1;
         private float fade;
 
         private Track() {
@@ -87,7 +90,8 @@ final class SelectionMusic {
         @Override
         public void tick() {
             fade = Mth.clamp(fade + (playing ? 1F / FADE_IN_TICKS : -1F / FADE_OUT_TICKS), 0, 1);
-            volume = fade * fade * (3 - 2 * fade);
+            duck = Mth.approach(duck, ducked ? 0.6F : 1, 0.05F);
+            volume = fade * fade * (3 - 2 * fade) * duck;
             if (!playing && fade == 0) stop();
         }
 

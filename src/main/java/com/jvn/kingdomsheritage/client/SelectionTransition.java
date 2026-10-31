@@ -140,7 +140,7 @@ final class SelectionTransition {
         graphics.flush();
         if (alpha >= 4 && (joining || awaitingWorld || waiting())) {
             LoadingIndicator.render(graphics, graphics.guiWidth() / 2, graphics.guiHeight() / 2 - 8, now, alpha);
-            graphics.drawCenteredString(Minecraft.getInstance().font, joining || awaitingWorld
+            SelectionText.centered(graphics, Minecraft.getInstance().font, joining || awaitingWorld
                             ? Component.translatable("screen.kingdomsheritage.loading") : ClientSelection.progress(),
                     graphics.guiWidth() / 2, graphics.guiHeight() / 2 + 16, alpha << 24 | 0xffffff);
         }

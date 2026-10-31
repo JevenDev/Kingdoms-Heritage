@@ -24,9 +24,9 @@ final class SelectionMusicToast implements Toast {
         graphics.renderFakeItem(icon, 8, 8);
         var title = IntroMarkup.style(Component.literal("<rainbow>")
                 .append(Component.translatable("toast.kingdomsheritage.now_playing")).append("</rainbow>"));
-        ToucanTextRenderer.renderLine(graphics, font, title.getVisualOrderText(), 30, 7,
-                0xffffffff, 255, (int) (timeSinceLastVisible / 50));
-        graphics.drawString(font, Component.translatable("music.kingdomsheritage.selection"), 30, 18, 0xffffffff, false);
+        ToucanTextRenderer.renderOutlinedLine(graphics, font, title.getVisualOrderText(), 30, 7,
+                0xffffffff, (int) (timeSinceLastVisible / 50));
+        SelectionText.draw(graphics, font, Component.translatable("music.kingdomsheritage.selection"), 30, 18, 0xffffffff);
         return timeSinceLastVisible < 5000 * toasts.getNotificationDisplayTimeMultiplier() ? Visibility.SHOW : Visibility.HIDE;
     }
 }

@@ -66,12 +66,23 @@ final class SelectionControls {
     }
 
     static class SoundButton extends Button {
+        private boolean hovered;
+
         SoundButton(int x, int y, int width, int height, Component message, OnPress onPress) {
             this(x, y, width, height, message, onPress, DEFAULT_NARRATION);
         }
 
         SoundButton(int x, int y, int width, int height, Component message, OnPress onPress, CreateNarration narration) {
             super(x, y, width, height, message, onPress, narration);
+        }
+
+        @Override
+        protected void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+            boolean hover = active && alpha * 255 >= 4 && isHovered();
+            if (hover && !hovered && !SelectionTransition.active()) SelectionSounds.HOVER.play();
+            hovered = hover;
+            if (alpha * 255 < 4) return;
+            super.renderWidget(graphics, mouseX, mouseY, partialTick);
         }
 
         @Override

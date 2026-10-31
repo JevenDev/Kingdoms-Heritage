@@ -155,16 +155,19 @@ public final class ClientSelection {
     }
 
     static void cancelReview(java.util.UUID token) {
-        net.neoforged.neoforge.network.PacketDistributor.sendToServer(new HeritageNetwork.ReviewDecision(token, false));
-        finalReview = null;
-        progress = "";
-        if (kits != null) {
-            kits.retry();
-            kits.openInventory();
-        } else {
-            selection.retry();
-            Minecraft.getInstance().setScreen(selection);
-        }
+        SelectionTransition.fadeOut(() -> {
+            net.neoforged.neoforge.network.PacketDistributor.sendToServer(new HeritageNetwork.ReviewDecision(token, false));
+            finalReview = null;
+            progress = "";
+            if (kits != null) {
+                kits.retry();
+                kits.openInventory();
+            } else {
+                selection.retry();
+                Minecraft.getInstance().setScreen(selection);
+            }
+            SelectionTransition.reveal();
+        });
     }
 
     static Component progress() {
@@ -198,7 +201,7 @@ public final class ClientSelection {
     private static void tick(ClientTickEvent.Post event) {
         SelectionTransition.tick();
         SpawnIntroOverlay.tick();
-        SelectionMusic.tick(catalog != null && !progress.equals("applying"));
+        SelectionMusic.tick(catalog != null && !progress.equals("applying"), finalReview != null);
         Minecraft minecraft = Minecraft.getInstance();
         if (catalog == null || minecraft.level == null || minecraft.player == null) return;
         if (finalReview != null) {

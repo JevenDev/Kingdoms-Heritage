@@ -369,19 +369,19 @@ public final class SpawnSelectScreen extends Screen {
         }
         if (expanded == null && choices.size() > PAGE_SIZE && confirmation == 0) {
             Card last = cards.getLast();
-            graphics.drawCenteredString(font, Component.literal((page + 1) + " / " + ((choices.size() + PAGE_SIZE - 1) / PAGE_SIZE)),
+            SelectionText.centered(graphics, font, Component.literal((page + 1) + " / " + ((choices.size() + PAGE_SIZE - 1) / PAGE_SIZE)),
                     Math.round(last.layout.x + last.layout.width * last.layout.scale / 2),
                     Math.round(last.layout.y + CARD_HEIGHT * last.layout.scale) + 8, 0xffffff);
         }
-        if (confirmation < 1) graphics.drawCenteredString(font, title, width / 2, 12,
+        if (confirmation < 1) SelectionText.centered(graphics, font, title, width / 2, 12,
                 Math.max(4, Math.round((1 - confirmation) * 255)) << 24 | 0xffffff);
         String error = catalog.get("error").getAsString();
         if (!error.isEmpty()) {
             var lines = font.split(DefinitionJson.message(catalog, "error", minecraft.player.registryAccess()), width - 20);
             for (int index = 0; index < Math.min(2, lines.size()); index++) {
-                graphics.drawCenteredString(font, lines.get(index), width / 2, height - 51 + index * 9, 0xffaaaa);
+                SelectionText.centered(graphics, font, lines.get(index), width / 2, height - 51 + index * 9, 0xffaaaa);
             }
-        } else if (automaticKit == null && confirmation == 0) graphics.drawCenteredString(font, Component.translatable("screen.kingdomsheritage.step_location"), width / 2, height - 43, 0xffffff);
+        } else if (automaticKit == null && confirmation == 0) SelectionText.centered(graphics, font, Component.translatable("screen.kingdomsheritage.step_location"), width / 2, height - 43, 0xffffff);
     }
 
     private int confirmationLeft() {
@@ -425,13 +425,13 @@ public final class SpawnSelectScreen extends Screen {
         int y = confirmationTop();
         int opacity = Math.max(4, Math.round(alpha * 255)) << 24;
         for (var line : font.split(Component.translatable("screen.kingdomsheritage.confirm_choice"), confirmationTextWidth())) {
-            graphics.drawString(font, line, x, y, opacity | 0xffffff);
+            SelectionText.draw(graphics, font, line, x, y, opacity | 0xffffff);
             y += font.lineHeight;
         }
         y += 6;
         var names = font.split(DefinitionJson.component(selected, "title"), confirmationTextWidth());
         for (var line : names.subList(0, Math.min(2, names.size()))) {
-            graphics.drawString(font, line, x, y, opacity | 0xf2cd83);
+            SelectionText.draw(graphics, font, line, x, y, opacity | 0xf2cd83);
             y += font.lineHeight;
         }
     }
@@ -594,10 +594,10 @@ public final class SpawnSelectScreen extends Screen {
             graphics.pose().pushPose();
             graphics.pose().translate(7, CARD_HEIGHT - 18 - titleHeight, 0);
             graphics.pose().scale(titleScale, titleScale, 1);
-            for (int index = 0; index < lines.size(); index++) graphics.drawString(font, lines.get(index), 0, index * font.lineHeight, textAlpha | 0xffffff, true);
+            for (int index = 0; index < lines.size(); index++) SelectionText.draw(graphics, font, lines.get(index), 0, index * font.lineHeight, textAlpha | 0xffffff);
             graphics.pose().popPose();
             String subtitle = DefinitionJson.component(choice, "subtitle").getString();
-            graphics.drawString(font, font.plainSubstrByWidth(subtitle, 114), 7, CARD_HEIGHT - 15, textAlpha | 0xdddddd, true);
+            SelectionText.draw(graphics, font, font.plainSubstrByWidth(subtitle, 114), 7, CARD_HEIGHT - 15, textAlpha | 0xdddddd);
             int descriptionAlpha = Math.round(layout.details * layout.opacity * 255);
             if (descriptionAlpha >= 4 && frameWidth > 140) {
                 var description = font.split(DefinitionJson.component(choice, "description"), 230);
@@ -605,8 +605,8 @@ public final class SpawnSelectScreen extends Screen {
                 graphics.enableScissor(Math.round(layout.x + 132 * layout.scale), getY() + Math.round(9 * layout.scale),
                         Math.round(layout.x + Math.min(366, frameWidth - 8) * layout.scale), getY() + Math.round(183 * layout.scale));
                 for (int index = 0; index < description.size(); index++) {
-                    graphics.drawString(font, description.get(index), 134, 10 + index * font.lineHeight - (int) descriptionScroll,
-                            descriptionAlpha << 24 | 0xffffff, false);
+                    SelectionText.draw(graphics, font, description.get(index), 134, 10 + index * font.lineHeight - (int) descriptionScroll,
+                            descriptionAlpha << 24 | 0xffffff);
                 }
                 graphics.disableScissor();
             }

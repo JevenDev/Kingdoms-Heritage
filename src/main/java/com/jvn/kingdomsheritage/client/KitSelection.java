@@ -44,6 +44,7 @@ public final class KitSelection {
     private boolean confirming;
     private float confirmationFrom;
     private long confirmationStarted;
+    private float frameConfirmation;
     private boolean capturingPreview;
     private float previewYaw = Float.NaN;
     private float previewPitch = Float.NaN;
@@ -134,7 +135,6 @@ public final class KitSelection {
 
     void tick() {
         preview();
-        updateButtons();
     }
 
     private void preview() {
@@ -165,7 +165,7 @@ public final class KitSelection {
         if (selection == null || entity != selection.player || !isInventory(Minecraft.getInstance().screen)) return angle;
         float mouse = horizontal ? selection.previewMouseX : selection.previewMouseY;
         float target = (float) Math.atan((center - mouse) / 40);
-        if (selection.capturingPreview) target *= 1 - selection.confirmationProgress();
+        if (selection.capturingPreview) target *= 1 - selection.frameConfirmation;
         float previous = horizontal ? selection.previewYaw : selection.previewPitch;
         float current = Float.isNaN(previous) ? target : Mth.lerp(selection.previewResponse, previous, target);
         if (horizontal) selection.previewYaw = current;
@@ -192,8 +192,11 @@ public final class KitSelection {
     }
 
     private void updateButtons() {
+        updateButtons(confirmationProgress());
+    }
+
+    private void updateButtons(float progress) {
         if (confirm == null) return;
-        float progress = confirmationProgress();
         boolean reviewing = confirming || progress > 0;
         previous.visible = next.visible = !reviewing;
         previous.active = index > 0 && !submitted && !reviewing;
@@ -261,7 +264,7 @@ public final class KitSelection {
         event.addListener(selection.back);
         event.addListener(selection.confirm);
         selection.updateButtons();
-        selection.positionControls(screen);
+        selection.positionControls(screen, selection.confirmationProgress());
     }
 
     private static void layout(ScreenEvent.Render.Pre event) {
@@ -273,14 +276,16 @@ public final class KitSelection {
         selection.previewResponse = 1 - (float) Math.exp(-delta * 12);
         selection.previewMouseX = event.getMouseX();
         selection.previewMouseY = event.getMouseY();
-        selection.positionControls(event.getScreen());
-        if (selection.confirming || selection.confirmationProgress() > 0) {
-            selection.renderConfirmation(event);
+        selection.frameConfirmation = selection.confirmationProgress();
+        selection.updateButtons(selection.frameConfirmation);
+        selection.positionControls(event.getScreen(), selection.frameConfirmation);
+        if (selection.confirming || selection.frameConfirmation > 0) {
+            selection.renderConfirmation(event, selection.frameConfirmation);
             event.setCanceled(true);
         }
     }
 
-    private void positionControls(Screen screen) {
+    private void positionControls(Screen screen, float progress) {
         var container = (AbstractContainerScreen<?>) screen;
         bounds = net.neoforged.fml.ModList.get().isLoaded("accessories") ? AccessoriesControls.inventoryBounds(screen) : null;
         if (bounds == null) {
@@ -306,7 +311,6 @@ public final class KitSelection {
         back.setPosition(center - buttonWidth - 2, bottom);
         confirm.setPosition(center + 2, bottom);
         descriptionY = bottom + 25;
-        float progress = confirmationProgress();
         if (confirming || progress > 0) {
             int x = confirmationLeft(screen) + Math.round((1 - progress) * 12);
             int textHeight = confirmationTextHeight(screen);
@@ -352,12 +356,11 @@ public final class KitSelection {
                 + Math.min(2, font.split(DefinitionJson.component(choices.get(index), "title"), width).size())) * font.lineHeight;
     }
 
-    private void renderConfirmation(ScreenEvent.Render.Pre event) {
+    private void renderConfirmation(ScreenEvent.Render.Pre event, float progress) {
         var graphics = event.getGuiGraphics();
         Screen screen = event.getScreen();
         var font = Minecraft.getInstance().font;
         long now = net.minecraft.Util.getMillis();
-        float progress = confirmationProgress();
         SelectionBackground.render(graphics, screen.width, screen.height);
         float targetScale = confirmationScale(screen);
         float scale = Mth.lerp(progress, 1, targetScale);
@@ -385,10 +388,10 @@ public final class KitSelection {
             int opacity = Math.max(4, Math.round((1 - progress) * 255)) << 24;
             int center = bounds.getX() + bounds.getWidth() / 2;
             int titleY = Math.max(2, bounds.getY() - 13);
-            if (titleY >= 16) graphics.drawCenteredString(font, Component.translatable("screen.kingdomsheritage.kit"), center, titleY - 12, opacity | 0xffffff);
+            if (titleY >= 16) SelectionText.centered(graphics, font, Component.translatable("screen.kingdomsheritage.kit"), center, titleY - 12, opacity | 0xffffff);
             var title = DefinitionJson.component(choices.get(index), "title").copy();
             title.append(" (" + (index + 1) + "/" + choices.size() + ")");
-            graphics.drawCenteredString(font, font.plainSubstrByWidth(title.getString(), Math.min(screen.width - 24, bounds.getWidth() + 60)),
+            SelectionText.centered(graphics, font, font.plainSubstrByWidth(title.getString(), Math.min(screen.width - 24, bounds.getWidth() + 60)),
                     center, titleY, opacity | 0xffffff);
         }
         float alpha = Mth.clamp((progress - 0.3F) / 0.7F, 0, 1);
@@ -397,13 +400,13 @@ public final class KitSelection {
             int textY = (screen.height - confirmationTextHeight(screen) - 64) / 2;
             int opacity = Math.max(4, Math.round(alpha * 255)) << 24;
             for (var line : font.split(Component.translatable("screen.kingdomsheritage.confirm_choice"), confirmationTextWidth(screen))) {
-                graphics.drawString(font, line, textX, textY, opacity | 0xffffff);
+                SelectionText.draw(graphics, font, line, textX, textY, opacity | 0xffffff);
                 textY += font.lineHeight;
             }
             textY += 6;
             var names = font.split(DefinitionJson.component(choices.get(index), "title"), confirmationTextWidth(screen));
             for (var line : names.subList(0, Math.min(2, names.size()))) {
-                graphics.drawString(font, line, textX, textY, opacity | 0xf2cd83);
+                SelectionText.draw(graphics, font, line, textX, textY, opacity | 0xf2cd83);
                 textY += font.lineHeight;
             }
         }
@@ -413,7 +416,7 @@ public final class KitSelection {
         if (!error().getString().isEmpty()) {
             var lines = font.split(error(), screen.width - 20);
             for (int i = 0; i < Math.min(2, lines.size()); i++) {
-                graphics.drawCenteredString(font, lines.get(i), screen.width / 2, screen.height - 51 + i * font.lineHeight, 0xffaaaa);
+                SelectionText.centered(graphics, font, lines.get(i), screen.width / 2, screen.height - 51 + i * font.lineHeight, 0xffaaaa);
             }
         }
         boolean keyboard = Minecraft.getInstance().getLastInputType().isKeyboard();
@@ -434,7 +437,7 @@ public final class KitSelection {
 
     private static void render(ScreenEvent.Render.Post event) {
         KitSelection selection = ClientSelection.kits();
-        if (selection == null || !isInventory(event.getScreen()) || selection.confirming || selection.confirmationProgress() > 0) return;
+        if (selection == null || !isInventory(event.getScreen()) || selection.confirming || selection.frameConfirmation > 0) return;
         var graphics = event.getGuiGraphics();
         Screen screen = event.getScreen();
         var font = Minecraft.getInstance().font;
@@ -442,11 +445,11 @@ public final class KitSelection {
         int titleY = Math.max(2, selection.bounds.getY() - 13);
         graphics.pose().pushPose();
         graphics.pose().translate(0, 0, 500);
-        if (titleY >= 16) graphics.drawCenteredString(font, Component.translatable("screen.kingdomsheritage.kit"), center, titleY - 12, 0xffffff);
+        if (titleY >= 16) SelectionText.centered(graphics, font, Component.translatable("screen.kingdomsheritage.kit"), center, titleY - 12, 0xffffff);
         JsonObject choice = selection.choices.get(selection.index);
         var title = DefinitionJson.component(choice, "title").copy();
         title.append(" (" + (selection.index + 1) + "/" + selection.choices.size() + ")");
-        graphics.drawCenteredString(font, font.plainSubstrByWidth(title.getString(), Math.min(screen.width - 24, selection.bounds.getWidth() + 60)), center, titleY, 0xffffff);
+        SelectionText.centered(graphics, font, font.plainSubstrByWidth(title.getString(), Math.min(screen.width - 24, selection.bounds.getWidth() + 60)), center, titleY, 0xffffff);
         boolean hasError = !selection.problem.getString().isEmpty() || !selection.error().getString().isEmpty();
         Component detail = !selection.problem.getString().isEmpty() ? selection.problem
                 : !selection.error().getString().isEmpty()
@@ -455,7 +458,7 @@ public final class KitSelection {
         String description = detail.getString();
         var lines = font.split(Component.literal(description), screen.width - 16);
         boolean showDescription = selection.descriptionY + font.lineHeight < screen.height;
-        if (showDescription && !lines.isEmpty()) graphics.drawCenteredString(font, lines.getFirst(), center,
+        if (showDescription && !lines.isEmpty()) SelectionText.centered(graphics, font, lines.getFirst(), center,
                 selection.descriptionY, hasError ? 0xffffaaaa : 0xffcccccc);
         boolean overTitle = event.getMouseY() >= titleY && event.getMouseY() < titleY + font.lineHeight;
         boolean overDescription = showDescription && event.getMouseY() >= selection.descriptionY
@@ -480,7 +483,7 @@ public final class KitSelection {
         if (SelectionTransition.active()) return;
         if (ClientSelection.kits() == null || !isInventory(event.getScreen())) return;
         KitSelection selection = ClientSelection.kits();
-        if (selection.confirming || selection.confirmationProgress() > 0) {
+        if (selection.confirming || selection.frameConfirmation > 0) {
             boolean overControl = List.of(selection.confirm, selection.back, selection.disconnect).stream().anyMatch(button ->
                     button.active && button.visible && button.isMouseOver(event.getMouseX(), event.getMouseY()));
             if (!overControl || event.getButton() != 0) event.setCanceled(true);
@@ -505,9 +508,9 @@ public final class KitSelection {
                 ClientSelection.kits().back();
             }
             event.setCanceled(true);
-        } else if (ClientSelection.kits().confirming || ClientSelection.kits().confirmationProgress() > 0) {
+        } else if (ClientSelection.kits().confirming || ClientSelection.kits().frameConfirmation > 0) {
             KitSelection selection = ClientSelection.kits();
-            if (selection.confirming && selection.confirmationProgress() == 1) {
+            if (selection.confirming && selection.frameConfirmation == 1) {
                 var buttons = List.of(selection.confirm, selection.back, selection.disconnect);
                 if (key == GLFW.GLFW_KEY_TAB || key == GLFW.GLFW_KEY_LEFT || key == GLFW.GLFW_KEY_RIGHT
                         || key == GLFW.GLFW_KEY_UP || key == GLFW.GLFW_KEY_DOWN) {
