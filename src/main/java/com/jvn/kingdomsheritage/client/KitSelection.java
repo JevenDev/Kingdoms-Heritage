@@ -19,6 +19,7 @@ import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.Mth;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.bus.api.EventPriority;
@@ -28,6 +29,8 @@ import net.neoforged.neoforge.network.PacketDistributor;
 import org.lwjgl.glfw.GLFW;
 
 public final class KitSelection {
+    private static final int CONFIRMATION_DURATION = 550;
+    private final KitConfirmationPreview confirmationPreview = new KitConfirmationPreview();
     private final JsonObject catalog;
     private final String spawn;
     private final List<JsonObject> choices;
@@ -40,11 +43,16 @@ public final class KitSelection {
     private List<KitDefinition.StackEntry> stacks = List.of();
     private int index;
     private boolean submitted;
+    private boolean confirming;
+    private float confirmationFrom;
+    private long confirmationStarted;
+    private boolean capturingPreview;
     private Component problem = Component.empty();
     private Button previous;
     private Button next;
     private Button confirm;
     private Button back;
+    private Button disconnect;
     private net.minecraft.client.renderer.Rect2i bounds;
     private int descriptionY;
 
@@ -106,6 +114,8 @@ public final class KitSelection {
 
     private void select(int index) {
         this.index = index;
+        confirming = false;
+        confirmationFrom = 0;
         problem = DefinitionJson.message(choices.get(index), "problem", player.registryAccess());
         try {
             var kit = KitDefinition.parse(ResourceLocation.parse(choices.get(index).get("id").getAsString()), choices.get(index));
@@ -137,6 +147,15 @@ public final class KitSelection {
         }
     }
 
+    void close() {
+        confirmationPreview.close();
+        restore();
+    }
+
+    static boolean capturingPreview() {
+        return ClientSelection.kits() != null && ClientSelection.kits().capturingPreview;
+    }
+
     void restore() {
         for (int slot = 0; slot < original.size(); slot++) player.getInventory().setItem(slot, original.get(slot).copy());
         for (var current : EquipmentCompat.slots(player)) {
@@ -157,14 +176,48 @@ public final class KitSelection {
 
     private void updateButtons() {
         if (confirm == null) return;
-        previous.active = index > 0 && !submitted;
-        next.active = index + 1 < choices.size() && !submitted;
-        back.active = !submitted;
-        confirm.active = !submitted && problem.getString().isEmpty();
-        confirm.setMessage(submitted ? ClientSelection.progress() : Component.translatable("screen.kingdomsheritage.begin"));
+        float progress = confirmationProgress();
+        boolean reviewing = confirming || progress > 0;
+        previous.visible = next.visible = !reviewing;
+        previous.active = index > 0 && !submitted && !reviewing;
+        next.active = index + 1 < choices.size() && !submitted && !reviewing;
+        back.active = !submitted && (confirming ? progress > 0.65F : progress == 0);
+        back.setMessage(Component.translatable(reviewing ? "screen.kingdomsheritage.choose_another" : "gui.back"));
+        confirm.active = !submitted && problem.getString().isEmpty() && (confirming ? progress == 1 : progress == 0);
+        confirm.setMessage(submitted ? ClientSelection.progress() : Component.translatable(
+                reviewing ? "screen.kingdomsheritage.confirm_begin" : "screen.kingdomsheritage.next"));
         confirm.setTooltip(Tooltip.create(problem.getString().isEmpty() ? Component.translatable("screen.kingdomsheritage.policy."
                 + (catalog.has("inventory_policy") ? catalog.get("inventory_policy").getAsString().toLowerCase(java.util.Locale.ROOT) : "replace"))
                 : problem));
+    }
+
+    private void confirm() {
+        if (submitted || !confirm.active || !problem.getString().isEmpty() || SelectionTransition.active()) return;
+        if (!confirming) {
+            confirmationFrom = confirmationProgress();
+            confirmationStarted = net.minecraft.Util.getMillis();
+            confirming = true;
+            updateButtons();
+            Minecraft.getInstance().screen.setFocused(confirm);
+            return;
+        }
+        submitted = true;
+        updateButtons();
+        var request = new HeritageNetwork.Choose(spawn, kitId(), catalog.get("revision").getAsLong());
+        SelectionTransition.fadeOut(() -> PacketDistributor.sendToServer(request));
+    }
+
+    private void back() {
+        if (submitted || SelectionTransition.active()) return;
+        if (!confirming) {
+            if (confirmationProgress() == 0) ClientSelection.back();
+            return;
+        }
+        confirmationFrom = confirmationProgress();
+        confirmationStarted = net.minecraft.Util.getMillis();
+        confirming = false;
+        updateButtons();
+        Minecraft.getInstance().screen.setFocused(confirm);
     }
 
     private static void init(ScreenEvent.Init.Post event) {
@@ -182,17 +235,11 @@ public final class KitSelection {
         selection.next = SelectionControls.arrow(screen.width - 28, 8, true, Component.translatable("screen.kingdomsheritage.next_kit"),
                 button -> selection.select(selection.index + 1));
         selection.back = new SelectionControls.SoundButton(8, screen.height - 27, 70, 20,
-                Component.translatable("gui.back"), button -> ClientSelection.back());
+                Component.translatable("gui.back"), button -> selection.back());
         selection.confirm = new SelectionControls.SoundButton(screen.width - 108, screen.height - 27, 100, 20,
-                Component.translatable("screen.kingdomsheritage.begin"), button -> {
-            if (selection.submitted || SelectionTransition.active()) return;
-            selection.submitted = true;
-            selection.updateButtons();
-            var request = new HeritageNetwork.Choose(selection.spawn,
-                    selection.choices.get(selection.index).get("id").getAsString(), selection.catalog.get("revision").getAsLong());
-            SelectionTransition.fadeOut(() -> PacketDistributor.sendToServer(request));
-        });
-        event.addListener(SelectionControls.disconnect(screen.height));
+                Component.translatable("screen.kingdomsheritage.next"), button -> selection.confirm());
+        selection.disconnect = SelectionControls.disconnect(screen.height);
+        event.addListener(selection.disconnect);
         event.addListener(selection.previous);
         event.addListener(selection.next);
         event.addListener(selection.back);
@@ -203,7 +250,12 @@ public final class KitSelection {
 
     private static void layout(ScreenEvent.Render.Pre event) {
         KitSelection selection = ClientSelection.kits();
-        if (selection != null && isInventory(event.getScreen())) selection.positionControls(event.getScreen());
+        if (selection == null || !isInventory(event.getScreen())) return;
+        selection.positionControls(event.getScreen());
+        if (selection.confirming || selection.confirmationProgress() > 0) {
+            selection.renderConfirmation(event);
+            event.setCanceled(true);
+        }
     }
 
     private void positionControls(Screen screen) {
@@ -232,11 +284,135 @@ public final class KitSelection {
         back.setPosition(center - buttonWidth - 2, bottom);
         confirm.setPosition(center + 2, bottom);
         descriptionY = bottom + 25;
+        float progress = confirmationProgress();
+        if (confirming || progress > 0) {
+            int x = confirmationLeft(screen) + Math.round((1 - progress) * 12);
+            int textHeight = confirmationTextHeight(screen);
+            int y = (screen.height - textHeight - 64) / 2 + textHeight + 18;
+            buttonWidth = Math.min(150, confirmationTextWidth(screen));
+            confirm.setWidth(buttonWidth);
+            back.setWidth(buttonWidth);
+            confirm.setPosition(x, y);
+            back.setPosition(x, y + 24);
+            float alpha = Mth.clamp((progress - 0.3F) / 0.7F, 0, 1);
+            confirm.setAlpha(alpha);
+            back.setAlpha(alpha);
+        } else {
+            confirm.setAlpha(1);
+            back.setAlpha(1);
+        }
+    }
+
+    private float confirmationProgress() {
+        float elapsed = Mth.clamp((net.minecraft.Util.getMillis() - confirmationStarted) / (float) CONFIRMATION_DURATION, 0, 1);
+        float eased = 1 - (1 - elapsed) * (1 - elapsed) * (1 - elapsed);
+        return Mth.lerp(eased, confirmationFrom, confirming ? 1 : 0);
+    }
+
+    private float confirmationScale(Screen screen) {
+        return Math.max(0.1F, Math.min(1, Math.min((screen.width - 32F) / (bounds.getWidth() + 216),
+                (screen.height - 96F) / bounds.getHeight())));
+    }
+
+    private int confirmationLeft(Screen screen) {
+        float scale = confirmationScale(screen);
+        return Math.round((screen.width - (bounds.getWidth() + 216) * scale) / 2 + (bounds.getWidth() + 24) * scale);
+    }
+
+    private int confirmationTextWidth(Screen screen) {
+        return Math.max(1, Math.round(192 * confirmationScale(screen)));
+    }
+
+    private int confirmationTextHeight(Screen screen) {
+        var font = Minecraft.getInstance().font;
+        int width = confirmationTextWidth(screen);
+        return (font.split(Component.translatable("screen.kingdomsheritage.confirm_choice"), width).size()
+                + Math.min(2, font.split(DefinitionJson.component(choices.get(index), "title"), width).size())) * font.lineHeight;
+    }
+
+    private void renderConfirmation(ScreenEvent.Render.Pre event) {
+        var graphics = event.getGuiGraphics();
+        Screen screen = event.getScreen();
+        var font = Minecraft.getInstance().font;
+        long now = net.minecraft.Util.getMillis();
+        float progress = confirmationProgress();
+        SelectionBackground.render(graphics, screen.width, screen.height);
+        float targetScale = confirmationScale(screen);
+        float scale = Mth.lerp(progress, 1, targetScale);
+        float phase = (now % 20000L) / 20000F * Mth.TWO_PI;
+        float left = (screen.width - (bounds.getWidth() + 216) * targetScale) / 2;
+        float x = Mth.lerp(progress, bounds.getX(), left);
+        float y = Mth.lerp(progress, bounds.getY(), (screen.height - bounds.getHeight() * targetScale) / 2)
+                - Mth.sin(phase * 5) * 2.5F * progress * scale;
+        float tilt = Mth.sin(phase * 4) * 0.35F * progress;
+        confirmationPreview.render(graphics, bounds, x, y, scale, tilt, () -> {
+            List<Button> buttons = List.of(previous, next, back, confirm, disconnect);
+            var visible = buttons.stream().map(button -> button.visible).toList();
+            capturingPreview = true;
+            try {
+                for (Button button : buttons) button.visible = false;
+                screen.render(graphics, bounds.getX() + 50, bounds.getY() + 43, event.getPartialTick());
+            } finally {
+                capturingPreview = false;
+                for (int i = 0; i < buttons.size(); i++) buttons.get(i).visible = visible.get(i);
+            }
+        });
+        graphics.pose().pushPose();
+        graphics.pose().translate(0, 0, 500);
+        if (progress < 1) {
+            int opacity = Math.max(4, Math.round((1 - progress) * 255)) << 24;
+            int center = bounds.getX() + bounds.getWidth() / 2;
+            int titleY = Math.max(2, bounds.getY() - 13);
+            if (titleY >= 16) graphics.drawCenteredString(font, Component.translatable("screen.kingdomsheritage.kit"), center, titleY - 12, opacity | 0xffffff);
+            var title = DefinitionJson.component(choices.get(index), "title").copy();
+            title.append(" (" + (index + 1) + "/" + choices.size() + ")");
+            graphics.drawCenteredString(font, font.plainSubstrByWidth(title.getString(), Math.min(screen.width - 24, bounds.getWidth() + 60)),
+                    center, titleY, opacity | 0xffffff);
+        }
+        float alpha = Mth.clamp((progress - 0.3F) / 0.7F, 0, 1);
+        if (alpha > 0) {
+            int textX = confirmationLeft(screen) + Math.round((1 - progress) * 12);
+            int textY = (screen.height - confirmationTextHeight(screen) - 64) / 2;
+            int opacity = Math.max(4, Math.round(alpha * 255)) << 24;
+            for (var line : font.split(Component.translatable("screen.kingdomsheritage.confirm_choice"), confirmationTextWidth(screen))) {
+                graphics.drawString(font, line, textX, textY, opacity | 0xffffff);
+                textY += font.lineHeight;
+            }
+            textY += 6;
+            var names = font.split(DefinitionJson.component(choices.get(index), "title"), confirmationTextWidth(screen));
+            for (var line : names.subList(0, Math.min(2, names.size()))) {
+                graphics.drawString(font, line, textX, textY, opacity | 0xf2cd83);
+                textY += font.lineHeight;
+            }
+        }
+        confirm.render(graphics, event.getMouseX(), event.getMouseY(), event.getPartialTick());
+        back.render(graphics, event.getMouseX(), event.getMouseY(), event.getPartialTick());
+        disconnect.render(graphics, event.getMouseX(), event.getMouseY(), event.getPartialTick());
+        if (!error().getString().isEmpty()) {
+            var lines = font.split(error(), screen.width - 20);
+            for (int i = 0; i < Math.min(2, lines.size()); i++) {
+                graphics.drawCenteredString(font, lines.get(i), screen.width / 2, screen.height - 51 + i * font.lineHeight, 0xffaaaa);
+            }
+        }
+        boolean keyboard = Minecraft.getInstance().getLastInputType().isKeyboard();
+        if (disconnect.isHovered() || keyboard && disconnect.isFocused()) {
+            graphics.renderTooltip(font, disconnect.getMessage(), disconnect.isHovered() ? event.getMouseX() : disconnect.getX() + disconnect.getWidth() / 2,
+                    disconnect.isHovered() ? event.getMouseY() : disconnect.getY() + disconnect.getHeight());
+        }
+        if (confirm.isHovered() || keyboard && confirm.isFocused()) {
+            var message = problem.getString().isEmpty() ? Component.translatable("screen.kingdomsheritage.policy."
+                    + (catalog.has("inventory_policy") ? catalog.get("inventory_policy").getAsString().toLowerCase(java.util.Locale.ROOT) : "replace")) : problem;
+            graphics.renderTooltip(font, font.split(message, Math.min(300, screen.width - 20)),
+                    confirm.isHovered() ? event.getMouseX() : confirm.getX() + confirm.getWidth() / 2,
+                    confirm.isHovered() ? event.getMouseY() : confirm.getY() + confirm.getHeight());
+        }
+        graphics.flush();
+        graphics.pose().popPose();
     }
 
     private static void render(ScreenEvent.Render.Post event) {
         KitSelection selection = ClientSelection.kits();
-        if (selection == null || !isInventory(event.getScreen())) return;
+        if (selection == null || !isInventory(event.getScreen()) || selection.confirming || selection.confirmationProgress() > 0) return;
         var graphics = event.getGuiGraphics();
         Screen screen = event.getScreen();
         var font = Minecraft.getInstance().font;
@@ -246,8 +422,8 @@ public final class KitSelection {
         graphics.pose().translate(0, 0, 500);
         if (titleY >= 16) graphics.drawCenteredString(font, Component.translatable("screen.kingdomsheritage.kit"), center, titleY - 12, 0xffffff);
         JsonObject choice = selection.choices.get(selection.index);
-        var title = DefinitionJson.component(choice, "title").copy()
-                .append(" (" + (selection.index + 1) + "/" + selection.choices.size() + ")");
+        var title = DefinitionJson.component(choice, "title").copy();
+        title.append(" (" + (selection.index + 1) + "/" + selection.choices.size() + ")");
         graphics.drawCenteredString(font, font.plainSubstrByWidth(title.getString(), Math.min(screen.width - 24, selection.bounds.getWidth() + 60)), center, titleY, 0xffffff);
         boolean hasError = !selection.problem.getString().isEmpty() || !selection.error().getString().isEmpty();
         Component detail = !selection.problem.getString().isEmpty() ? selection.problem
@@ -281,6 +457,13 @@ public final class KitSelection {
     private static void mouse(ScreenEvent.MouseButtonPressed.Pre event) {
         if (SelectionTransition.active()) return;
         if (ClientSelection.kits() == null || !isInventory(event.getScreen())) return;
+        KitSelection selection = ClientSelection.kits();
+        if (selection.confirming || selection.confirmationProgress() > 0) {
+            boolean overControl = List.of(selection.confirm, selection.back, selection.disconnect).stream().anyMatch(button ->
+                    button.active && button.visible && button.isMouseOver(event.getMouseX(), event.getMouseY()));
+            if (!overControl || event.getButton() != 0) event.setCanceled(true);
+            return;
+        }
         boolean overControl = event.getScreen().children().stream().anyMatch(child ->
                 child instanceof AbstractWidget widget && widget.active && widget.visible
                         && widget.isMouseOver(event.getMouseX(), event.getMouseY()));
@@ -297,7 +480,25 @@ public final class KitSelection {
         if (key == GLFW.GLFW_KEY_ESCAPE || Minecraft.getInstance().options.keyInventory.matches(key, event.getScanCode())) {
             if (!ClientSelection.kits().submitted) {
                 SelectionSounds.CLICK.play();
-                ClientSelection.back();
+                ClientSelection.kits().back();
+            }
+            event.setCanceled(true);
+        } else if (ClientSelection.kits().confirming || ClientSelection.kits().confirmationProgress() > 0) {
+            KitSelection selection = ClientSelection.kits();
+            if (selection.confirming && selection.confirmationProgress() == 1) {
+                var buttons = List.of(selection.confirm, selection.back, selection.disconnect);
+                if (key == GLFW.GLFW_KEY_TAB || key == GLFW.GLFW_KEY_LEFT || key == GLFW.GLFW_KEY_RIGHT
+                        || key == GLFW.GLFW_KEY_UP || key == GLFW.GLFW_KEY_DOWN) {
+                    int direction = key == GLFW.GLFW_KEY_LEFT || key == GLFW.GLFW_KEY_UP
+                            || key == GLFW.GLFW_KEY_TAB && (event.getModifiers() & GLFW.GLFW_MOD_SHIFT) != 0 ? -1 : 1;
+                    int current = buttons.indexOf(event.getScreen().getFocused());
+                    event.getScreen().setFocused(buttons.get(Math.floorMod(current + direction, buttons.size())));
+                } else if (key == GLFW.GLFW_KEY_ENTER || key == GLFW.GLFW_KEY_SPACE) {
+                    for (Button button : buttons) if (event.getScreen().getFocused() == button && button.active) {
+                        button.keyPressed(key, event.getScanCode(), event.getModifiers());
+                        break;
+                    }
+                }
             }
             event.setCanceled(true);
         } else if (key != GLFW.GLFW_KEY_TAB && key != GLFW.GLFW_KEY_ENTER && key != GLFW.GLFW_KEY_SPACE

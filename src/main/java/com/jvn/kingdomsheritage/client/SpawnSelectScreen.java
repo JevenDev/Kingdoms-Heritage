@@ -277,7 +277,7 @@ public final class SpawnSelectScreen extends Screen {
 
     private void confirm() {
         if (!confirming || confirmationProgress(net.minecraft.Util.getMillis()) < 1
-                || selected == null || submitted || SelectionTransition.active()) return;
+                || selected == null || submitted || !next.active || SelectionTransition.active()) return;
         if (automaticKit == null) {
             ClientSelection.openKits(selected.get("id").getAsString());
             return;
@@ -291,13 +291,13 @@ public final class SpawnSelectScreen extends Screen {
 
     private void updateNext() {
         var kits = ClientSelection.allowedKits(catalog, selectedId());
-        JsonObject only = kits.size() == 1 ? kits.getFirst() : null;
-        automaticKit = only != null && only.getAsJsonArray("items").isEmpty()
-                && only.get("problem").getAsString().isEmpty() ? only : null;
+        automaticKit = kits.size() == 1 ? kits.getFirst() : null;
+        boolean valid = automaticKit == null || automaticKit.get("problem").getAsString().isEmpty();
         float progress = confirmationProgress(net.minecraft.Util.getMillis());
         for (Card card : cards) card.active = !submitted && !confirming && progress == 0 && card.visible;
         description.active = !submitted && !confirming && progress == 0;
-        next.active = confirming && progress == 1 && selected != null && !kits.isEmpty() && !submitted;
+        next.active = confirming && progress == 1 && selected != null && !kits.isEmpty() && valid && !submitted;
+        next.setTooltip(valid ? null : Tooltip.create(DefinitionJson.message(automaticKit, "problem", minecraft.player.registryAccess())));
         next.visible = confirming || progress > 0;
         back.active = confirming && !submitted && progress > 0.65F;
         back.visible = next.visible;

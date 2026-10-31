@@ -69,7 +69,7 @@ public final class ClientSelection {
         String spawnId = kits != null ? kits.spawnId() : selection == null ? null : selection.selectedId();
         String kitId = kits == null ? null : kits.kitId();
         if (kits != null) {
-            kits.restore();
+            kits.close();
             if (minecraft.player != null) minecraft.player.closeContainer();
         }
         kits = null;
@@ -91,7 +91,7 @@ public final class ClientSelection {
         selection.restoreSelection(spawnId);
         if (minecraft.level != null && minecraft.player != null) {
             minecraft.setScreen(selection);
-            if (kitId != null && selection.selectedId() != null && !allowedKits(catalog, spawnId).isEmpty()) {
+            if (kitId != null && selection.selectedId() != null && allowedKits(catalog, spawnId).size() > 1) {
                 kits = new KitSelection(catalog, spawnId);
                 kits.restoreSelection(kitId);
                 kits.openInventory();
@@ -151,7 +151,7 @@ public final class ClientSelection {
 
     static void back() {
         SelectionTransition.fadeOut(() -> {
-            if (kits != null) kits.restore();
+            if (kits != null) kits.close();
             kits = null;
             Minecraft minecraft = Minecraft.getInstance();
             minecraft.player.closeContainer();
@@ -198,7 +198,7 @@ public final class ClientSelection {
         // starting an integrated server also fires a logout without a connection
         if (event.getConnection() != null || !SelectionTransition.joining()) SelectionTransition.clear();
         SpawnIntroOverlay.clear();
-        if (kits != null) kits.restore();
+        if (kits != null) kits.close();
         kits = null;
         catalog = null;
         selection = null;
@@ -210,7 +210,7 @@ public final class ClientSelection {
         SelectionTransition.clear();
         SpawnIntroOverlay.clear();
         Minecraft minecraft = Minecraft.getInstance();
-        if (kits != null) kits.restore();
+        if (kits != null) kits.close();
         kits = null;
         catalog = null;
         selection = null;

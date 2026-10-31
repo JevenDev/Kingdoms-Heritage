@@ -48,6 +48,7 @@ public final class SelectionBackground {
 
     public static boolean renderKitBackground(Screen screen, GuiGraphics graphics) {
         if (!ClientSelection.choosingKit() || !KitSelection.isInventory(screen) && !KitSelection.isLayoutPicker(screen)) return false;
+        if (KitSelection.capturingPreview()) return true;
         render(graphics, screen.width, screen.height);
         return true;
     }
