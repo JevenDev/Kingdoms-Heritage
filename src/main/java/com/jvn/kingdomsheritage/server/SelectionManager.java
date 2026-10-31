@@ -68,6 +68,7 @@ public final class SelectionManager {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
         SpawnIntro.release(player);
         CompoundTag state = state(player);
+        defaultSpawn(player);
         if (state.getBoolean("complete")) {
             sendJoinState(player, false);
             return;
@@ -89,6 +90,20 @@ public final class SelectionManager {
         }
         hold(player);
         sendJoinState(player, true);
+    }
+
+    static BlockPos defaultSpawn(ServerPlayer player) {
+        CompoundTag state = state(player);
+        if (!state.contains("default_spawn")) {
+            BlockPos position = player.server.overworld().getSharedSpawnPos();
+            if (state.contains("spawn") && state.getString("original_dimension").equals("minecraft:overworld")) {
+                position = BlockPos.of(state.getLong("spawn"));
+            } else if (!state.contains("spawn") && player.level() == player.server.overworld()) {
+                position = player.blockPosition();
+            }
+            state.putLong("default_spawn", position.asLong());
+        }
+        return BlockPos.of(state.getLong("default_spawn"));
     }
 
     private static void sendJoinState(ServerPlayer player, boolean pending) {
@@ -128,8 +143,7 @@ public final class SelectionManager {
         if (!pending(player)) return;
         hold(player);
         if (player.tickCount >= 20 && (SENT_REVISION.getOrDefault(player.getUUID(), -1L) != HeritageCatalog.revision())) {
-            PREPARATIONS.remove(player.getUUID());
-            REVIEWS.remove(player.getUUID());
+            cancelPreparation(player.getUUID());
             sendChoices(player, SENT_REVISION.containsKey(player.getUUID())
                     ? Component.translatable("error.kingdomsheritage.reloaded") : Component.empty());
         }
@@ -147,7 +161,10 @@ public final class SelectionManager {
         var review = REVIEWS.get(player.getUUID());
         if (review == null || !pending(player) || !review.token().equals(decision.token())) return;
         REVIEWS.remove(player.getUUID());
-        if (!decision.accepted()) return;
+        if (!decision.accepted()) {
+            review.preparation().search().close();
+            return;
+        }
         var preparation = review.preparation();
         PREPARATIONS.put(player.getUUID(), new Preparation(player, preparation.request(), preparation.search(), false));
         sendProgress(player, "queued");
@@ -176,7 +193,7 @@ public final class SelectionManager {
         try {
             var stacks = kit.decode(player.registryAccess());
             if (inventoryPolicy(player) != HeritageConfig.InventoryPolicy.PRESERVE) EquipmentCompat.validate(player, stacks);
-            var search = new SpawnResolver.Search(player, spawn, BlockPos.of(state(player).getLong("spawn")));
+            var search = new SpawnResolver.Search(player, spawn, defaultSpawn(player));
             PREPARATIONS.put(player.getUUID(), new Preparation(player, request, search, review));
             sendProgress(player, "queued");
         } catch (IllegalArgumentException error) {
@@ -193,8 +210,13 @@ public final class SelectionManager {
 
     static void processPreparation(ServerPlayer player) {
         var preparation = PREPARATIONS.remove(player.getUUID());
-        if (preparation == null || !pending(player)) return;
+        if (preparation == null) return;
+        if (!pending(player)) {
+            preparation.search().close();
+            return;
+        }
         if (preparation.request().revision() != HeritageCatalog.revision()) {
+            preparation.search().close();
             sendChoices(player, Component.translatable("error.kingdomsheritage.reloaded"));
             return;
         }
@@ -231,10 +253,9 @@ public final class SelectionManager {
                     spawn.id(), preparation.search().workMillis());
             var arrival = preparation.search().definition();
             JsonObject intro = SpawnIntro.prepare(arrival, destination);
-            KitService.apply(player, kit, stacks, inventoryPolicy(player));
             CompoundTag state = state(player);
-            player.teleportTo(destination.level(), destination.position().getX() + 0.5,
-                    destination.position().getY(), destination.position().getZ() + 0.5, java.util.Set.of(), state.getFloat("yaw"), 0);
+            teleport(player, destination, state.getFloat("yaw"));
+            KitService.apply(player, kit, stacks, inventoryPolicy(player));
             state.putBoolean("complete", true);
             state.putBoolean("pending", false);
             state.putString("spawn_choice", spawn.id().toString());
@@ -255,7 +276,28 @@ public final class SelectionManager {
             SpawnIntro.begin(player, arrival.intro(), intro);
             player.inventoryMenu.sendAllDataToRemote();
         } catch (IllegalArgumentException error) {
+            hold(player);
             sendChoices(player, HeritageException.component(error));
+        } finally {
+            if (!PREPARATIONS.containsKey(player.getUUID()) && !REVIEWS.containsKey(player.getUUID())) preparation.search().close();
+        }
+    }
+
+    private static void cancelPreparation(UUID player) {
+        var preparation = PREPARATIONS.remove(player);
+        if (preparation != null) preparation.search().close();
+        var review = REVIEWS.remove(player);
+        if (review != null) review.preparation().search().close();
+    }
+
+    private static void teleport(ServerPlayer player, SpawnResolver.Destination destination, float yaw) {
+        BlockPos position = destination.position();
+        player.teleportTo(destination.level(), position.getX() + 0.5, position.getY(), position.getZ() + 0.5,
+                java.util.Set.of(), yaw, 0);
+        // dimension travel can be cancelled even when teleportTo returns true
+        if (player.level() != destination.level()
+                || player.distanceToSqr(position.getX() + 0.5, position.getY(), position.getZ() + 0.5) > 0.0001) {
+            throw new HeritageException("travel", "Travel to the destination was blocked. Choose another location or contact an administrator");
         }
     }
 
@@ -293,9 +335,8 @@ public final class SelectionManager {
         BlockPos original = BlockPos.of(state.getLong("spawn"));
         BlockPos position = SpawnResolver.safe(level, original) ? original : SpawnResolver.nearby(level, original, 32, null)
                 .orElseThrow(() -> new HeritageException("original_ground", "No safe ground near the original position"));
-        player.teleportTo(level, position.getX() + 0.5, position.getY(), position.getZ() + 0.5, state.getFloat("yaw"), 0);
-        PREPARATIONS.remove(player.getUUID());
-        REVIEWS.remove(player.getUUID());
+        teleport(player, new SpawnResolver.Destination(level, position), state.getFloat("yaw"));
+        cancelPreparation(player.getUUID());
         state.putBoolean("pending", false);
         state.putBoolean("complete", true);
         state.remove("reset");
@@ -413,8 +454,7 @@ public final class SelectionManager {
     @SubscribeEvent
     public static void logout(PlayerEvent.PlayerLoggedOutEvent event) {
         if (event.getEntity() instanceof ServerPlayer player) SpawnIntro.release(player);
-        PREPARATIONS.remove(event.getEntity().getUUID());
-        REVIEWS.remove(event.getEntity().getUUID());
+        cancelPreparation(event.getEntity().getUUID());
         LAST_REQUEST.remove(event.getEntity().getUUID());
         SENT_REVISION.remove(event.getEntity().getUUID());
     }
@@ -423,8 +463,7 @@ public final class SelectionManager {
     public static void respawn(PlayerEvent.PlayerRespawnEvent event) {
         if (event.getEntity() instanceof ServerPlayer player) SpawnIntro.release(player);
         if (event.getEntity() instanceof ServerPlayer player && pending(player)) {
-            PREPARATIONS.remove(player.getUUID());
-            REVIEWS.remove(player.getUUID());
+            cancelPreparation(player.getUUID());
             hold(player);
             SENT_REVISION.remove(player.getUUID());
         }
@@ -432,6 +471,8 @@ public final class SelectionManager {
 
     @SubscribeEvent
     public static void stop(ServerStoppedEvent event) {
+        PREPARATIONS.values().forEach(preparation -> preparation.search().close());
+        REVIEWS.values().forEach(review -> review.preparation().search().close());
         PREPARATIONS.clear();
         REVIEWS.clear();
         SpawnIntro.clear();

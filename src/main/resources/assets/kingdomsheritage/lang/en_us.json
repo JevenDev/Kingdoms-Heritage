@@ -61,6 +61,8 @@
   "error.kingdomsheritage.structure": "Unknown or empty structure target: %s",
   "error.kingdomsheritage.structure_room": "No safe standing room found inside this structure within the search limit",
   "error.kingdomsheritage.structure_pieces": "The located structure has no available pieces",
+  "error.kingdomsheritage.chunk": "The destination could not be loaded. Please try again",
+  "error.kingdomsheritage.travel": "Travel to the destination was blocked. Choose another location or contact an administrator",
   "error.kingdomsheritage.changed": "The destination changed during preparation. Please try again",
   "error.kingdomsheritage.pending": "Recover the pending selection before resetting it",
   "error.kingdomsheritage.not_pending": "This player has no pending selection",

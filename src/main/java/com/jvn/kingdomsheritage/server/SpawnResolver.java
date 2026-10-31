@@ -4,7 +4,6 @@ import com.jvn.kingdomsheritage.HeritageConfig;
 import com.jvn.kingdomsheritage.data.HeritageCatalog;
 import com.jvn.kingdomsheritage.data.HeritageException;
 import com.jvn.kingdomsheritage.data.SpawnDefinition;
-import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Optional;
@@ -32,19 +31,19 @@ public final class SpawnResolver {
         cachedRevision = -1;
     }
 
-    public static Destination resolve(ServerPlayer player, SpawnDefinition definition, BlockPos originalSpawn) {
-        var search = new Search(player, definition, originalSpawn);
-        while (!search.step()) {}
-        return search.destination();
-    }
-
-    public static final class Search {
+    public static final class Search implements AutoCloseable {
         private final ServerLevel level;
         private final SpawnDefinition definition;
         private final BlockPos original;
         private final BlockPos origin;
         private final CacheKey cacheKey;
+        private final SpawnChunks chunks;
         private Iterator<BlockPos> columns;
+        private BlockPos pendingColumn;
+        private BlockPos cached;
+        private BiomeSpawnSearch biomeSearch;
+        private StructureSpawnResolver.Search structureSearch;
+        private boolean initialized;
         private boolean located;
         private int attempts;
         private Destination destination;
@@ -55,6 +54,7 @@ public final class SpawnResolver {
             this.original = original;
             level = player.server.getLevel(ResourceKey.create(Registries.DIMENSION, this.definition.dimension()));
             if (level == null) throw new HeritageException("dimension", "Dimension is unavailable: %s", this.definition.dimension().toString());
+            chunks = new SpawnChunks(level);
             origin = level.getSharedSpawnPos();
             cacheKey = new CacheKey(level, this.definition, origin, searchRadius(this.definition));
         }
@@ -69,25 +69,31 @@ public final class SpawnResolver {
             long start = System.nanoTime();
             try {
                 if (!located) {
-                    locate();
+                    if (!locate(start + 4000000)) return false;
                     located = true;
-                    return destination != null;
+                    if (destination != null) return true;
                 }
-                for (int count = 0; count < 8 && (count == 0 || System.nanoTime() - start < 4000000); count++) {
-                    BlockPos column;
-                    if (definition.kind() == SpawnDefinition.Kind.RANDOM) {
-                        if (attempts++ >= 96) throw new HeritageException("random", "No safe random location found. Please try again or choose another location");
-                        int radius = definition.randomRadius() == 0 ? HeritageConfig.RANDOM_RADIUS.get() : definition.randomRadius();
-                        double angle = level.random.nextDouble() * Math.PI * 2;
-                        double distance = Math.sqrt(level.random.nextDouble()) * radius;
-                        column = origin.offset((int) (Math.cos(angle) * distance), 0, (int) (Math.sin(angle) * distance));
-                    } else {
-                        if (!columns.hasNext()) throw new HeritageException("ground", "No safe ground found at this location. Choose another location or ask an administrator to check its terrain");
-                        column = columns.next();
+                for (int count = 0; count < 8 && System.nanoTime() - start < 4000000; count++) {
+                    if (pendingColumn == null) {
+                        if (definition.kind() == SpawnDefinition.Kind.RANDOM) {
+                            if (attempts++ >= 96) throw new HeritageException("random", "No safe random location found. Please try again or choose another location");
+                            int radius = definition.randomRadius() == 0 ? HeritageConfig.RANDOM_RADIUS.get() : definition.randomRadius();
+                            double angle = level.random.nextDouble() * Math.PI * 2;
+                            double distance = Math.sqrt(level.random.nextDouble()) * radius;
+                            pendingColumn = origin.offset((int) (Math.cos(angle) * distance), 0, (int) (Math.sin(angle) * distance));
+                        } else {
+                            if (!columns.hasNext()) throw new HeritageException("ground", "No safe ground found at this location. Choose another location or ask an administrator to check its terrain");
+                            pendingColumn = columns.next();
+                        }
                     }
-                    if (!level.getWorldBorder().isWithinBounds(column)) continue;
-                    var position = ground(level, column.getX(), column.getZ(),
+                    if (!level.getWorldBorder().isWithinBounds(pendingColumn)) {
+                        pendingColumn = null;
+                        continue;
+                    }
+                    if (!chunks.prepare(pendingColumn)) return false;
+                    var position = ground(level, pendingColumn,
                             definition.kind() == SpawnDefinition.Kind.BIOME ? definition : null);
+                    pendingColumn = null;
                     if (position.isPresent()) {
                         complete(position.get());
                         return true;
@@ -99,41 +105,48 @@ public final class SpawnResolver {
             }
         }
 
-        private void locate() {
-            if (cachedRevision != HeritageCatalog.revision()) {
-                clearCache();
-                cachedRevision = HeritageCatalog.revision();
-            }
-            if (definition.kind() == SpawnDefinition.Kind.BIOME || definition.kind() == SpawnDefinition.Kind.STRUCTURE) {
-                BlockPos cached = CACHE.get(cacheKey);
-                if (cached != null) {
-                    if (safe(level, cached) && (definition.kind() != SpawnDefinition.Kind.BIOME || matchesBiome(level, cached, definition))) {
-                        destination = new Destination(level, cached);
-                        return;
-                    }
-                    CACHE.remove(cacheKey);
+        private boolean locate(long deadline) {
+            if (!initialized) {
+                if (cachedRevision != HeritageCatalog.revision()) {
+                    clearCache();
+                    cachedRevision = HeritageCatalog.revision();
                 }
+                if (definition.kind() == SpawnDefinition.Kind.BIOME || definition.kind() == SpawnDefinition.Kind.STRUCTURE) cached = CACHE.get(cacheKey);
+                initialized = true;
+            }
+            if (cached != null) {
+                if (!chunks.prepare(cached)) return false;
+                if (safe(level, cached) && (definition.kind() != SpawnDefinition.Kind.BIOME || matchesBiome(level, cached, definition))) {
+                    destination = new Destination(level, cached);
+                    return true;
+                }
+                CACHE.remove(cacheKey);
+                cached = null;
             }
             if (definition.kind() == SpawnDefinition.Kind.DEFAULT) {
                 BlockPos preferred = level == level.getServer().overworld() ? original : origin;
+                if (!chunks.prepare(preferred)) return false;
                 if (safe(level, preferred)) complete(preferred);
                 else columns = columns(preferred, 32);
             } else if (definition.kind() == SpawnDefinition.Kind.FIXED) {
                 BlockPos position = new BlockPos(definition.x(), definition.y(), definition.z());
+                if (!chunks.prepare(position)) return false;
                 if (!safe(level, position)) throw new HeritageException("fixed", "The configured location is obstructed or unsafe");
                 complete(position);
             } else if (definition.kind() == SpawnDefinition.Kind.STRUCTURE) {
-                complete(StructureSpawnResolver.resolve(level, definition, origin));
+                if (structureSearch == null) structureSearch = new StructureSpawnResolver.Search(level, definition, origin, chunks);
+                if (!structureSearch.step(deadline)) return false;
+                complete(structureSearch.result());
             } else if (definition.kind() == SpawnDefinition.Kind.BIOME) {
-                validateBiome(level, definition);
-                var found = level.findClosestBiome3d(holder -> definition.targetTag()
-                                ? holder.is(TagKey.create(Registries.BIOME, definition.target()))
-                                : holder.is(ResourceKey.create(Registries.BIOME, definition.target())),
-                        origin, searchRadius(definition), 32, 64);
-                if (found == null) throw new HeritageException("not_found", "No matching location found within the configured search radius");
-                columns = columns(found.getFirst(), 48);
+                if (biomeSearch == null) biomeSearch = new BiomeSpawnSearch(level, definition, origin);
+                if (!biomeSearch.step(deadline)) return false;
+                columns = columns(biomeSearch.result(), 48);
             }
+            return true;
         }
+
+        @Override
+        public void close() { chunks.close(); }
 
         private void complete(BlockPos position) {
             destination = new Destination(level, position);
@@ -162,15 +175,43 @@ public final class SpawnResolver {
     }
 
     private static Iterator<BlockPos> columns(BlockPos center, int radius) {
-        var positions = new ArrayList<BlockPos>();
-        for (int ring = 0; ring <= radius; ring++) {
-            for (int dx = -ring; dx <= ring; dx++) {
-                for (int dz = -ring; dz <= ring; dz++) {
-                    if (Math.max(Math.abs(dx), Math.abs(dz)) == ring) positions.add(center.offset(dx, 0, dz));
-                }
+        return new Iterator<>() {
+            private int current;
+            private Iterator<BlockPos> positions = ring(center, 0);
+
+            @Override public boolean hasNext() { return positions.hasNext() || current < radius; }
+
+            @Override
+            public BlockPos next() {
+                if (!hasNext()) throw new java.util.NoSuchElementException();
+                if (!positions.hasNext()) positions = ring(center, ++current);
+                return positions.next();
             }
-        }
-        return positions.iterator();
+        };
+    }
+
+    static Iterator<BlockPos> ring(BlockPos center, int radius) {
+        return new Iterator<>() {
+            private int x = -radius;
+            private int z = -radius;
+
+            @Override public boolean hasNext() { return x <= radius; }
+
+            @Override
+            public BlockPos next() {
+                if (!hasNext()) throw new java.util.NoSuchElementException();
+                BlockPos position = center.offset(x, 0, z);
+                if (x == -radius || x == radius) {
+                    if (++z > radius) { x++; z = -radius; }
+                } else if (z == -radius) {
+                    z = radius;
+                } else {
+                    x++;
+                    z = -radius;
+                }
+                return position;
+            }
+        };
     }
 
     static Optional<BlockPos> nearby(ServerLevel level, BlockPos center, int radius, SpawnDefinition biome) {
@@ -178,25 +219,40 @@ public final class SpawnResolver {
         while (columns.hasNext()) {
             BlockPos column = columns.next();
             if (!level.getWorldBorder().isWithinBounds(column)) continue;
-            var position = ground(level, column.getX(), column.getZ(), biome);
+            var position = ground(level, column, biome);
             if (position.isPresent()) return position;
         }
         return Optional.empty();
     }
 
-    private static Optional<BlockPos> ground(ServerLevel level, int x, int z, SpawnDefinition biome) {
+    static Optional<BlockPos> ground(ServerLevel level, BlockPos column, SpawnDefinition biome) {
+        int x = column.getX();
+        int z = column.getZ();
         var chunk = level.getChunk(x >> 4, z >> 4);
-        if (level.dimensionType().hasCeiling()) {
-            int top = Math.min(level.getMaxBuildHeight(), level.getMinBuildHeight() + level.dimensionType().logicalHeight()) - 3;
-            for (int y = top; y > level.getMinBuildHeight(); y--) {
-                BlockPos position = new BlockPos(x, y, z);
-                if (level.getBlockState(position).isAir() && (biome == null || matchesBiome(level, position, biome))
+        if (biome != null) {
+            int top = (level.dimensionType().hasCeiling()
+                    ? Math.min(level.getMaxBuildHeight(), level.getMinBuildHeight() + level.dimensionType().logicalHeight())
+                    : level.getMaxBuildHeight()) - 3;
+            var heights = net.minecraft.util.Mth.outFromOrigin(
+                    net.minecraft.util.Mth.clamp(column.getY(), level.getMinBuildHeight() + 1, top),
+                    level.getMinBuildHeight() + 1, top).iterator();
+            while (heights.hasNext()) {
+                BlockPos position = new BlockPos(x, heights.nextInt(), z);
+                if (level.getBlockState(position).isAir() && matchesBiome(level, position, biome)
                         && safe(level, position)) return Optional.of(position);
             }
             return Optional.empty();
         }
+        if (level.dimensionType().hasCeiling()) {
+            int top = Math.min(level.getMaxBuildHeight(), level.getMinBuildHeight() + level.dimensionType().logicalHeight()) - 3;
+            for (int y = top; y > level.getMinBuildHeight(); y--) {
+                BlockPos position = new BlockPos(x, y, z);
+                if (level.getBlockState(position).isAir() && safe(level, position)) return Optional.of(position);
+            }
+            return Optional.empty();
+        }
         BlockPos position = new BlockPos(x, chunk.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x & 15, z & 15) + 1, z);
-        return (biome == null || matchesBiome(level, position, biome)) && safe(level, position) ? Optional.of(position) : Optional.empty();
+        return safe(level, position) ? Optional.of(position) : Optional.empty();
     }
 
     static boolean safe(ServerLevel level, BlockPos position) {

@@ -15,7 +15,6 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.tags.TagKey;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 
 public final class HeritageCommands {
@@ -108,11 +107,7 @@ public final class HeritageCommands {
             if (spawn.kind() == SpawnDefinition.Kind.BIOME) {
                 SpawnResolver.validateBiome(level, spawn);
             } else if (spawn.kind() == SpawnDefinition.Kind.STRUCTURE) {
-                var registry = level.registryAccess().registryOrThrow(Registries.STRUCTURE);
-                boolean tag = registry.getTag(TagKey.create(Registries.STRUCTURE, spawn.target())).filter(value -> value.size() > 0).isPresent();
-                if (!tag && (spawn.targetTag() || !registry.containsKey(spawn.target()))) {
-                    throw new HeritageException("structure", "Unknown or empty structure target: %s", spawn.target().toString());
-                }
+                StructureSpawnResolver.targets(level, spawn);
                 if (!server.getWorldData().worldGenOptions().generateStructures()) {
                     throw new HeritageException("structures_disabled", "Structure generation is disabled in this world");
                 }

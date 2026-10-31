@@ -7,11 +7,9 @@ import com.jvn.kingdomsheritage.data.SpawnDefinition;
 import com.mojang.serialization.JsonOps;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.core.Holder;
 import net.minecraft.core.HolderSet;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.RegistryOps;
@@ -24,69 +22,21 @@ import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.levelgen.structure.PoolElementStructurePiece;
 import net.minecraft.world.level.levelgen.structure.Structure;
 import net.minecraft.world.level.levelgen.structure.StructurePiece;
-import net.minecraft.world.level.levelgen.structure.StructureStart;
-import net.minecraft.world.level.levelgen.structure.placement.RandomSpreadStructurePlacement;
 import net.minecraft.world.level.levelgen.structure.pools.StructurePoolElement;
 
 final class StructureSpawnResolver {
     private StructureSpawnResolver() {}
 
-    static BlockPos resolve(ServerLevel level, SpawnDefinition definition, BlockPos origin) {
-        if (!level.getServer().getWorldData().worldGenOptions().generateStructures()) {
-            throw new HeritageException("structures_disabled", "Structure generation is disabled in this world");
-        }
+    static HolderSet<Structure> targets(ServerLevel level, SpawnDefinition definition) {
         var registry = level.registryAccess().registryOrThrow(Registries.STRUCTURE);
-        HolderSet<Structure> structures = registry.getTag(TagKey.create(Registries.STRUCTURE, definition.target()))
-                .filter(tag -> tag.size() > 0).orElse(null);
-        if (structures == null && !definition.targetTag()) {
-            structures = registry.getHolder(ResourceKey.create(Registries.STRUCTURE, definition.target()))
-                    .map(HolderSet::direct).orElse(null);
+        if (!definition.targetTag()) {
+            var direct = registry.getHolder(ResourceKey.create(Registries.STRUCTURE, definition.target()));
+            if (direct.isPresent()) return HolderSet.direct(direct.get());
         }
-        if (structures == null) throw new HeritageException("structure", "Unknown or empty structure target: %s", definition.target().toString());
-        int radius = SpawnResolver.searchRadius(definition);
-        int spacing = structures.stream()
-                .flatMap(holder -> level.getChunkSource().getGeneratorState().getPlacementsForStructure(holder).stream())
-                .filter(RandomSpreadStructurePlacement.class::isInstance).map(RandomSpreadStructurePlacement.class::cast)
-                .mapToInt(RandomSpreadStructurePlacement::spacing).min().orElse(1);
-        int rings = Math.max(1, Mth.ceil((double) radius / (16 * spacing)));
-        var found = level.getChunkSource().getGenerator().findNearestMapStructure(level, structures, origin, rings, false);
-        if (found != null && found.getFirst().distToCenterSqr(origin.getX() + 0.5, found.getFirst().getY() + 0.5,
-                origin.getZ() + 0.5) > (double) radius * radius) found = null;
-        if (found == null) throw new HeritageException("not_found", "No matching location found within the configured search radius");
-        var start = startAt(level, found.getFirst(), found.getSecond());
-        return inside(level, start.getPieces(), definition.piece())
-                .orElseThrow(() -> new HeritageException("structure_room", "No safe standing room found inside this structure within the search limit"));
-    }
-
-    static StructureStart startAt(ServerLevel level, BlockPos locator, Holder<Structure> structure) {
-        for (var placement : level.getChunkSource().getGeneratorState().getPlacementsForStructure(structure)) {
-            BlockPos offset = placement.getLocatePos(new ChunkPos(0, 0));
-            ChunkPos chunkPos = new ChunkPos(locator.subtract(offset));
-            if (!placement.getLocatePos(chunkPos).equals(locator)) continue;
-            var start = level.getChunk(chunkPos.x, chunkPos.z).getStartForStructure(structure.value());
-            if (start != null && start.isValid()) return start;
-        }
-        throw new HeritageException("structure_pieces", "The located structure has no available pieces");
-    }
-
-    static Optional<BlockPos> inside(ServerLevel level, List<StructurePiece> pieces, ResourceLocation preferred) {
-        Set<StructurePiece> matching = new HashSet<>();
-        if (preferred != null) {
-            var search = new Search(level);
-            for (var piece : pieces) {
-                if (!matches(level, piece, preferred)) continue;
-                matching.add(piece);
-                var position = search.inside(piece);
-                if (position.isPresent()) return position;
-            }
-        }
-        var search = new Search(level);
-        for (var piece : pieces) {
-            if (matching.contains(piece)) continue;
-            var position = search.inside(piece);
-            if (position.isPresent()) return position;
-        }
-        return Optional.empty();
+        // retain unprefixed tag aliases such as minecraft:village
+        return registry.getTag(TagKey.create(Registries.STRUCTURE, definition.target()))
+                .filter(tag -> tag.size() > 0)
+                .orElseThrow(() -> new HeritageException("structure", "Unknown or empty structure target: %s", definition.target().toString()));
     }
 
     static boolean matches(ServerLevel level, StructurePiece piece, ResourceLocation template) {
@@ -109,51 +59,102 @@ final class StructureSpawnResolver {
         return false;
     }
 
-    private static final class Search {
+    static final class Search {
         private final ServerLevel level;
-        private final Set<Long> chunks = new HashSet<>();
+        private final SpawnDefinition definition;
+        private final SpawnChunks chunks;
+        private final StructureSpawnSearch locator;
+        private final Set<StructurePiece> matching = new HashSet<>();
+        private final Set<Long> visitedChunks = new HashSet<>();
+        private List<StructurePiece> pieces;
+        private StructurePiece piece;
+        private int pass;
+        private int pieceIndex;
         private int remaining = 262144;
+        private int minX, maxX, minZ, maxZ, minY, maxY, centerX, centerZ, xi, zi, y;
+        private BlockPos result;
 
-        private Search(ServerLevel level) {
+        Search(ServerLevel level, SpawnDefinition definition, BlockPos origin, SpawnChunks chunks) {
             this.level = level;
+            this.definition = definition;
+            this.chunks = chunks;
+            locator = new StructureSpawnSearch(level, definition, origin, chunks);
+            pass = definition.piece() == null ? 1 : 0;
         }
 
-        private boolean load(int x, int z) {
-            long key = ChunkPos.asLong(x >> 4, z >> 4);
-            if (!chunks.contains(key) && chunks.size() >= 64) return false;
-            chunks.add(key);
-            level.getChunk(x >> 4, z >> 4);
-            return true;
-        }
+        BlockPos result() { return result; }
 
-        private Optional<BlockPos> inside(StructurePiece piece) {
-            if (remaining <= 0) return Optional.empty();
-            var center = piece.getBoundingBox().getCenter();
-            if (level.getWorldBorder().isWithinBounds(center)) load(center.getX(), center.getZ());
-            var box = piece.getBoundingBox();
-            int minX = Math.max(box.minX(), Mth.ceil(level.getWorldBorder().getMinX()));
-            int maxX = Math.min(box.maxX(), Mth.floor(level.getWorldBorder().getMaxX()) - 1);
-            int minZ = Math.max(box.minZ(), Mth.ceil(level.getWorldBorder().getMinZ()));
-            int maxZ = Math.min(box.maxZ(), Mth.floor(level.getWorldBorder().getMaxZ()) - 1);
-            int minY = Math.max(box.minY(), level.getMinBuildHeight() + 1);
-            int maxY = Math.min(box.getYSpan() <= 2 ? box.maxY() + 1 : box.maxY() - 1, level.getMaxBuildHeight() - 3);
-            int centerX = minX + (maxX - minX) / 2;
-            int centerZ = minZ + (maxZ - minZ) / 2;
-            for (int xi = 0; xi <= maxX - minX; xi++) {
-                int x = centerX + offset(xi);
-                for (int zi = 0; zi <= maxZ - minZ; zi++) {
-                    if (--remaining < 0) return Optional.empty();
-                    int z = centerZ + offset(zi);
-                    if (!load(x, z)) continue;
-                    for (int y = minY; y <= maxY; y++) {
-                        if (--remaining < 0) return Optional.empty();
-                        BlockPos position = new BlockPos(x, y, z);
-                        if (level.getBlockState(position.below()).isFaceSturdy(level, position.below(), Direction.UP)
-                                && SpawnResolver.safe(level, position)) return Optional.of(position);
+        boolean step(long deadline) {
+            if (result != null) return true;
+            if (pieces == null) {
+                if (!locator.step(deadline)) return false;
+                pieces = locator.result().getPieces();
+            }
+            for (int work = 0; work < 512 && System.nanoTime() < deadline; work++) {
+                if (remaining <= 0 || piece == null && pieceIndex >= pieces.size()) {
+                    if (pass == 1) throw new HeritageException("structure_room", "No safe standing room found inside this structure within the search limit");
+                    pass = 1;
+                    pieceIndex = 0;
+                    piece = null;
+                    remaining = 262144;
+                    visitedChunks.clear();
+                    continue;
+                }
+                if (piece == null) {
+                    var next = pieces.get(pieceIndex++);
+                    if (pass == 0) {
+                        if (!matches(level, next, definition.piece())) continue;
+                        matching.add(next);
+                    } else if (matching.contains(next)) continue;
+                    begin(next);
+                    if (minX > maxX || minZ > maxZ || minY > maxY) {
+                        piece = null;
+                        continue;
                     }
                 }
+                int x = centerX + offset(xi);
+                int z = centerZ + offset(zi);
+                long key = ChunkPos.asLong(x >> 4, z >> 4);
+                if (!visitedChunks.contains(key) && visitedChunks.size() >= 64) {
+                    advanceColumn();
+                    continue;
+                }
+                visitedChunks.add(key);
+                BlockPos position = new BlockPos(x, y, z);
+                if (!chunks.prepare(position)) return false;
+                remaining--;
+                if (level.getBlockState(position.below()).isFaceSturdy(level, position.below(), Direction.UP)
+                        && SpawnResolver.safe(level, position)) {
+                    result = position;
+                    return true;
+                }
+                if (++y > maxY) advanceColumn();
             }
-            return Optional.empty();
+            return false;
+        }
+
+        private void begin(StructurePiece next) {
+            piece = next;
+            var box = piece.getBoundingBox();
+            minX = Math.max(box.minX(), Mth.ceil(level.getWorldBorder().getMinX()));
+            maxX = Math.min(box.maxX(), Mth.floor(level.getWorldBorder().getMaxX()) - 1);
+            minZ = Math.max(box.minZ(), Mth.ceil(level.getWorldBorder().getMinZ()));
+            maxZ = Math.min(box.maxZ(), Mth.floor(level.getWorldBorder().getMaxZ()) - 1);
+            minY = Math.max(box.minY(), level.getMinBuildHeight() + 1);
+            maxY = Math.min(box.getYSpan() <= 2 ? box.maxY() + 1 : box.maxY() - 1, level.getMaxBuildHeight() - 3);
+            centerX = minX + (maxX - minX) / 2;
+            centerZ = minZ + (maxZ - minZ) / 2;
+            xi = zi = 0;
+            y = minY;
+        }
+
+        private void advanceColumn() {
+            remaining--;
+            y = minY;
+            if (++zi > maxZ - minZ) {
+                zi = 0;
+                if (++xi > maxX - minX) piece = null;
+            }
         }
 
         private static int offset(int index) {
