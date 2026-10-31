@@ -36,6 +36,7 @@ public final class SpawnSelectScreen extends Screen {
     private JsonObject preview;
     private Card hovered;
     private Card highlighted;
+    private boolean hoverSoundReady;
     private Button description;
     private int page;
     private float scale;
@@ -81,6 +82,7 @@ public final class SpawnSelectScreen extends Screen {
         pageButtons.clear();
         hovered = null;
         highlighted = null;
+        hoverSoundReady = false;
         renderedAt = net.minecraft.Util.getMillis();
         int count = Math.min(PAGE_SIZE, choices.size() - page * PAGE_SIZE);
         List<JsonObject> visible = choices.subList(page * PAGE_SIZE, page * PAGE_SIZE + count);
@@ -208,6 +210,12 @@ public final class SpawnSelectScreen extends Screen {
     }
 
     @Override
+    public void mouseMoved(double mouseX, double mouseY) {
+        hoverSoundReady = true;
+        super.mouseMoved(mouseX, mouseY);
+    }
+
+    @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (description.mouseClicked(mouseX, mouseY, button)) return true;
         Card card = cardAt(mouseX, mouseY);
@@ -223,6 +231,7 @@ public final class SpawnSelectScreen extends Screen {
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        hoverSoundReady = true;
         if (keyCode == GLFW.GLFW_KEY_ESCAPE && confirming && !submitted && !SelectionTransition.active()) {
             SelectionSounds.CLICK.play();
             cancelChoice();
@@ -326,7 +335,7 @@ public final class SpawnSelectScreen extends Screen {
         if (confirming || confirmation > 0) foreground = cards.stream().filter(card -> card.choice == selected).findFirst().orElse(null);
         if (foreground != highlighted) {
             highlighted = foreground;
-            if (foreground != null && foreground.active && !submitted && confirmation == 0
+            if (hoverSoundReady && foreground != null && foreground.active && !submitted && confirmation == 0
                     && !SelectionTransition.active()) SelectionSounds.HOVER.play();
         }
         if (foreground != null && preview != foreground.choice) {

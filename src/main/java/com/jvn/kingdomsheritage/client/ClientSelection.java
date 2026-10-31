@@ -101,8 +101,8 @@ public final class ClientSelection {
             return;
         }
         if (!SelectionTransition.joining()) SelectionTransition.reveal();
-        if (next.get("error").getAsString().isEmpty()) SelectionSounds.NOTICE.play();
-        else SelectionSounds.ERROR.play();
+        if (!next.get("error").getAsString().isEmpty()) SelectionSounds.ERROR.play();
+        else if (catalog != null) SelectionSounds.NOTICE.play();
         catalog = next;
         selection = new SpawnSelectScreen(catalog);
         selection.restoreSelection(spawnId);

@@ -8,6 +8,7 @@
   "client": [
     "AccessoriesCraftingPreview",
     "SelectionScreenBackground",
+    "KitPreviewRotation",
     "IntroMouseGuard",
     "IntroKeyGuard",
     "IntroToastGuard",

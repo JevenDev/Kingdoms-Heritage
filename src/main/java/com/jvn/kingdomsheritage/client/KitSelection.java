@@ -45,6 +45,12 @@ public final class KitSelection {
     private float confirmationFrom;
     private long confirmationStarted;
     private boolean capturingPreview;
+    private float previewYaw = Float.NaN;
+    private float previewPitch = Float.NaN;
+    private float previewMouseX;
+    private float previewMouseY;
+    private float previewResponse;
+    private long previewRenderedAt;
     private Component problem = Component.empty();
     private Button previous;
     private Button next;
@@ -154,6 +160,19 @@ public final class KitSelection {
         return ClientSelection.kits() != null && ClientSelection.kits().capturingPreview;
     }
 
+    public static float previewAngle(net.minecraft.world.entity.LivingEntity entity, float angle, float center, boolean horizontal) {
+        KitSelection selection = ClientSelection.kits();
+        if (selection == null || entity != selection.player || !isInventory(Minecraft.getInstance().screen)) return angle;
+        float mouse = horizontal ? selection.previewMouseX : selection.previewMouseY;
+        float target = (float) Math.atan((center - mouse) / 40);
+        if (selection.capturingPreview) target *= 1 - selection.confirmationProgress();
+        float previous = horizontal ? selection.previewYaw : selection.previewPitch;
+        float current = Float.isNaN(previous) ? target : Mth.lerp(selection.previewResponse, previous, target);
+        if (horizontal) selection.previewYaw = current;
+        else selection.previewPitch = current;
+        return current;
+    }
+
     void restore() {
         for (int slot = 0; slot < original.size(); slot++) player.getInventory().setItem(slot, original.get(slot).copy());
         for (var current : EquipmentCompat.slots(player)) {
@@ -248,6 +267,12 @@ public final class KitSelection {
     private static void layout(ScreenEvent.Render.Pre event) {
         KitSelection selection = ClientSelection.kits();
         if (selection == null || !isInventory(event.getScreen())) return;
+        long now = net.minecraft.Util.getMillis();
+        float delta = Mth.clamp((now - selection.previewRenderedAt) / 1000F, 0, 0.05F);
+        selection.previewRenderedAt = now;
+        selection.previewResponse = 1 - (float) Math.exp(-delta * 12);
+        selection.previewMouseX = event.getMouseX();
+        selection.previewMouseY = event.getMouseY();
         selection.positionControls(event.getScreen());
         if (selection.confirming || selection.confirmationProgress() > 0) {
             selection.renderConfirmation(event);
