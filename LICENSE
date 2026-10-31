@@ -2,13 +2,31 @@ All Rights Reserved
 
 Copyright (c) 2026 jvn
 
-Kingdoms: Heritage and its source code, assets, documentation, and related
-materials are the property of the copyright holder.
+Except for the third-party UI sound effects identified below, Kingdoms:
+Heritage and its source code, assets, documentation, and related materials
+are the property of the copyright holder.
 
-No permission is granted to copy, modify, distribute, sublicense, sell, or create
-derivative works from this project except where explicitly permitted in writing
-by the copyright holder.
+Except for the third-party UI sound effects identified below, no permission
+is granted to copy, modify, distribute, sublicense, sell, or create derivative
+works from this project except where explicitly permitted in writing by the
+copyright holder.
 
 Any permissions stated in this repository, on the official Modrinth or
 CurseForge pages, or in other official project materials are limited to the
 scope described there and do not transfer ownership or grant additional rights.
+
+Third-party UI sound effects
+
+The sound effects in src/main/resources/assets/kingdomsheritage/sounds/ui/
+are from Interface Bleeps by Bleeoop:
+https://bleeoop.itch.io/interface-bleeps
+
+These sound effects are excluded from this project's All Rights Reserved
+terms. They remain subject to Bleeoop's Sound Library License provided with
+the original asset pack and are not relicensed by this project.
+
+Music
+
+The selection music in
+src/main/resources/assets/kingdomsheritage/sounds/music/selection.ogg
+was made by jvn and remains All Rights Reserved under this license.
