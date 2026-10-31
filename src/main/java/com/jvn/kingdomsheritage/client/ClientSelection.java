@@ -6,6 +6,7 @@ import com.jvn.kingdomsheritage.KingdomsHeritage;
 import com.jvn.kingdomsheritage.network.HeritageNetwork;
 import java.util.List;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.DeathScreen;
 import net.minecraft.client.gui.screens.GenericMessageScreen;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.network.ConnectionProtocol;
@@ -54,6 +55,7 @@ public final class ClientSelection {
         JsonObject next = JsonParser.parseString(json).getAsJsonObject();
         Minecraft minecraft = Minecraft.getInstance();
         if (next.has("progress")) {
+            if (minecraft.screen instanceof DeathScreen || minecraft.player != null && !minecraft.player.isAlive()) return;
             progress = next.get("progress").getAsString();
             if (progress.equals("retry")) {
                 SelectionSounds.ERROR.play();
@@ -67,7 +69,7 @@ public final class ClientSelection {
         }
         if (next.has("review")) {
             var review = next.getAsJsonObject("review");
-            if (catalog == null || review.get("revision").getAsLong() != catalog.get("revision").getAsLong()) {
+            if (minecraft.screen instanceof DeathScreen || minecraft.player == null || !minecraft.player.isAlive() || catalog == null || review.get("revision").getAsLong() != catalog.get("revision").getAsLong()) {
                 net.neoforged.neoforge.network.PacketDistributor.sendToServer(new HeritageNetwork.ReviewDecision(
                         java.util.UUID.fromString(review.get("token").getAsString()), false));
                 return;
@@ -106,7 +108,7 @@ public final class ClientSelection {
         catalog = next;
         selection = new SpawnSelectScreen(catalog);
         selection.restoreSelection(spawnId);
-        if (minecraft.level != null && minecraft.player != null) {
+        if (minecraft.level != null && minecraft.player != null && minecraft.player.isAlive() && !(minecraft.screen instanceof DeathScreen)) {
             minecraft.setScreen(selection);
             if (kitId != null && selection.selectedId() != null && allowedKits(catalog, spawnId).size() > 1) {
                 kits = new KitSelection(catalog, spawnId);
@@ -208,6 +210,15 @@ public final class ClientSelection {
         SelectionMusic.tick(catalog != null && !progress.equals("applying"), finalReview != null);
         Minecraft minecraft = Minecraft.getInstance();
         if (catalog == null || minecraft.level == null || minecraft.player == null) return;
+        if (!minecraft.player.isAlive() || minecraft.screen instanceof DeathScreen) {
+            if (kits != null) kits.close();
+            kits = null;
+            finalReview = null;
+            selection.retry();
+            progress = "";
+            SelectionTransition.clear();
+            return;
+        }
         if (finalReview != null) {
             if (minecraft.screen != finalReview) minecraft.setScreen(finalReview);
         } else if (kits != null) {

@@ -141,6 +141,10 @@ public final class SelectionManager {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
         SpawnIntro.tick(player);
         if (!pending(player)) return;
+        if (!player.isAlive()) {
+            cancelPreparation(player.getUUID());
+            return;
+        }
         hold(player);
         if (player.tickCount >= 20 && (SENT_REVISION.getOrDefault(player.getUUID(), -1L) != HeritageCatalog.revision())) {
             cancelPreparation(player.getUUID());
@@ -159,7 +163,7 @@ public final class SelectionManager {
 
     public static void reviewDecision(ServerPlayer player, HeritageNetwork.ReviewDecision decision) {
         var review = REVIEWS.get(player.getUUID());
-        if (review == null || !pending(player) || !review.token().equals(decision.token())) return;
+        if (review == null || !player.isAlive() || !pending(player) || !review.token().equals(decision.token())) return;
         REVIEWS.remove(player.getUUID());
         if (!decision.accepted()) {
             review.preparation().search().close();
@@ -171,7 +175,7 @@ public final class SelectionManager {
     }
 
     private static void prepare(ServerPlayer player, HeritageNetwork.Choose request, boolean review) {
-        if (!pending(player) || PREPARATIONS.containsKey(player.getUUID()) || REVIEWS.containsKey(player.getUUID())) return;
+        if (!player.isAlive() || !pending(player) || PREPARATIONS.containsKey(player.getUUID()) || REVIEWS.containsKey(player.getUUID())) return;
         long now = player.server.overworld().getGameTime();
         if (now - LAST_REQUEST.getOrDefault(player.getUUID(), -100L) < 20) {
             sendProgress(player, "retry");
@@ -211,7 +215,7 @@ public final class SelectionManager {
     static void processPreparation(ServerPlayer player) {
         var preparation = PREPARATIONS.remove(player.getUUID());
         if (preparation == null) return;
-        if (!pending(player)) {
+        if (!player.isAlive() || !pending(player)) {
             preparation.search().close();
             return;
         }

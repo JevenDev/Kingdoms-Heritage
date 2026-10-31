@@ -2,12 +2,9 @@ package com.jvn.kingdomsheritage.client;
 
 import com.google.gson.JsonObject;
 import com.jvn.kingdomsheritage.HeritageConfig;
-import com.jvn.kingdomsheritage.compat.EquipmentCompat;
 import com.jvn.kingdomsheritage.data.DefinitionJson;
 import com.jvn.kingdomsheritage.data.HeritageException;
 import com.jvn.kingdomsheritage.data.KitDefinition;
-import com.jvn.kingdomsheritage.data.KitLoadout;
-import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.AbstractWidget;
@@ -20,7 +17,6 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.item.ItemStack;
 import net.neoforged.bus.api.EventPriority;
 import net.neoforged.neoforge.client.event.ScreenEvent;
 import net.neoforged.neoforge.common.NeoForge;
@@ -33,10 +29,9 @@ public final class KitSelection {
     private final String spawn;
     private final List<JsonObject> choices;
     private final Player player;
-    private final List<ItemStack> original = new ArrayList<>();
-    private final List<EquipmentCompat.Slot> equipment;
-    private final List<ItemStack> originalEquipment;
-    private final int originalSelected;
+    private final KitPreview inventoryPreview;
+    private final HeritageConfig.InventoryPolicy inventoryPolicy;
+    private KitDefinition kit;
     private final boolean recipeBookOpen;
     private List<KitDefinition.StackEntry> stacks = List.of();
     private int index;
@@ -52,6 +47,7 @@ public final class KitSelection {
     private float previewMouseY;
     private float previewResponse;
     private long previewRenderedAt;
+    private Component definitionProblem = Component.empty();
     private Component problem = Component.empty();
     private Button previous;
     private Button next;
@@ -66,11 +62,10 @@ public final class KitSelection {
         this.spawn = spawn;
         choices = ClientSelection.allowedKits(catalog, spawn);
         player = Minecraft.getInstance().player;
-        for (int slot = 0; slot < player.getInventory().getContainerSize(); slot++) original.add(player.getInventory().getItem(slot).copy());
-        originalSelected = player.getInventory().selected;
+        inventoryPreview = new KitPreview(player);
+        inventoryPolicy = catalog.has("inventory_policy") ? HeritageConfig.InventoryPolicy.valueOf(
+                catalog.get("inventory_policy").getAsString()) : HeritageConfig.InventoryPolicy.REPLACE;
         recipeBookOpen = Minecraft.getInstance().player.getRecipeBook().isOpen(net.minecraft.world.inventory.RecipeBookType.CRAFTING);
-        equipment = EquipmentCompat.slots(player);
-        originalEquipment = equipment.stream().map(slot -> slot.get().get().copy()).toList();
         select(0);
     }
 
@@ -123,12 +118,13 @@ public final class KitSelection {
         confirmationFrom = 0;
         problem = DefinitionJson.message(choices.get(index), "problem", player.registryAccess());
         try {
-            var kit = KitDefinition.parse(ResourceLocation.parse(choices.get(index).get("id").getAsString()), choices.get(index));
+            kit = KitDefinition.parse(ResourceLocation.parse(choices.get(index).get("id").getAsString()), choices.get(index));
             stacks = kit.decode(player.registryAccess());
         } catch (IllegalArgumentException error) {
             stacks = List.of();
             problem = HeritageException.component(error);
         }
+        definitionProblem = problem;
         preview();
         updateButtons();
     }
@@ -138,17 +134,22 @@ public final class KitSelection {
     }
 
     private void preview() {
-        restore();
-        if (!problem.getString().isEmpty()) return;
-        var choice = choices.get(index);
-        var policy = catalog.has("inventory_policy") ? HeritageConfig.InventoryPolicy.valueOf(
-                catalog.get("inventory_policy").getAsString()) : HeritageConfig.InventoryPolicy.REPLACE;
+        problem = definitionProblem;
         try {
-            var kit = KitDefinition.parse(ResourceLocation.parse(choice.get("id").getAsString()), choice);
-            KitLoadout.apply(player, kit, stacks, policy);
+            inventoryPreview.apply(problem.getString().isEmpty() ? kit : null, stacks, inventoryPolicy);
         } catch (IllegalArgumentException error) {
             problem = HeritageException.component(error);
         }
+    }
+
+    public static void renderPreview(Screen screen, Runnable draw) {
+        var selection = ClientSelection.kits();
+        if (selection == null || !isInventory(screen) || Minecraft.getInstance().player != selection.player) {
+            draw.run();
+            return;
+        }
+        selection.preview();
+        selection.inventoryPreview.render(draw);
     }
 
     void close() {
@@ -174,20 +175,6 @@ public final class KitSelection {
     }
 
     void restore() {
-        for (int slot = 0; slot < original.size(); slot++) player.getInventory().setItem(slot, original.get(slot).copy());
-        for (var current : EquipmentCompat.slots(player)) {
-            ItemStack restored = ItemStack.EMPTY;
-            for (int slot = 0; slot < equipment.size(); slot++) {
-                var previous = equipment.get(slot);
-                if (current.inventory().equals(previous.inventory()) && current.name().equals(previous.name())
-                        && current.index() == previous.index() && current.cosmetic() == previous.cosmetic()) {
-                    restored = originalEquipment.get(slot);
-                    break;
-                }
-            }
-            current.set().accept(restored.copy());
-        }
-        player.getInventory().selected = originalSelected;
         if (Minecraft.getInstance().player == player) Minecraft.getInstance().player.getRecipeBook().setOpen(net.minecraft.world.inventory.RecipeBookType.CRAFTING, recipeBookOpen);
     }
 
