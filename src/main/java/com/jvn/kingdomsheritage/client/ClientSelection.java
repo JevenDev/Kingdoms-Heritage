@@ -35,7 +35,7 @@ public final class ClientSelection {
         HeritageNetwork.clientReceiver = ClientSelection::receive;
         HeritageNetwork.joinReceiver = pending -> {
             if (pending) SelectionTransition.join();
-            else SelectionTransition.arrive();
+            else SelectionTransition.clear();
         };
         NeoForge.EVENT_BUS.addListener(ClientSelection::tick);
         NeoForge.EVENT_BUS.addListener(ClientSelection::movement);
@@ -226,9 +226,8 @@ public final class ClientSelection {
     }
 
     private static void login(ClientPlayerNetworkEvent.LoggingIn event) {
-        if (NetworkRegistry.hasChannel(event.getConnection(), ConnectionProtocol.PLAY, HeritageNetwork.JoinState.TYPE.id())) {
-            SelectionTransition.join();
-        } else if (SelectionTransition.joining()) {
+        if (!NetworkRegistry.hasChannel(event.getConnection(), ConnectionProtocol.PLAY, HeritageNetwork.JoinState.TYPE.id())
+                && SelectionTransition.joining()) {
             SelectionTransition.clear();
         }
     }

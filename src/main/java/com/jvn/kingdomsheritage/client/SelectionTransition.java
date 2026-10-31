@@ -48,14 +48,9 @@ final class SelectionTransition {
     static boolean joining() { return joining; }
 
     static void join() {
-        beginJoin(true);
-    }
-
-    private static void beginJoin(boolean opaque) {
-        if (joining && !opaque) return;
         active = joining = true;
         revealing = awaitingWorld = false;
-        from = opaque ? 1 : 0;
+        from = 1;
         onBlack = null;
         started = Util.getMillis();
     }
@@ -202,9 +197,8 @@ final class SelectionTransition {
         Screen screen = event.getNewScreen();
         if (screen instanceof DeathScreen || screen instanceof DisconnectedScreen) {
             clear();
-        } else if (screen != null && !(screen instanceof SpawnSelectScreen)) {
-            if ((Minecraft.getInstance().level == null || joining) && loadingScreen(screen)) beginJoin(false);
-            else if (joining) clear();
+        } else if (joining && screen != null && !(screen instanceof SpawnSelectScreen) && !loadingScreen(screen)) {
+            clear();
         }
     }
 }
