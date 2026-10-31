@@ -292,8 +292,8 @@ function dragStart(event,payload,onDrop,options={}) {
   return cleanup;
 }
 class Inventory {
-  constructor(host,{editable=false,onSelect,onMove,onDrop,onClick,onCollect,onClone,getCursor,onControl,isSelecting,getSelection,onToggleSelection,onMovePreview,onMovePreviewEnd,scaleWidth=0}={}) {
-    this.host=host;this.callbacks={onSelect,onMove,onDrop,onClick,onCollect,onClone,getCursor,onControl,isSelecting,getSelection,onToggleSelection,onMovePreview,onMovePreviewEnd};this.kit={items:[]};this.options={mode:'player'};this.selected=0;this.hover=null;this.aim={x:-12,y:0};this.scaleWidth=scaleWidth;this.editable=editable;this.ready=false;this.visible=true;this.dirty=true;this.bounds=null;
+  constructor(host,{editable=false,onSelect,onMove,onDrop,onClick,onCollect,onClone,getCursor,getWarnings,onControl,isSelecting,getSelection,onToggleSelection,onMovePreview,onMovePreviewEnd,scaleWidth=0}={}) {
+    this.host=host;this.callbacks={onSelect,onMove,onDrop,onClick,onCollect,onClone,getCursor,getWarnings,onControl,isSelecting,getSelection,onToggleSelection,onMovePreview,onMovePreviewEnd};this.kit={items:[]};this.options={mode:'player'};this.selected=0;this.hover=null;this.aim={x:-12,y:0};this.scaleWidth=scaleWidth;this.editable=editable;this.ready=false;this.visible=true;this.dirty=true;this.bounds=null;
     this.frame=document.createElement('div');this.frame.className='mc-inventory';this.frame.dataset.editable=String(editable);this.frame.setAttribute('aria-busy','true');
     this.canvas=document.createElement('canvas');this.canvas.setAttribute('aria-hidden','true');this.background=document.createElement('canvas');
     this.frame.append(this.canvas);host.replaceChildren(this.frame);this.buttons=new Map();this.controls=new Map();this.entries=new Map();this.stacks=new Map();this.set(this.kit);
@@ -342,7 +342,11 @@ class Inventory {
         event.preventDefault();const next=HeritageEquipment.neighbor(this.layout,value,event.key);this.select(next,true);this.callbacks.onSelect?.(next);
       });
       button.addEventListener('pointerenter',()=>{this.hover=value;this.draw();});button.addEventListener('pointerleave',()=>{this.hover=null;this.draw();});
-      bindTooltip(button,()=>{const entry=this.entry(value);return entry?T.tooltip(entry.item,HeritageEquipment.name(value)):[HeritageEquipment.name(value)];});
+      bindTooltip(button,()=>{
+        const entry=this.entry(value);if(!entry)return [HeritageEquipment.name(value)];
+        const warnings=this.callbacks.getWarnings?.(entry)??[];
+        return [...T.tooltip(entry.item,HeritageEquipment.name(value)),...warnings.map(message=>T.parse(message,{color:T.colors.yellow}))];
+      });
       if(this.editable) {
         button.addEventListener('contextmenu',event=>event.preventDefault());
         button.addEventListener('dblclick',event=>{if(!event.altKey&&!this.callbacks.isSelecting?.(event))this.callbacks.onCollect?.(value);});
@@ -383,7 +387,12 @@ class Inventory {
   entry(value){return (this.previewEntries??this.entries).get(value);}
   labels() {
     for(const [value,button] of this.buttons){
-      const entry=this.entry(value);button.setAttribute('aria-label',HeritageEquipment.name(value)+(entry?': '+T.name(entry.item)+', '+(entry.item.count??1):': empty'));
+      const entry=this.entry(value),warnings=entry?this.callbacks.getWarnings?.(entry)??[]:[];
+      button.setAttribute('aria-label',HeritageEquipment.name(value)+(entry?': '+T.name(entry.item)+', '+(entry.item.count??1):': empty')+(warnings.length?'. '+warnings.join(' '):''));
+      const marker=button.querySelector('.mc-validation-warning');
+      if(warnings.length&&!marker){
+        const icon=HeritageIcons.create('triangle-alert');icon.classList.add('mc-validation-warning');button.append(icon);
+      }else if(!warnings.length)marker?.remove();
     }
   }
   preview(kit) {

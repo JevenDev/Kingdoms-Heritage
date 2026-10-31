@@ -4,7 +4,7 @@ const K=HeritageKit,E=HeritageEquipment,M=HeritageKitMouse,V=HeritageInventory,T
 if(!await HeritageSession.acquire(storageKey))return;
 const searchIndex=HeritageItems.items.map(item=>({item,search:(item.name+' '+item.id).toLowerCase()})),itemButtons=new Map();
 let documentState={title:'My kit',items:[]},validDocument={title:'My kit',items:[]},selected=0,page=0,rawInvalid=false,errorState=null,drafts=new Map(),loreSources=new Map(),slotClipboard=null;
-let kitWarnings=[],activeItemButton,carried=null,pendingDelete=null,selectedSlots=new Set(),selectionMode=false,selectionAnchor=null;
+let activeItemButton,carried=null,pendingDelete=null,selectedSlots=new Set(),selectionMode=false,selectionAnchor=null;
 let pageSize=90,pageCount=1,wheelPageTime=-Infinity;
 let history=[],historyIndex=-1,historyGroup=null,historyTime=0,saveTimer,saveUnavailable=false,saveBlocked=false,workspace;
 const view=new V.Inventory($('inventory'),{
@@ -12,6 +12,7 @@ const view=new V.Inventory($('inventory'),{
   onSelect:(slot,event)=>{if(event&&!event.altKey&&selectedSlots.size)deselectSlots();selectSlot(slot);},
   onClick:(slot,event)=>clickSlot(slot,event),
   onCollect:slot=>collectSlot(slot),
+  getWarnings:entry=>K.itemWarnings(entry),
   onClone:slot=>cloneSlot(slot),
   getCursor:()=>carried?.entry.item,
   isSelecting:event=>!carried&&(selectionMode||!!(event.ctrlKey||event.metaKey)),
@@ -52,7 +53,7 @@ function restore(direction) {
   const next=historyIndex+direction;if(next<0||next>=history.length)return;
   historyIndex=next;const state=history[next];
   documentState=K.copy(state.document);validDocument=K.copy(state.validDocument??{title:'My kit',items:[]});
-  carried=M.cursor(state.cursor);kitWarnings=K.inspect(state.source).warnings;selected=state.selected;drafts=new Map(K.copy(state.drafts));loreSources=readLoreSources(state.loreSources);errorState=state.error;rawInvalid=false;preview.restore(state.preview);
+  carried=M.cursor(state.cursor);selected=state.selected;drafts=new Map(K.copy(state.drafts));loreSources=readLoreSources(state.loreSources);errorState=state.error;rawInvalid=false;preview.restore(state.preview);
   selectedSlots=new Set((state.selection??[]).filter(E.valid));selectionMode=state.selectionMode===true;selectionAnchor=null;
   $('kit-json').value=state.source;
   const parsed=K.inspect(state.source);rawInvalid=!!parsed.error&&!parsed.previewable;
@@ -240,7 +241,7 @@ function display() {
   $('tags').value=Array.isArray(documentState.tags)?documentState.tags.join(', '):'';
   const stacks=documentState.enabled===false?0:documentState.items?.length??0;
   $('stack-count').textContent=stacks+' stack'+(stacks===1?'':'s');
-  $('warnings').textContent=documentState.enabled===false?'Kit disabled. Set enabled to true in JSON to enable it.':kitWarnings.join(' ');
+  $('warnings').textContent=documentState.enabled===false?'Kit disabled. Set enabled to true in JSON to enable it.':'';
   equipment();slotFields();
   if($('item-category').value==='used')browser();
 }
@@ -268,7 +269,7 @@ function selectAllSlots() {
 function parse(replace=false,save=true) {
   if(carried){$('kit-json').value=JSON.stringify(documentState,null,2);notice('Place the held stack or press Escape before editing JSON.');return;}
   try {
-    const parsed=K.inspect(source());kitWarnings=parsed.warnings;rawInvalid=!!parsed.error&&!parsed.previewable;
+    const parsed=K.inspect(source());rawInvalid=!!parsed.error&&!parsed.previewable;
     errorState=parsed.error?sourceError(parsed.error):null;
     if(!parsed.error||parsed.previewable)documentState=parsed.document;
     if(!parsed.error)validDocument=K.copy(documentState);
@@ -281,7 +282,7 @@ function commit(next,key=null,{replace=false,selected:nextSlot=selected,discard=
   if(replace&&carried){notice('Place the held stack or press Escape before replacing this kit.');return false;}
   try {
     const parsed=K.read(JSON.stringify(next)),nextCarried=M.cursor(nextCursor);
-    documentState=parsed.document;validDocument=K.copy(documentState);kitWarnings=parsed.warnings;rawInvalid=false;errorState=null;selected=nextSlot;carried=nextCarried;selectedSlots=new Set(nextSelection);
+    documentState=parsed.document;validDocument=K.copy(documentState);rawInvalid=false;errorState=null;selected=nextSlot;carried=nextCarried;selectedSlots=new Set(nextSelection);
     if(replace){selectedSlots.clear();selectionMode=false;selectionAnchor=null;drafts.clear();const first=(Array.isArray(documentState.items)?documentState.items:[]).find(entry=>entry&&['curios','accessories'].includes(entry.inventory));selected=first?E.id(first):0;preview.state.mode=first?.inventory??'player';}else for(const slot of discard)drafts.delete(slot);
     if(pendingDraft)drafts.set(selected,pendingDraft);
     const field=$('kit-json'),scroll=field.scrollTop,start=field.selectionStart,end=field.selectionEnd;
@@ -680,7 +681,7 @@ saved=workspace.get().state;
 if(saved&&typeof saved.source==='string') {
   try {
     const parsed=K.inspect(saved.source);documentState=parsed.previewable||!parsed.error?parsed.document:K.copy(saved.validDocument??saved.document);
-    validDocument=K.copy(saved.validDocument??(!parsed.error?documentState:{title:'My kit',items:[]}));kitWarnings=parsed.warnings;
+    validDocument=K.copy(saved.validDocument??(!parsed.error?documentState:{title:'My kit',items:[]}));
     initialSource=saved.source;selected=E.valid(saved.selected)?saved.selected:0;selectedSlots=new Set((Array.isArray(saved.selection)?saved.selection:[]).filter(E.valid));selectionMode=saved.selectionMode===true;preview.restore(saved.preview);carried=M.cursor(saved.cursor);
     drafts=new Map(Array.isArray(saved.drafts)?saved.drafts.filter(entry=>Array.isArray(entry)&&E.valid(entry[0])&&entry[1]&&typeof entry[1].id==='string'&&typeof entry[1].components==='string'):[]);
     loreSources=readLoreSources(saved.loreSources);

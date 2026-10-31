@@ -7,6 +7,12 @@ const MAX_COUNT=2147483647;
 const items=new Map(HeritageItems.items.map(item=>[item.id,item]));
 const issue=(message,path=[])=>Object.assign(new Error(message),{path});
 const integer=(value,min,max,name,path=[])=>{if(!Number.isInteger(value)||value<min||value>max)throw issue(name+' must be a whole number from '+min+' to '+max+'.',path);};
+function itemWarnings(entry) {
+  const stack=entry.item,id=normalize(stack.id),warnings=[];
+  if(!items.has(id)&&!id.startsWith('minecraft:'))warnings.push('Check this modded item in Minecraft.');
+  if(entry.ignore_stack_limit===true)warnings.push('Check this stack size in Minecraft.');
+  return warnings;
+}
 function read(source) {
   let document;
   try {document=JSON.parse(source);}catch(error){throw new Error('Invalid JSON: '+error.message);}
@@ -45,8 +51,7 @@ function read(source) {
     const maximum=componentMax===undefined?known?.max??99:componentMax;
     integer(maximum,1,entry.ignore_stack_limit===true?MAX_COUNT:99,label+' maximum stack size',[...path,'item','components','minecraft:max_stack_size']);
     integer(entry.item.count??1,1,entry.ignore_stack_limit===true?MAX_COUNT:maximum,label+' count',[...path,'item','count']);
-    if(entry.ignore_stack_limit===true&&(entry.item.count??1)>maximum)warnings.push('Item counts exceed vanilla stack limits. Check your modpack in Minecraft.');
-    if(!known)warnings.push(id+' needs its mod installed. Its model and components must be checked in Minecraft.');
+    warnings.push(...itemWarnings(entry).map(message=>id+': '+message));
   }
   return {document,warnings:[...new Set(warnings)]};
 }
@@ -114,6 +119,6 @@ function neighbor(index,key) {
 }
 const slotName=index=>index<9?'Hotbar '+(index+1):index<36?'Inventory '+(index-8):({36:'Boots',37:'Leggings',38:'Chestplate',39:'Helmet',40:'Offhand'})[index];
 const positions=Array.from({length:41},(_,index)=>({index,x:index<9?8+index*18:index<36?8+(index-9)%9*18:index===40?77:8,y:index<9?142:index<36?84+Math.floor((index-9)/9)*18:index===40?62:8+(39-index)*18}));
-globalThis.HeritageKit={read,inspect,canPreview,copy,setSlot,removeSlot,moveSlot,slotName,positions,items,normalize,itemAt,maxCount,firstEmpty,placeItem,neighbor};
+globalThis.HeritageKit={read,inspect,canPreview,itemWarnings,copy,setSlot,removeSlot,moveSlot,slotName,positions,items,normalize,itemAt,maxCount,firstEmpty,placeItem,neighbor};
 if(typeof module!=='undefined')module.exports=globalThis.HeritageKit;
 })();
