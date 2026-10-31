@@ -187,6 +187,10 @@ public final class ClientSelection {
 
     public static boolean choosingKit() { return kits != null; }
 
+    public static boolean blocksToasts() {
+        return catalog != null || SpawnIntroOverlay.blocked() || SpawnIntroOverlay.active();
+    }
+
     static void back() {
         SelectionTransition.fadeOut(() -> {
             if (kits != null) kits.close();

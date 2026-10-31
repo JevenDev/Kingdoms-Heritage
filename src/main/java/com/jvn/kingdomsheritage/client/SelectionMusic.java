@@ -2,6 +2,7 @@ package com.jvn.kingdomsheritage.client;
 
 import com.jvn.kingdomsheritage.HeritageConfig;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.components.toasts.ToastComponent;
 import net.minecraft.client.resources.sounds.AbstractTickableSoundInstance;
 import net.minecraft.client.resources.sounds.SoundInstance;
 import net.minecraft.resources.ResourceLocation;
@@ -12,10 +13,11 @@ import net.neoforged.bus.api.EventPriority;
 import net.neoforged.neoforge.client.event.SelectMusicEvent;
 import net.neoforged.neoforge.common.NeoForge;
 
-final class SelectionMusic {
+public final class SelectionMusic {
     private static final SoundEvent MUSIC = SoundEvent.createVariableRangeEvent(
             ResourceLocation.fromNamespaceAndPath("kingdomsheritage", "selection_music"));
     private static Track track;
+    private static ToastComponent toasts;
 
     private SelectionMusic() {}
 
@@ -47,12 +49,16 @@ final class SelectionMusic {
             if (!playing && track.toast != null) track.toast.hide();
             if (playing && track.toast == null && track.getVolume() > 0) {
                 track.toast = new SelectionMusicToast();
-                minecraft.getToasts().addToast(track.toast);
+                if (toasts == null) toasts = new ToastComponent(minecraft);
+                toasts.addToast(track.toast);
             }
         }
     }
 
+    public static ToastComponent toasts() { return toasts; }
+
     static void stop() {
+        if (toasts != null) toasts.clear();
         if (track == null) return;
         track.finish();
         Minecraft.getInstance().getSoundManager().stop(track);
