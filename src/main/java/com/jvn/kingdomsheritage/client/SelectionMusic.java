@@ -90,8 +90,8 @@ final class SelectionMusic {
         @Override
         public void tick() {
             fade = Mth.clamp(fade + (playing ? 1F / FADE_IN_TICKS : -1F / FADE_OUT_TICKS), 0, 1);
-            duck = Mth.approach(duck, ducked ? 0.6F : 1, 0.05F);
-            volume = fade * fade * (3 - 2 * fade) * duck;
+            duck = Mth.approach(duck, ducked ? 0.5F : 1, 0.05F);
+            volume = 0.5F * fade * fade * (3 - 2 * fade) * duck;
             if (!playing && fade == 0) stop();
         }
 

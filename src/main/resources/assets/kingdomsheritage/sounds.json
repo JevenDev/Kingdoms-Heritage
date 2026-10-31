@@ -3,31 +3,32 @@
     "sounds": [
       {
         "name": "kingdomsheritage:music/selection",
+        "volume": 0.5,
         "stream": true
       }
     ]
   },
   "dialogue": {
     "sounds": [
-      "kingdomsheritage:dialogue/dialogue_villager_01"
+      { "name": "kingdomsheritage:dialogue/dialogue_villager_01", "volume": 0.5 }
     ]
   },
   "ui_notice": {
-    "sounds": ["kingdomsheritage:ui/notice"]
+    "sounds": [{ "name": "kingdomsheritage:ui/notice", "volume": 0.22 }]
   },
   "ui_error": {
-    "sounds": ["kingdomsheritage:ui/error"]
+    "sounds": [{ "name": "kingdomsheritage:ui/error", "volume": 0.62 }]
   },
   "ui_confirmation": {
-    "sounds": ["kingdomsheritage:ui/confirmation"]
+    "sounds": [{ "name": "kingdomsheritage:ui/confirmation", "volume": 0.39 }]
   },
   "ui_click": {
-    "sounds": ["kingdomsheritage:ui/click"]
+    "sounds": [{ "name": "kingdomsheritage:ui/click", "volume": 0.4 }]
   },
   "ui_dissolve": {
-    "sounds": ["kingdomsheritage:ui/dissolve"]
+    "sounds": [{ "name": "kingdomsheritage:ui/dissolve", "volume": 0.75 }]
   },
   "ui_hover": {
-    "sounds": ["kingdomsheritage:ui/hover"]
+    "sounds": [{ "name": "kingdomsheritage:ui/hover", "volume": 0.55 }]
   }
 }

@@ -90,7 +90,7 @@ final class FinalConfirmationScreen extends Screen {
         int visible = visible();
         if (!skipped && visible >= nextBlip) {
             if (glyphs.subList(lastAudible, visible).stream().anyMatch(glyph -> Character.isLetterOrDigit(glyph.codePoint()))) {
-                SelectionSounds.DIALOGUE.play(0.35F);
+                SelectionSounds.DIALOGUE.play(0.7F);
             }
             lastAudible = visible;
             nextBlip = visible + 2 + minecraft.player.getRandom().nextInt(3);

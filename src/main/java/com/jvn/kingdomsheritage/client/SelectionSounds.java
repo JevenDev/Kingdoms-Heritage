@@ -24,7 +24,7 @@ enum SelectionSounds {
     }
 
     void play() {
-        play(1);
+        play(0.25F);
     }
 
     void play(float volume) {
