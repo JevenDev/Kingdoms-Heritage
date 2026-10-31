@@ -17,12 +17,13 @@ function zip(files,date=new Date()) {
     if(typeof file.path!=='string'||file.path.includes('\\')||file.path.includes(':')||file.path.split('/').some(part=>!part||/^\.+$/.test(part))||/[\x00-\x1f]/.test(file.path))throw new Error('Unsafe ZIP path.');
     if(names.has(file.path))throw new Error('Duplicate ZIP path.');
     names.add(file.path);
-    const name=encoder.encode(file.path),data=encoder.encode(file.content);
+    if(typeof file.content!=='string'&&!(file.content instanceof Uint8Array))throw new Error('ZIP content must be text or bytes.');
+    const name=encoder.encode(file.path),data=typeof file.content==='string'?encoder.encode(file.content):file.content;
     if(name.length>65535||data.length>0xffffffff)throw new Error('A file exceeds ZIP size limits.');
     return {name,data,crc:crc32(data)};
   });
   const size=entries.reduce((sum,entry)=>sum+76+entry.name.length*2+entry.data.length,22);
-  if(size>0xffffffff)throw new Error('The datapack exceeds ZIP size limits.');
+  if(size>0xffffffff)throw new Error('The pack exceeds ZIP size limits.');
   const bytes=new Uint8Array(size),view=new DataView(bytes.buffer);
   const year=Math.max(1980,Math.min(2107,date.getFullYear()));
   const day=((year-1980)<<9)|((date.getMonth()+1)<<5)|date.getDate();

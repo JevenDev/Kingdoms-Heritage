@@ -42,6 +42,13 @@
 .destination-settings > .stack { margin-bottom: 14px; }
 .destination-options { margin: 12px 0 16px; }
 .destination-options .form-grid { padding-top: 14px; }
+.picture-drop { margin-top: 12px; padding: 16px; border: 1px dashed var(--line); text-align: center; }
+.picture-drop p { margin: 0 0 12px; font-size: 14px; }
+.picture-drop.drag-over { border-color: var(--accent-strong); background: var(--panel-2); }
+.picture-preview { margin: 16px 0 12px; }
+.picture-preview img { display: block; max-width: 100%; height: auto; border: 1px solid var(--line); }
+.picture-preview figcaption { margin-top: 8px; color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+#picture-manual { margin-top: 12px; }
 .intro-excerpt { border-left: 2px solid var(--line); padding-left: 10px; overflow-wrap: anywhere; }
 .assembler [hidden] { display: none !important; }
 #location-kits { margin-top: 12px; display: grid; gap: 10px; }

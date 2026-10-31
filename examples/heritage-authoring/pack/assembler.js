@@ -13,6 +13,7 @@ const element=(tag,attributes={},text='')=>{
 };
 const option=(value,text)=>element('option',{value},text);
 const active=()=>state.locations.find(entry=>entry.id===state.active);
+const pictureRequests=new WeakMap();
 const plainText=text=>HeritagePreview.parse(text).map(glyph=>glyph.ch).join('');
 const placeName=value=>{
   const name=String(value||'Not chosen').split(':').at(-1).replace(/^is_/,'').replaceAll('_',' ');
@@ -202,6 +203,58 @@ function renderPool() {
     row.append(status);container.append(row);destinationType(row,index,destination.type);
   });
 }
+function renderPicture() {
+  const entry=active();if(!entry)return;
+  const mode=entry.imageMode??(entry.picture?'upload':entry.fields.image?'manual':'upload'),busy=pictureRequests.has(entry);
+  $('picture-source').value=mode;$('picture-upload').hidden=mode!=='upload';$('picture-manual').hidden=mode!=='manual';
+  $('choose-picture').disabled=busy;$('remove-picture').hidden=!entry.picture&&!busy;
+  $('picture-preview').hidden=true;$('picture-image').removeAttribute('src');
+  $('picture-drop').classList.remove('drag-over');
+  $('picture-status').classList.remove('error');$('picture-status').textContent=busy?'Preparing image…':'';
+  if(P.usesPicture(entry)) {
+    try {
+      P.pictureBytes(entry.picture);
+      $('picture-image').src=entry.picture.data;$('picture-name').textContent=entry.picture.name;
+      $('picture-preview').hidden=false;
+    }catch(error){$('picture-status').textContent=error.message;$('picture-status').classList.add('error');}
+  }
+}
+async function uploadPicture(files) {
+  const entry=active(),pack=state;if(!entry)return;
+  const request={};pictureRequests.set(entry,request);renderPicture();renderOutput();
+  let failure='';
+  try {
+    if(files.length!==1)throw new Error('Choose one image for this card.');
+    const file=files[0];
+    if(!['image/png','image/jpeg','image/webp'].includes(file.type)&&!(!file.type&&/\.(png|jpe?g|webp)$/i.test(file.name)))throw new Error('Choose a PNG, JPEG or WebP image.');
+    if(file.size>10*1024*1024)throw new Error('Choose an image smaller than 10 MB.');
+    const url=URL.createObjectURL(file),image=new Image();
+    try {
+      image.src=url;
+      try{await image.decode();}catch(error){throw new Error('This image could not be opened. Choose a valid PNG, JPEG or WebP.');}
+      if(state!==pack||!state.locations.includes(entry)||pictureRequests.get(entry)!==request)return;
+      const canvas=document.createElement('canvas');canvas.width=128;canvas.height=192;
+      const context=canvas.getContext('2d');if(!context)throw new Error('Image processing is unavailable in this browser.');
+      context.imageSmoothingQuality='high';
+      const scale=Math.max(128/image.naturalWidth,192/image.naturalHeight),width=128/scale,height=192/scale;
+      context.drawImage(image,(image.naturalWidth-width)/2,(image.naturalHeight-height)/2,width,height,0,0,128,192);
+      const picture={name:file.name,data:canvas.toDataURL('image/png')};P.pictureBytes(picture);
+      entry.picture=picture;entry.imageMode='upload';
+    }finally{URL.revokeObjectURL(url);}
+  }catch(error){failure=error.message;}
+  finally {
+    if(pictureRequests.get(entry)===request) {
+      pictureRequests.delete(entry);
+      if(state===pack&&state.locations.includes(entry)) {
+        if(active()===entry) {
+          renderPicture();
+          if(failure){$('picture-status').textContent=failure;$('picture-status').classList.add('error');}
+        }
+        changed();
+      }
+    }
+  }
+}
 function renderLocation() {
   locationOptions();renderOverview();
   const entry=active();$('location-empty').hidden=!!entry;$('location-form').hidden=!entry;$('delete-location').disabled=!entry;
@@ -209,7 +262,7 @@ function renderLocation() {
   $('location-id').value=entry.path;
   document.querySelectorAll('[data-location-field]').forEach(field=>{field.value=entry.fields[field.dataset.locationField]??'';});
   $('kit-mode').value=entry.kitMode;
-  showType();introOptions();kitChoices();renderPool();
+  showType();introOptions();kitChoices();renderPool();renderPicture();
   if(output){$('export-file').value='data/'+state.namespace+'/heritage/spawns/'+entry.path+'.json';previewFile();}
 }
 function previewFile() {
@@ -235,11 +288,13 @@ function renderOutput() {
     const help=field.dataset.locationField==='target'?'target-help':field.id==='namespace'?'namespace-help':field.id==='location-id'?'location-id-help':'';
     field.setAttribute('aria-describedby',(help?help+' ':'')+message.id);
   }
-  $('export-pack').disabled=!!output.errors.length;
+  const preparing=state.locations.some(entry=>pictureRequests.has(entry));
+  $('export-pack').disabled=!!output.errors.length||preparing;
+  $('export-pack').textContent=output.resourceFiles.length?'Download datapack & resource pack':'Download datapack';
   $('export-file').disabled=!output.previewFiles.length;
   $('preview-state').textContent=output.errors.length?'Draft preview. Fix the highlighted issues before downloading.':'Read-only preview';
   $('pack-summary').textContent=output.locationCount+' starting location'+(output.locationCount===1?'':'s')+' · '+output.kitCount+' kit'+(output.kitCount===1?'':'s');
-  $('export-readiness').textContent=output.errors.length?'A few things need fixing before you download.':'Files checked for Minecraft 1.21.1. Test the installed pack in-game.';
+  $('export-readiness').textContent=preparing?'Wait for your picture to finish processing.':output.errors.length?'A few things need fixing before you download.':output.resourceFiles.length?'Includes a datapack ZIP and a resource-pack ZIP for '+output.pictureCount+' card picture'+(output.pictureCount===1?'':'s')+'. Extract both ZIPs from the download before installing.':'Files checked for Minecraft 1.21.1. Test the installed pack in-game.';
   const errors=$('export-errors');errors.replaceChildren();
   if(output.errors.length) {
     errors.append(element('p',{},'Before downloading:'));
@@ -302,6 +357,23 @@ $('delete-location').addEventListener('click',()=>{
 $('confirm-delete-location').addEventListener('click',()=>{
   state.locations=state.locations.filter(entry=>entry.id!==state.active);state.active=state.locations[0]?.id??'';$('delete-location-dialog').close();renderLocation();changed();
 });
+$('picture-source').addEventListener('change',event=>{
+  const entry=active();pictureRequests.delete(entry);entry.imageMode=event.target.value;renderPicture();changed();
+});
+$('choose-picture').addEventListener('click',()=>$('picture-file').click());
+$('picture-file').addEventListener('change',event=>{
+  const files=[...event.target.files];event.target.value='';if(files.length)uploadPicture(files);
+});
+$('remove-picture').addEventListener('click',()=>{
+  const entry=active();pictureRequests.delete(entry);delete entry.picture;renderPicture();changed();
+});
+for(const type of ['dragenter','dragover'])$('picture-drop').addEventListener(type,event=>{
+  event.preventDefault();event.dataTransfer.dropEffect='copy';$('picture-drop').classList.add('drag-over');
+});
+$('picture-drop').addEventListener('dragleave',event=>{if(!$('picture-drop').contains(event.relatedTarget))$('picture-drop').classList.remove('drag-over');});
+$('picture-drop').addEventListener('drop',event=>{
+  event.preventDefault();$('picture-drop').classList.remove('drag-over');uploadPicture([...event.dataTransfer.files]);
+});
 $('location-form').addEventListener('submit',event=>event.preventDefault());
 $('location-form').addEventListener('input',event=>{
   const entry=active(),field=event.target;if(!entry)return;
@@ -352,11 +424,14 @@ $('copy').addEventListener('click',async()=>{
   catch(failure){$('export-json').focus();$('export-json').select();$('copy-status').textContent='Copy the selected JSON with Ctrl+C.';}
 });
 $('export-pack').addEventListener('click',()=>{
-  refresh();if(output.errors.length)return;
+  refresh();if($('export-pack').disabled)return;
   try {
-    const bytes=HeritageZip.zip(output.files),blob=new Blob([bytes],{type:'application/zip'}),url=URL.createObjectURL(blob),link=element('a',{href:url,download:P.slug(state.name)+'.zip'});
+    const name=P.slug(state.name),withPictures=output.resourceFiles.length>0;
+    const files=withPictures?[{path:name+'-data.zip',content:HeritageZip.zip(output.files)},{path:name+'-resources.zip',content:HeritageZip.zip(output.resourceFiles)}]:output.files;
+    const filename=name+(withPictures?'-packs':'')+'.zip';
+    const bytes=HeritageZip.zip(files),blob=new Blob([bytes],{type:'application/zip'}),url=URL.createObjectURL(blob),link=element('a',{href:url,download:filename});
     document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
-    $('export-status').textContent='Downloaded '+P.slug(state.name)+'.zip. Put it in your world’s datapacks folder.';
+    $('export-status').textContent='Downloaded '+filename+(withPictures?'. Extract it, then put '+name+'-data.zip in your world’s datapacks folder. Put '+name+'-resources.zip in each player’s resourcepacks folder and enable it.':'. Put it in your world’s datapacks folder.');
     save();
   }catch(error){$('export-status').textContent='Could not download your pack: '+error.message;}
 });
@@ -372,7 +447,7 @@ $('save-project').addEventListener('click',()=>{
     const read=key=>JSON.parse(localStorage.getItem(key)??'null');
     const backup=HeritageProject.backup(state,read(HeritageProject.keys.kits),read(HeritageProject.keys.intros));
     HeritageSession.download(backup,P.slug(state.name)+'.heritage-project.json');
-    $('project-status').textContent='Project saved with all kits, intros and unfinished drafts.';
+    $('project-status').textContent='Project saved with all kits, intros, uploaded pictures and unfinished drafts.';
   }catch(error){$('project-status').textContent='Could not save project: '+error.message;}
 });
 $('open-project').addEventListener('change',async()=>{

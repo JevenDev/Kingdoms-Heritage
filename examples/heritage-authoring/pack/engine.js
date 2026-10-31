@@ -21,6 +21,17 @@ function resource(value,label,tags=false) {
   if(typeof value!=='string'||!new RegExp('^'+(tags?'#?':'')+'(?:[a-z0-9_.-]+:)?[a-z0-9/._-]+$').test(value))throw new Error(label+' must be a resource ID'+(tags?' or #tag':'')+'.');
   return value;
 }
+const usesPicture=entry=>entry.imageMode!=='manual'&&entry.picture!==undefined;
+const pictureId=(namespace,path)=>namespace+':textures/gui/locations/'+path+'.png';
+function pictureBytes(picture) {
+  if(!object(picture)||typeof picture.name!=='string'||typeof picture.data!=='string'||picture.data.length>150000||!/^data:image\/png;base64,(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(picture.data))throw fieldError('image','This saved picture is invalid. Choose the image again.');
+  const bytes=Uint8Array.from(atob(picture.data.slice(22)),char=>char.charCodeAt(0));
+  const signature=[137,80,78,71,13,10,26,10,0,0,0,13,73,72,68,82],end=[0,0,0,0,73,69,78,68,174,66,96,130];
+  if(bytes.length<57||signature.some((byte,index)=>bytes[index]!==byte)||end.some((byte,index)=>bytes[bytes.length-end.length+index]!==byte))throw fieldError('image','This saved picture is not a PNG. Choose the image again.');
+  const view=new DataView(bytes.buffer);
+  if(view.getUint32(16)!==128||view.getUint32(20)!==192)throw fieldError('image','This saved picture must be 128 × 192 pixels. Choose the image again.');
+  return bytes;
+}
 function integer(value,min,max,label) {
   if(!Number.isInteger(value)||value<min||value>max)throw new Error(label+' must be a whole number from '+min+' to '+max+'.');
 }
@@ -149,6 +160,8 @@ function previewFiles(state,catalog) {
     for(const key of [...fields,'pool','intro','kits','enabled'])delete document[key];
     const relevant=fields.filter(key=>key!=='piece'||type==='structure').filter(key=>key!=='target'||['biome','structure'].includes(type)).filter(key=>!['x','y','z'].includes(key)||type==='fixed');
     Object.assign(document,settings(entry.fields??{},relevant,false));
+    if(usesPicture(entry))document.image=pictureId(namespace,entry.path);
+    else if(entry.imageMode==='upload')delete document.image;
     if(entry.fields?.title==='')document.title='';
     const intro=id=>catalog.intros.find(draft=>draft.id===id)?.document??null;
     if(entry.intro)document.intro=copy(intro(entry.intro));
@@ -166,7 +179,7 @@ function previewFiles(state,catalog) {
   return files;
 }
 function build(state,catalog) {
-  const errors=[],warnings=[],files=[],issues=[];
+  const errors=[],warnings=[],files=[],issues=[],resourceFiles=[];
   const report=(label,action,locationId,filePath,kitId)=>{try{return action();}catch(error){
     errors.push(label+': '+error.message);
     const path=error.path??error.field?.split('.')??[];
@@ -209,6 +222,9 @@ function build(state,catalog) {
     const relevant=fields.filter(key=>key!=='piece'||type==='structure').filter(key=>key!=='target'||['biome','structure'].includes(type)).filter(key=>!['x','y','z'].includes(key)||type==='fixed');
     const values=settings(entry.fields??{},relevant);
     Object.assign(document,values);
+    const picture=usesPicture(entry)?pictureBytes(entry.picture):null;
+    if(picture)document.image=pictureId(namespace,path);
+    else if(entry.imageMode==='upload')delete document.image;
     if(type==='pool')document.pool=(entry.destinations??[]).map((destination,index)=>{
       try {
         const values=settings(destination,destinationFields);
@@ -234,6 +250,8 @@ function build(state,catalog) {
       if(['biome','structure'].includes(place.type)&&knownResource(place.target,place.type,true))warnings.push('Custom biomes, structures and groups must be installed and checked in-game with /heritage validate @s.');
     }
     add('data/'+namespace+'/heritage/spawns/'+path+'.json',document);spawnIds.add(namespace+':'+path);
+    if(picture)resourceFiles.push({path:'assets/'+namespace+'/textures/gui/locations/'+path+'.png',content:picture});
+    else if(document.image)warnings.push('Pictures entered as resource paths must be supplied by an enabled resource pack.');
   },entry.id,'data/'+namespace+'/heritage/spawns/'+entry.path+'.json');
   if(spawnIds.size>50)errors.push('A datapack can contain at most 50 starting locations, including bundled locations.');
   add('pack.mcmeta',{pack:{pack_format:48,description:state.description}});
@@ -243,9 +261,11 @@ function build(state,catalog) {
   }
   if(!state.keepKits&&!paths.has('data/kingdomsheritage/heritage/kits/default.json'))add('data/kingdomsheritage/heritage/kits/default.json',{enabled:false});
   files.sort((a,b)=>a.path==='pack.mcmeta'?-1:b.path==='pack.mcmeta'?1:a.path.localeCompare(b.path));
-  return {files:errors.length?[]:files,previewFiles:errors.length?previewFiles(state,catalog):files,errors,issues,warnings:[...new Set(warnings)],kitCount:count,locationCount:spawnIds.size};
+  const pictureCount=resourceFiles.length;
+  if(pictureCount)resourceFiles.unshift({path:'pack.mcmeta',content:JSON.stringify({pack:{pack_format:34,description:state.description}},null,2)+'\n'});
+  return {files:errors.length?[]:files,resourceFiles:errors.length?[]:resourceFiles,pictureCount,previewFiles:errors.length?previewFiles(state,catalog):files,errors,issues,warnings:[...new Set(warnings)],kitCount:count,locationCount:spawnIds.size};
 }
-const api={copy,slug,fileId,resource,drafts,location,importSpawn,knownResource,validateSpawn,build,emptyKit,types,fields,destinationFields};
+const api={copy,slug,fileId,resource,drafts,location,importSpawn,knownResource,validateSpawn,build,emptyKit,types,fields,destinationFields,usesPicture,pictureId,pictureBytes};
 if(typeof module!=='undefined')module.exports=api;
 else globalThis.HeritagePack=api;
 })();
