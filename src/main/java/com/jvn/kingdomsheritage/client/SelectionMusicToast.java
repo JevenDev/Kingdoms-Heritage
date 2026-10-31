@@ -5,12 +5,10 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.toasts.Toast;
 import net.minecraft.client.gui.components.toasts.ToastComponent;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 
 final class SelectionMusicToast implements Toast {
-    private static final ResourceLocation BACKGROUND = ResourceLocation.withDefaultNamespace("toast/advancement");
     private final ItemStack icon = new ItemStack(Items.JUKEBOX);
     private boolean hidden;
 
@@ -22,7 +20,7 @@ final class SelectionMusicToast implements Toast {
     public Visibility render(GuiGraphics graphics, ToastComponent toasts, long timeSinceLastVisible) {
         if (hidden) return Visibility.HIDE;
         var font = toasts.getMinecraft().font;
-        graphics.blitSprite(BACKGROUND, 0, 0, width(), height());
+        SelectionMusicToastBackground.render(graphics, width(), height(), timeSinceLastVisible / 1000F);
         graphics.renderFakeItem(icon, 8, 8);
         var title = IntroMarkup.style(Component.literal("<rainbow>")
                 .append(Component.translatable("toast.kingdomsheritage.now_playing")).append("</rainbow>"));
