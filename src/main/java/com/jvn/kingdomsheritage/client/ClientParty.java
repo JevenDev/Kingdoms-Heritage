@@ -18,6 +18,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.PlayerFaceRenderer;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.tooltip.TooltipRenderUtil;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
@@ -57,6 +58,7 @@ final class ClientParty {
     private static UUID menuPlayer;
     private static UUID hovered;
     private static Button leave;
+    private static Screen overlayScreen;
 
     private ClientParty() {}
 
@@ -65,6 +67,30 @@ final class ClientParty {
         NeoForge.EVENT_BUS.addListener(EventPriority.LOWEST, ClientParty::renderScreen);
         NeoForge.EVENT_BUS.addListener(EventPriority.HIGHEST, true, ClientParty::mouse);
         NeoForge.EVENT_BUS.addListener(EventPriority.HIGHEST, true, ClientParty::key);
+    }
+
+    static HeritageParty.Snapshot snapshot() {
+        long now = Util.getMillis();
+        return new HeritageParty.Snapshot(PLAYERS.values().stream().map(player -> new HeritageParty.Player(
+                player.id(), player.name(), HeritageParty.Stage.values()[player.stage()], player.available())).toList(),
+                leader, MEMBERS, spawn, INVITES.entrySet().stream().filter(entry -> entry.getValue().expires() > now)
+                        .map(entry -> new HeritageParty.Invitation(entry.getKey(), entry.getValue().expires() - now)).toList(), OUTGOING);
+    }
+
+    private static boolean partyScreen(Screen screen) {
+        return screen instanceof SpawnSelectScreen || screen instanceof HeritageScreen heritage && heritage.showsParty();
+    }
+
+    private static boolean overlay(Screen screen) {
+        if (overlayScreen != screen) {
+            overlayScreen = screen;
+            CONTROLS.clear();
+            BUTTONS.clear();
+            MENU.clear();
+            menuPlayer = hovered = null;
+            leave = null;
+        }
+        return ClientSelection.selecting() && (HeritageScreens.finished() || partyScreen(screen));
     }
 
     static boolean grouped() { return leader != null; }
@@ -115,6 +141,7 @@ final class ClientParty {
         spawn = nextSpawn;
         generation = nextGeneration;
         if (changed) pendingSpawn = spawn.isEmpty() ? null : spawn;
+        ClientSelectionEvents.party();
     }
 
     static void action(int action, UUID target, String spawn) {
@@ -131,12 +158,14 @@ final class ClientParty {
         if (!ClientSelection.selecting()) return;
         var minecraft = Minecraft.getInstance();
         ticks++;
-        if (pendingSpawn != null && !SelectionTransition.active()) {
+        if (pendingSpawn != null && HeritageScreens.finished() && !SelectionTransition.active()) {
             String location = pendingSpawn;
             pendingSpawn = null;
             ClientSelection.followPartySpawn(location);
         }
-        String stage = SelectionTransition.active() ? "loading" : ClientSelection.choosingKit() ? "kit" : "spawn";
+        boolean choosingKit = ClientSelection.choosingKit() || !HeritageScreens.finished()
+                && (HeritageScreens.placement() != HeritageScreens.Placement.BEFORE_SPAWN || !partyScreen(minecraft.screen));
+        String stage = SelectionTransition.active() ? "loading" : choosingKit ? "kit" : "spawn";
         if (!reportedStage.equals(stage) || ticks % 10 == 0) {
             reportedStage = stage;
             action(HeritageNetwork.PartyAction.STAGE, null, stage);
@@ -178,6 +207,7 @@ final class ClientParty {
         spawn = reportedStage = "";
         menuPlayer = hovered = null;
         leave = null;
+        overlayScreen = null;
         ticks = headPage = 0;
         sentX = sentY = sentPage = -1;
     }
@@ -209,7 +239,7 @@ final class ClientParty {
     }
 
     private static void renderScreen(ScreenEvent.Render.Post event) {
-        if (!ClientSelection.selecting() || KitSelection.capturingPreview()) return;
+        if (!overlay(event.getScreen()) || KitSelection.capturingPreview()) return;
         render(event.getGuiGraphics(), event.getScreen().width, event.getScreen().height, event.getMouseX(), event.getMouseY());
     }
 
@@ -220,7 +250,7 @@ final class ClientParty {
         graphics.flush();
         graphics.pose().pushPose();
         graphics.pose().translate(0, 0, 1200);
-        boolean selectingSpawn = minecraft.screen instanceof SpawnSelectScreen;
+        boolean selectingSpawn = partyScreen(minecraft.screen);
         var others = others();
         int columns = columns(width);
         headPage = Math.min(headPage, Math.max(0, (others.size() - 1) / columns));
@@ -245,8 +275,8 @@ final class ClientParty {
             leave = control(43, height - 29, Math.min(104, width / 3), 21, text("leave"), true,
                     () -> action(HeritageNetwork.PartyAction.LEAVE, null, ""));
         } else leave = null;
-        if (selectingSpawn && !SelectionTransition.active()) {
-            int page = ((SpawnSelectScreen) minecraft.screen).page();
+        if (minecraft.screen instanceof SpawnSelectScreen selection && !SelectionTransition.active()) {
+            int page = selection.page();
             for (var entry : CURSORS.entrySet()) {
                 var cursor = entry.getValue();
                 var player = PLAYERS.get(entry.getKey());
@@ -332,7 +362,7 @@ final class ClientParty {
     }
 
     private static void mouse(ScreenEvent.MouseButtonPressed.Pre event) {
-        if (!ClientSelection.selecting()) return;
+        if (!overlay(event.getScreen())) return;
         double x = event.getMouseX(), y = event.getMouseY();
         int button = event.getButton();
         if (SelectionTransition.active()) {
@@ -353,7 +383,7 @@ final class ClientParty {
             event.setCanceled(true);
             return;
         }
-        if (button != 1 || !(event.getScreen() instanceof SpawnSelectScreen)) return;
+        if (button != 1 || !partyScreen(event.getScreen())) return;
         var others = others();
         int columns = columns(event.getScreen().width);
         for (int i = 0; i < columns && headPage * columns + i < others.size(); i++) {
@@ -370,7 +400,8 @@ final class ClientParty {
             } else {
                 boolean outgoing = OUTGOING.contains(player.id());
                 boolean available = !follower() && spawn.isEmpty() && player.stage() == 0 && !MEMBERS.contains(player.id())
-                        && MEMBERS.size() < 8 && !outgoing && player.available();
+                        && MEMBERS.size() < 8 && !outgoing && player.available()
+                        && (HeritageScreens.finished() || HeritageScreens.placement() == HeritageScreens.Placement.BEFORE_SPAWN);
                 menuButton(text(outgoing ? "invited" : "invite"), available, () -> {
                     action(HeritageNetwork.PartyAction.INVITE, player.id(), "");
                     MENU.clear();
@@ -401,7 +432,7 @@ final class ClientParty {
     }
 
     private static void key(ScreenEvent.KeyPressed.Pre event) {
-        if (menuPlayer == null) return;
+        if (!overlay(event.getScreen()) || menuPlayer == null) return;
         int key = event.getKeyCode();
         if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_ESCAPE) {
             MENU.clear();

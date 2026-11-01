@@ -23,6 +23,7 @@ public final class KingdomsHeritage {
                         net.minecraft.server.packs.repository.PackSource.BUILT_IN::decorate, false), false,
                 net.minecraft.server.packs.repository.Pack.Position.TOP));
         net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(com.jvn.kingdomsheritage.data.HeritageCatalog::register);
+        net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(com.jvn.kingdomsheritage.api.HeritageFlow::starting);
         net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(com.jvn.kingdomsheritage.server.KitService::commands);
         net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(com.jvn.kingdomsheritage.server.HeritageCommands::register);
         net.neoforged.neoforge.common.NeoForge.EVENT_BUS.register(com.jvn.kingdomsheritage.server.SelectionManager.class);

@@ -61,6 +61,16 @@ public final class SelectionParty {
         }
     }
 
+    static UUID leader(ServerPlayer player) {
+        var party = PARTIES.get(player.getUUID());
+        return party == null ? null : party.leader;
+    }
+
+    static Set<UUID> memberIds(ServerPlayer player) {
+        var party = PARTIES.get(player.getUUID());
+        return party == null ? Set.of() : Set.copyOf(party.members);
+    }
+
     static boolean grouped(ServerPlayer player) { return PARTIES.containsKey(player.getUUID()); }
 
     static boolean allows(ServerPlayer player, String spawn) {
@@ -117,6 +127,10 @@ public final class SelectionParty {
     }
 
     static void refresh(ServerPlayer player) {
+        refresh(player, com.jvn.kingdomsheritage.api.ScreenStep.Placement.BEFORE_SPAWN);
+    }
+
+    static void refresh(ServerPlayer player, com.jvn.kingdomsheritage.api.ScreenStep.Placement from) {
         var party = PARTIES.get(player.getUUID());
         var members = members(player);
         if (party != null) {
@@ -126,6 +140,7 @@ public final class SelectionParty {
             if (party.search != null) party.search.close();
             party.search = null;
         }
+        SelectionSteps.invalidate(members, from, null, false);
         for (var member : members) SelectionManager.refresh(member);
         dirty = true;
     }
@@ -167,7 +182,8 @@ public final class SelectionParty {
                 if (party.spawn.equals(request.spawn())) return;
                 party.spawn = request.spawn();
                 INVITES.removeIf(invite -> party.members.contains(invite.sender()));
-                refresh(player);
+                for (var member : members(player)) SelectionLifecycle.choices(member, id, null);
+                refresh(player, com.jvn.kingdomsheritage.api.ScreenStep.Placement.AFTER_SPAWN);
             }
             return;
         }
@@ -238,6 +254,7 @@ public final class SelectionParty {
         if (party.leader.equals(player.getUUID()) || party.members.size() == 1) {
             for (var id : party.members) PARTIES.remove(id);
         }
+        SelectionSteps.invalidate(members, com.jvn.kingdomsheritage.api.ScreenStep.Placement.BEFORE_SPAWN, null, false);
         for (var member : members) SelectionManager.refresh(member);
         dirty = true;
     }
@@ -283,6 +300,7 @@ public final class SelectionParty {
         }
         for (var participant : PLAYERS.values()) {
             var player = participant.player;
+            SelectionLifecycle.party(player);
             var party = PARTIES.get(player.getUUID());
             var state = new JsonObject();
             state.add("players", roster);

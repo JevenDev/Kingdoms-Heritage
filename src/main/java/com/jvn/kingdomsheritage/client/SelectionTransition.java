@@ -230,7 +230,7 @@ final class SelectionTransition {
         Screen screen = event.getNewScreen();
         if (screen instanceof DeathScreen || screen instanceof DisconnectedScreen) {
             clear();
-        } else if (joining() && screen != null && !(screen instanceof SpawnSelectScreen) && !loadingScreen(screen)) {
+        } else if (joining() && screen != null && !(screen instanceof SpawnSelectScreen) && !HeritageScreens.owns(screen) && !loadingScreen(screen)) {
             clear();
         }
     }

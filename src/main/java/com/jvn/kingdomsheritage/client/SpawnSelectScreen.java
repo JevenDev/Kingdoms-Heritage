@@ -276,6 +276,7 @@ public final class SpawnSelectScreen extends Screen {
         confirmationStarted = net.minecraft.Util.getMillis();
         confirming = true;
         selected = preview = choice;
+        ClientSelection.choicesChanged(selectedId(), null);
         expanded = null;
         descriptionScroll = 0;
         layoutCards(true);
@@ -311,7 +312,7 @@ public final class SpawnSelectScreen extends Screen {
         }
         submitted = true;
         updateNext();
-        ClientSelection.review(selected.get("id").getAsString(), automaticKit.get("id").getAsString());
+        ClientSelection.reviewAutomaticKit(selected.get("id").getAsString(), automaticKit.get("id").getAsString());
     }
 
     private void updateNext() {

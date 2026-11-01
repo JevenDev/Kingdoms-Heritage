@@ -111,6 +111,7 @@ public final class SelectionManager {
         hold(player);
         SelectionParty.register(player);
         SelectionParty.stage(player, 2);
+        SelectionLifecycle.start(player);
         sendJoinState(player, true);
     }
 
@@ -166,6 +167,7 @@ public final class SelectionManager {
         if (!player.isAlive()) {
             SelectionParty.leave(player);
             cancelPreparation(player.getUUID());
+            SelectionLifecycle.cancel(player, com.jvn.kingdomsheritage.api.SelectionEvent.Reason.DEATH);
             return;
         }
         hold(player);
@@ -231,8 +233,10 @@ public final class SelectionManager {
             return;
         }
         try {
+            SelectionSteps.requireComplete(player, request.spawn(), request.kit());
             var stacks = kit.decode(player.registryAccess());
             if (inventoryPolicy(player) != HeritageConfig.InventoryPolicy.PRESERVE) EquipmentCompat.validate(player, stacks);
+            SelectionLifecycle.choices(player, spawnId, kitId);
             var search = SelectionParty.search(player, spawn);
             PREPARATIONS.put(player.getUUID(), new Preparation(player, request, search, review));
             sendProgress(player, "queued");
@@ -298,6 +302,7 @@ public final class SelectionManager {
                 if (!member.isAlive() || !pending(member) || request.revision() != HeritageCatalog.revision()) {
                     throw new HeritageException("party_changed", "The party changed. Please review your choices again");
                 }
+                SelectionSteps.requireComplete(member, request.spawn(), request.kit());
                 var kit = HeritageCatalog.kits().get(ResourceLocation.parse(request.kit()));
                 var stacks = kit.decode(member.registryAccess());
                 if (inventoryPolicy(member) != HeritageConfig.InventoryPolicy.PRESERVE) EquipmentCompat.validate(member, stacks);
@@ -325,12 +330,14 @@ public final class SelectionManager {
                 members.forEach(SelectionManager::hold);
                 throw error;
             }
+            for (var entry : requests.entrySet()) SelectionSteps.capture(entry.getKey(), entry.getValue().spawn(), entry.getValue().kit());
             for (var entry : requests.entrySet()) apply(entry.getKey(), entry.getValue(), preparation.search(), intros.get(entry.getKey()));
             SelectionParty.finished(player);
             for (var member : members) {
                 REVIEWS.remove(member.getUUID());
                 SelectionParty.remove(member);
             }
+            for (var member : members) SelectionLifecycle.complete(member);
         } catch (IllegalArgumentException error) {
             if (SelectionParty.grouped(player)) {
                 SelectionParty.refresh(player);
@@ -368,6 +375,8 @@ public final class SelectionManager {
         player.closeContainer();
         player.fallDistance = 0;
         player.invulnerableTime = 100;
+        intro.addProperty("outcome", "completed");
+        intro.addProperty("session", SelectionLifecycle.state(player).sessionId().toString());
         SpawnIntro.begin(player, arrival.intro(), intro);
         player.inventoryMenu.sendAllDataToRemote();
     }
@@ -417,6 +426,8 @@ public final class SelectionManager {
     public static void reset(ServerPlayer player) {
         SpawnIntro.release(player);
         if (pending(player)) throw new HeritageException("pending", "Recover the pending selection before resetting it");
+        SelectionSteps.remove(player);
+        SelectionLifecycle.reset(player);
         state(player).putBoolean("complete", false);
         state(player).putBoolean("reset", true);
         LAST_REQUEST.remove(player.getUUID());
@@ -447,7 +458,9 @@ public final class SelectionManager {
         player.fallDistance = 0;
         LAST_REQUEST.remove(player.getUUID());
         SENT_REVISION.remove(player.getUUID());
-        PacketDistributor.sendToPlayer(player, new HeritageNetwork.Catalog("{}"));
+        SelectionSteps.remove(player);
+        SelectionLifecycle.cancel(player, com.jvn.kingdomsheritage.api.SelectionEvent.Reason.RECOVERED);
+        PacketDistributor.sendToPlayer(player, new HeritageNetwork.Catalog("{\"outcome\":\"recovered\"}"));
         player.inventoryMenu.sendAllDataToRemote();
     }
 
@@ -455,6 +468,13 @@ public final class SelectionManager {
         SelectionParty.register(player);
         SelectionParty.stage(player, 2);
         JsonObject json = new JsonObject();
+        var lifecycle = SelectionLifecycle.state(player);
+        var selectedSpawn = lifecycle.spawnId().map(HeritageCatalog.spawns()::get).orElse(null);
+        var selectedKit = lifecycle.kitId().map(HeritageCatalog.kits()::get).filter(value -> selectedSpawn != null && selectedSpawn.allows(value)).orElse(null);
+        SelectionLifecycle.choices(player, selectedSpawn == null ? null : selectedSpawn.id(), selectedKit == null ? null : selectedKit.id());
+        json.add("flow", SelectionSteps.manifest(player));
+        json.addProperty("session", lifecycle.sessionId().toString());
+        json.addProperty("reset", state(player).getBoolean("reset"));
         json.addProperty("revision", HeritageCatalog.revision());
         json.addProperty("error", error.getString());
         json.addProperty("error_component", Component.Serializer.toJson(error, player.registryAccess()));
@@ -558,6 +578,8 @@ public final class SelectionManager {
         if (event.getEntity() instanceof ServerPlayer player) {
             SelectionParty.remove(player);
             SpawnIntro.release(player);
+            SelectionSteps.remove(player);
+            SelectionLifecycle.cancel(player, com.jvn.kingdomsheritage.api.SelectionEvent.Reason.DISCONNECTED);
         }
         cancelPreparation(event.getEntity().getUUID());
         LAST_REQUEST.remove(event.getEntity().getUUID());
@@ -582,6 +604,9 @@ public final class SelectionManager {
         PREPARATIONS.clear();
         REVIEWS.clear();
         SelectionParty.clear();
+        SelectionLifecycle.clear();
+        SelectionSteps.clear();
+        com.jvn.kingdomsheritage.api.HeritageFlow.stopped();
         SpawnIntro.clear();
         SpawnResolver.clearCache();
         LAST_REQUEST.clear();

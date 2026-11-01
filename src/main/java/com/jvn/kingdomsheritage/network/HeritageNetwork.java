@@ -89,8 +89,30 @@ public final class HeritageNetwork {
         @Override public Type<Cursor> type() { return TYPE; }
     }
 
+    public record FlowAction(java.util.UUID session, java.util.UUID token, long revision, ResourceLocation step,
+                             int action, String spawn, String kit, String value, long version) implements CustomPacketPayload {
+        public static final int ENTER = 0, SUBMIT = 1, BACK = 2, SKIP = 3, NAVIGATE = 4;
+        public static final Type<FlowAction> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(KingdomsHeritage.MOD_ID, "flow_action"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, FlowAction> CODEC = StreamCodec.of(
+                (buffer, value) -> {
+                    buffer.writeUUID(value.session);
+                    buffer.writeUUID(value.token);
+                    buffer.writeLong(value.revision);
+                    buffer.writeResourceLocation(value.step);
+                    buffer.writeByte(value.action);
+                    buffer.writeUtf(value.spawn, 256);
+                    buffer.writeUtf(value.kit, 256);
+                    buffer.writeUtf(value.value, 16384);
+                    buffer.writeLong(value.version);
+                }, buffer -> new FlowAction(buffer.readUUID(), buffer.readUUID(), buffer.readLong(), buffer.readResourceLocation(),
+                        buffer.readUnsignedByte(), buffer.readUtf(256), buffer.readUtf(256), buffer.readUtf(16384), buffer.readLong()));
+        @Override public Type<FlowAction> type() { return TYPE; }
+    }
+
     public static void register(RegisterPayloadHandlersEvent event) {
-        var registrar = event.registrar("5");
+        var registrar = event.registrar("6");
+        registrar.playToServer(FlowAction.TYPE, FlowAction.CODEC, (packet, context) ->
+                com.jvn.kingdomsheritage.server.SelectionSteps.action((ServerPlayer) context.player(), packet));
         registrar.playToServer(PartyAction.TYPE, PartyAction.CODEC, (packet, context) ->
                 com.jvn.kingdomsheritage.server.SelectionParty.action((ServerPlayer) context.player(), packet));
         registrar.playBidirectional(Cursor.TYPE, Cursor.CODEC, (packet, context) -> {

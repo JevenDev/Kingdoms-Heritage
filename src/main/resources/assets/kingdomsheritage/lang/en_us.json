@@ -129,5 +129,9 @@
   "screen.kingdomsheritage.review_party_pair": "%s and %s",
   "screen.kingdomsheritage.review_party_list": "%s, and %s",
   "screen.kingdomsheritage.review_party": " You will arrive with %s...",
-  "error.kingdomsheritage.party_spawn": "Your party leader chooses the spawn. Please review the party location."
+  "error.kingdomsheritage.party_spawn": "Your party leader chooses the spawn. Please review the party location.",
+  "screen.kingdomsheritage.extension_title": "Preparing your journey",
+  "screen.kingdomsheritage.extension_leader": "Waiting for the party leader to choose",
+  "screen.kingdomsheritage.extension_ready": "Party confirmations: %s/%s",
+  "screen.kingdomsheritage.extension_retry": "Try again"
 }

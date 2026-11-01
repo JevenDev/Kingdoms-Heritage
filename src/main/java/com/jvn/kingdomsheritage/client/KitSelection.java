@@ -68,6 +68,7 @@ public final class KitSelection {
 
     void select(int index) {
         this.index = index;
+        ClientSelection.choicesChanged(spawn, kitId());
         view.reset();
         problem = DefinitionJson.message(choices.get(index), "problem", player.registryAccess());
         try {

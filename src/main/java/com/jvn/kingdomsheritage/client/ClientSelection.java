@@ -8,6 +8,7 @@ import java.util.List;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.DeathScreen;
 import net.minecraft.client.gui.screens.GenericMessageScreen;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.network.ConnectionProtocol;
 import net.minecraft.network.chat.Component;
@@ -54,7 +55,9 @@ public final class ClientSelection {
 
     private static void receive(String json) {
         JsonObject next = JsonParser.parseString(json).getAsJsonObject();
-        if (next.has("party")) ClientParty.receive(next.getAsJsonObject("party"));
+        if (next.has("flow_update")) ClientSteps.receive(next.getAsJsonObject("flow_update"));
+        else if (next.has("flow_reset")) ClientSteps.reset(next.getAsJsonObject("flow_reset"));
+        else if (next.has("party")) ClientParty.receive(next.getAsJsonObject("party"));
         else if (next.has("suggestion")) {
             SelectionSounds.NOTICE.play();
             if (selection != null) selection.suggestion(next.get("suggestion").getAsString(), next.get("sender").getAsString());
@@ -101,6 +104,8 @@ public final class ClientSelection {
         if (kits != null && minecraft.player != null) minecraft.player.closeContainer();
         closeKits();
         if (!next.has("spawns")) {
+            ClientSelectionEvents.finish(next.has("outcome") ? next.get("outcome").getAsString().equals("completed") : confirmed,
+                    com.jvn.kingdomsheritage.api.SelectionEvent.Reason.RECOVERED);
             if (confirmed) SelectionSounds.CONFIRMATION.play();
             clearSelection();
             if (minecraft.player != null) minecraft.player.closeContainer();
@@ -112,16 +117,22 @@ public final class ClientSelection {
         if (!SelectionTransition.joining()) SelectionTransition.reveal();
         if (!next.get("error").getAsString().isEmpty()) SelectionSounds.ERROR.play();
         else if (catalog != null) SelectionSounds.NOTICE.play();
+        boolean newSession = catalog == null || next.has("session") && catalog.has("session")
+                && !next.get("session").getAsString().equals(catalog.get("session").getAsString());
         catalog = next;
+        ClientSelectionEvents.catalog(next);
+        var flowReset = ClientSteps.catalog(next);
+        if (newSession) HeritageScreens.begin();
         selection = new SpawnSelectScreen(catalog);
         selection.restoreSelection(spawnId);
+        if (!HeritageScreens.valid(catalog)) HeritageScreens.cancel();
         if (minecraft.level != null && minecraft.player != null && !interrupted()) {
-            minecraft.setScreen(selection);
             if (kitId != null && selection.selectedId() != null && allowedKits(catalog, spawnId).size() > 1) {
                 kits = new KitSelection(catalog, spawnId);
                 kits.restoreSelection(kitId);
-                kits.openInventory();
             }
+            if (!newSession && flowReset != null) resetExtensions(flowReset);
+            else showSelection();
             if (SelectionTransition.joining()) SelectionTransition.reveal();
         }
     }
@@ -152,6 +163,24 @@ public final class ClientSelection {
 
     static boolean selecting() { return catalog != null && Minecraft.getInstance().player != null; }
 
+    static void choicesChanged(String spawn, String kit) {
+        ClientSteps.navigate(spawn, kit);
+        ClientSelectionEvents.choices(spawn == null ? null : net.minecraft.resources.ResourceLocation.parse(spawn),
+                kit == null ? null : net.minecraft.resources.ResourceLocation.parse(kit));
+    }
+
+    static JsonObject catalogCopy() { return catalog.deepCopy(); }
+
+    static void showSelection() {
+        if (!HeritageScreens.finished()) {
+            HeritageScreens.showNext();
+            return;
+        }
+        if (kits != null) kits.openInventory();
+        else Minecraft.getInstance().setScreen(selection);
+        SelectionTransition.reveal();
+    }
+
     static long revision() { return catalog == null ? -1 : catalog.get("revision").getAsLong(); }
 
     static void followPartySpawn(String spawn) {
@@ -165,19 +194,39 @@ public final class ClientSelection {
     }
 
     static void openKits(String spawn) {
-        SelectionTransition.fadeOut(() -> {
-            kits = new KitSelection(catalog, spawn);
-            kits.openInventory();
-            SelectionTransition.reveal();
-        });
+        choicesChanged(spawn, null);
+        SelectionTransition.fadeOut(() -> HeritageScreens.open(HeritageScreens.Placement.AFTER_SPAWN,
+                HeritageScreens.Placement.BEFORE_KIT, spawn, null, () -> {
+                    kits = new KitSelection(catalog, spawn);
+                    kits.openInventory();
+                    SelectionTransition.reveal();
+                }));
+    }
+
+    static void reviewAutomaticKit(String spawn, String kit) {
+        choicesChanged(spawn, kit);
+        SelectionTransition.fadeOut(() -> HeritageScreens.open(HeritageScreens.Placement.AFTER_SPAWN,
+                HeritageScreens.Placement.AFTER_KIT, spawn, kit, () -> requestReview(spawn, kit)));
     }
 
     static void review(String spawn, String kit) {
+        choicesChanged(spawn, kit);
+        SelectionTransition.fadeOut(() -> {
+            if (kits != null) kits.close();
+            Minecraft.getInstance().player.closeContainer();
+            HeritageScreens.open(HeritageScreens.Placement.AFTER_KIT, HeritageScreens.Placement.AFTER_KIT,
+                    spawn, kit, () -> requestReview(spawn, kit));
+        });
+    }
+
+    private static void requestReview(String spawn, String kit) {
         var request = new HeritageNetwork.Choose(spawn, kit, catalog.get("revision").getAsLong());
-        SelectionTransition.fadeOut(() -> net.neoforged.neoforge.network.PacketDistributor.sendToServer(new HeritageNetwork.Review(request)));
+        net.neoforged.neoforge.network.PacketDistributor.sendToServer(new HeritageNetwork.Review(request));
     }
 
     static void cancelReview(java.util.UUID token) {
+        ClientSteps.invalidate(kits == null ? com.jvn.kingdomsheritage.api.ScreenStep.Placement.AFTER_SPAWN
+                : com.jvn.kingdomsheritage.api.ScreenStep.Placement.AFTER_KIT);
         SelectionTransition.fadeOut(() -> {
             net.neoforged.neoforge.network.PacketDistributor.sendToServer(new HeritageNetwork.ReviewDecision(token, false));
             finalReview = null;
@@ -191,6 +240,36 @@ public final class ClientSelection {
             }
             SelectionTransition.reveal();
         });
+    }
+
+    static void resetExtensions(com.jvn.kingdomsheritage.api.ScreenStep.Placement from) {
+        if (!selecting()) return;
+        var placement = HeritageScreens.placement();
+        if (placement != null && placement.ordinal() < from.ordinal()) return;
+        if (from == com.jvn.kingdomsheritage.api.ScreenStep.Placement.AFTER_KIT && placement == null && kits == null && finalReview == null) return;
+        finalReview = null;
+        progress = "";
+        SelectionTransition.clear();
+        if (from == com.jvn.kingdomsheritage.api.ScreenStep.Placement.BEFORE_SPAWN) {
+            closeKits();
+            HeritageScreens.restart();
+        } else backFromExtension(HeritageScreens.Placement.valueOf(from.name()));
+    }
+
+    static void backFromExtension(HeritageScreens.Placement placement) {
+        HeritageScreens.cancel();
+        progress = "";
+        if (placement == HeritageScreens.Placement.AFTER_KIT && kits != null) {
+            kits.retry();
+            kits.openInventory();
+        } else {
+            closeKits();
+            Minecraft.getInstance().player.closeContainer();
+            selection.retry();
+            choicesChanged(selection.selectedId(), null);
+            Minecraft.getInstance().setScreen(selection);
+        }
+        SelectionTransition.reveal();
     }
 
     static Component progress() {
@@ -215,10 +294,12 @@ public final class ClientSelection {
     }
 
     static void back() {
+        ClientSteps.invalidate(com.jvn.kingdomsheritage.api.ScreenStep.Placement.AFTER_SPAWN);
         SelectionTransition.fadeOut(() -> {
             closeKits();
             Minecraft minecraft = Minecraft.getInstance();
             minecraft.player.closeContainer();
+            choicesChanged(selection.selectedId(), null);
             minecraft.setScreen(selection);
             SelectionTransition.reveal();
         });
@@ -230,15 +311,27 @@ public final class ClientSelection {
         SelectionMusic.tick(catalog != null && !progress.equals("applying"), finalReview != null);
         Minecraft minecraft = Minecraft.getInstance();
         if (catalog == null || minecraft.level == null || minecraft.player == null) return;
+        ClientSelectionEvents.ensureStarted();
+        if (!interrupted()) ClientSteps.pump();
         if (interrupted()) {
+            ClientSelectionEvents.finish(false, com.jvn.kingdomsheritage.api.SelectionEvent.Reason.DEATH);
             closeKits();
             finalReview = null;
+            HeritageScreens.clear();
+            ClientSteps.clear();
             selection.retry();
             progress = "";
             SelectionTransition.clear();
             return;
         }
-        if (finalReview != null) {
+        if (!HeritageScreens.finished()) {
+            Screen extension = HeritageScreens.current();
+            if (extension == null) HeritageScreens.showNext();
+            else {
+                if (minecraft.screen != extension) minecraft.setScreen(extension);
+                HeritageScreens.tick();
+            }
+        } else if (finalReview != null) {
             if (minecraft.screen != finalReview) minecraft.setScreen(finalReview);
         } else if (kits != null) {
             kits.tick();
@@ -277,6 +370,8 @@ public final class ClientSelection {
         finalReview = null;
         progress = "";
         ClientParty.clear();
+        HeritageScreens.clear();
+        ClientSteps.clear();
         SelectionToasts.clear();
     }
 
@@ -288,6 +383,7 @@ public final class ClientSelection {
     }
 
     private static void logout(ClientPlayerNetworkEvent.LoggingOut event) {
+        ClientSelectionEvents.finish(false, com.jvn.kingdomsheritage.api.SelectionEvent.Reason.DISCONNECTED);
         SelectionMusic.stop();
         // starting an integrated server also fires a logout without a connection
         if (event.getConnection() != null || !SelectionTransition.joining()) SelectionTransition.clear();
@@ -296,6 +392,7 @@ public final class ClientSelection {
     }
 
     static void disconnect() {
+        ClientSelectionEvents.finish(false, com.jvn.kingdomsheritage.api.SelectionEvent.Reason.DISCONNECTED);
         SelectionMusic.stop();
         SelectionTransition.clear();
         SpawnIntroOverlay.clear();
