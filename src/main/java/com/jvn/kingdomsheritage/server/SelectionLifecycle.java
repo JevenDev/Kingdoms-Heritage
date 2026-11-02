@@ -24,6 +24,16 @@ final class SelectionLifecycle {
         return STATES.get(player.getUUID());
     }
 
+    static SelectionState snapshot(ServerPlayer player) {
+        var existing = STATES.get(player.getUUID());
+        if (existing != null) return existing;
+        var data = SelectionManager.inspect(player);
+        return new SelectionState(UUID.randomUUID(), HeritageCatalog.revision(),
+                Optional.ofNullable(ResourceLocation.tryParse(data.getString("spawn_choice"))),
+                Optional.ofNullable(ResourceLocation.tryParse(data.getString("kit_choice"))),
+                Optional.ofNullable(SelectionParty.leader(player)), SelectionParty.memberIds(player));
+    }
+
     static void start(ServerPlayer player) {
         if (STATES.containsKey(player.getUUID())) return;
         var state = new SelectionState(UUID.randomUUID(), HeritageCatalog.revision(), Optional.empty(), Optional.empty(),

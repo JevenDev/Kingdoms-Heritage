@@ -56,7 +56,12 @@ public final class ClientSelection {
 
     private static void receive(String json) {
         JsonObject next = JsonParser.parseString(json).getAsJsonObject();
-        if (next.has("flow_update")) ClientSteps.receive(next.getAsJsonObject("flow_update"));
+        if (next.has("cinematic")) {
+            if (next.has("intro")) {
+                Minecraft.getInstance().setScreen(null);
+                SpawnIntroOverlay.start(next);
+            } else SpawnIntroOverlay.clear();
+        } else if (next.has("flow_update")) ClientSteps.receive(next.getAsJsonObject("flow_update"));
         else if (next.has("flow_reset")) ClientSteps.reset(next.getAsJsonObject("flow_reset"));
         else if (next.has("party")) ClientParty.receive(next.getAsJsonObject("party"));
         else if (next.has("suggestion")) {

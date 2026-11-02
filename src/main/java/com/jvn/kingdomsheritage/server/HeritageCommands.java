@@ -1,5 +1,6 @@
 package com.jvn.kingdomsheritage.server;
 
+import com.jvn.kingdomsheritage.api.HeritageCinematics;
 import com.jvn.kingdomsheritage.compat.EquipmentCompat;
 import com.jvn.kingdomsheritage.data.HeritageCatalog;
 import com.jvn.kingdomsheritage.data.HeritageException;
@@ -8,7 +9,9 @@ import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.exceptions.SimpleCommandExceptionType;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.commands.SharedSuggestionProvider;
 import net.minecraft.commands.arguments.EntityArgument;
+import net.minecraft.commands.arguments.ResourceLocationArgument;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
@@ -23,6 +26,16 @@ public final class HeritageCommands {
     public static void register(RegisterCommandsEvent event) {
         event.getDispatcher().register(Commands.literal("heritage")
                 .then(Commands.literal("background").executes(context -> background(context.getSource(), context.getSource().getPlayerOrException())))
+                .then(Commands.literal("cinematic").requires(source -> source.hasPermission(2))
+                        .then(Commands.literal("play")
+                                .then(Commands.argument("players", EntityArgument.players())
+                                        .then(Commands.argument("id", ResourceLocationArgument.id())
+                                                .suggests((context, builder) -> SharedSuggestionProvider.suggestResource(HeritageCatalog.cinematics().keySet(), builder))
+                                                .executes(context -> cinematic(context.getSource(), EntityArgument.getPlayers(context, "players"),
+                                                        ResourceLocationArgument.getId(context, "id"))))))
+                        .then(Commands.literal("stop")
+                                .then(Commands.argument("players", EntityArgument.players()).executes(context ->
+                                        cinematic(context.getSource(), EntityArgument.getPlayers(context, "players"), null)))))
                 .then(Commands.literal("inspect").requires(source -> source.hasPermission(2))
                         .then(Commands.argument("player", EntityArgument.player()).executes(context ->
                                 inspect(context.getSource(), EntityArgument.getPlayer(context, "player")))))
@@ -36,6 +49,24 @@ public final class HeritageCommands {
                 .then(Commands.literal("recover").requires(source -> source.hasPermission(2))
                         .then(Commands.argument("player", EntityArgument.player()).executes(context ->
                                 change(context.getSource(), EntityArgument.getPlayer(context, "player"), true)))));
+    }
+
+    private static int cinematic(CommandSourceStack source, java.util.Collection<ServerPlayer> players,
+                                  ResourceLocation id) throws CommandSyntaxException {
+        var intro = id == null ? null : HeritageCinematics.definition(id).orElseThrow(() ->
+                new SimpleCommandExceptionType(Component.translatable("commands.kingdomsheritage.cinematic_unknown", id.toString())).create());
+        int count = 0;
+        for (var player : players) {
+            try {
+                if (intro == null ? HeritageCinematics.stop(player) : HeritageCinematics.play(player, intro)) count++;
+            } catch (IllegalArgumentException error) {
+                throw new SimpleCommandExceptionType(HeritageException.component(error)).create();
+            }
+        }
+        int changed = count;
+        source.sendSuccess(() -> Component.translatable("commands.kingdomsheritage.cinematic_" + (intro == null ? "stopped" : "played"),
+                changed, players.size()), false);
+        return count;
     }
 
     private static int background(CommandSourceStack source, ServerPlayer player) {

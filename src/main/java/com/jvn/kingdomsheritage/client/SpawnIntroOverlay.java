@@ -44,6 +44,7 @@ public final class SpawnIntroOverlay {
     private static int lastAudible;
     private static int nextBlip;
     private static boolean ready;
+    private static boolean standalone;
 
     private SpawnIntroOverlay() {}
 
@@ -56,6 +57,7 @@ public final class SpawnIntroOverlay {
 
     static void start(JsonObject message) {
         clear();
+        standalone = message.has("cinematic");
         intro = IntroDefinition.parse(message.getAsJsonObject("intro"));
         token = UUID.fromString(message.get("token").getAsString());
         barSlant = IntroCinematicBars.sampleSlant(token, intro.barStyle());
@@ -102,11 +104,11 @@ public final class SpawnIntroOverlay {
             return;
         }
         if (!minecraft.level.dimension().location().equals(dimension)) {
-            if (ready) finish();
+            if (ready || standalone) finish();
             return;
         }
         if (minecraft.isPaused() || minecraft.screen instanceof ReceivingLevelScreen
-                || !ready && !SelectionTransition.terrainReady()) return;
+                || !ready && !standalone && !SelectionTransition.terrainReady()) return;
         if (!ready) PacketDistributor.sendToServer(new HeritageNetwork.IntroReady(token, intro.durationTicks(revealTicks)));
         ready = true;
         SelectionTransition.introReady();
@@ -136,7 +138,7 @@ public final class SpawnIntroOverlay {
         revealTicks = 0;
         age = layoutWidth = lastAudible = 0;
         nextBlip = 3;
-        ready = false;
+        ready = standalone = false;
     }
 
     static int visible(float ticks) {

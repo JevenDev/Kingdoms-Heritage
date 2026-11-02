@@ -16,15 +16,17 @@ import net.neoforged.neoforge.event.AddReloadListenerEvent;
 
 public final class HeritageCatalog {
     record Snapshot(Map<ResourceLocation, SpawnDefinition> spawns,
-                    Map<ResourceLocation, KitDefinition> kits, SelectionSettings selection) {}
+                    Map<ResourceLocation, KitDefinition> kits, Map<ResourceLocation, IntroDefinition> cinematics,
+                    SelectionSettings selection) {}
     private static final ResourceLocation SELECTION = ResourceLocation.fromNamespaceAndPath("kingdomsheritage", "selection");
-    private static Snapshot current = new Snapshot(Map.of(), Map.of(), SelectionSettings.DEFAULT);
+    private static Snapshot current = new Snapshot(Map.of(), Map.of(), Map.of(), SelectionSettings.DEFAULT);
     private static long revision;
 
     private HeritageCatalog() {}
 
     public static Map<ResourceLocation, SpawnDefinition> spawns() { return current.spawns; }
     public static Map<ResourceLocation, KitDefinition> kits() { return current.kits; }
+    public static Map<ResourceLocation, IntroDefinition> cinematics() { return current.cinematics; }
     public static long revision() { return revision; }
     public static int guiScale() { return current.selection.guiScale(); }
 
@@ -38,6 +40,7 @@ public final class HeritageCatalog {
                 : SelectionSettings.DEFAULT;
         Map<ResourceLocation, SpawnDefinition> spawns = new LinkedHashMap<>();
         Map<ResourceLocation, KitDefinition> kits = new LinkedHashMap<>();
+        Map<ResourceLocation, IntroDefinition> cinematics = new LinkedHashMap<>();
         resources.entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(entry -> {
             if (entry.getKey().equals(SELECTION)) return;
             try {
@@ -50,6 +53,9 @@ public final class HeritageCatalog {
                 } else if (path.startsWith("kits/")) {
                     ResourceLocation id = ResourceLocation.fromNamespaceAndPath(entry.getKey().getNamespace(), path.substring(5));
                     kits.put(id, KitDefinition.parse(id, json));
+                } else if (path.startsWith("cinematics/")) {
+                    ResourceLocation id = ResourceLocation.fromNamespaceAndPath(entry.getKey().getNamespace(), path.substring(11));
+                    cinematics.put(id, IntroDefinition.parse(json));
                 }
             } catch (RuntimeException error) {
                 throw new IllegalArgumentException("Invalid Heritage definition " + entry.getKey() + ": " + error.getMessage(), error);
@@ -75,7 +81,8 @@ public final class HeritageCatalog {
         Map<ResourceLocation, KitDefinition> sortedKits = new LinkedHashMap<>();
         kits.values().stream().sorted(Comparator.comparingInt(KitDefinition::order).thenComparing(KitDefinition::id))
                 .forEach(value -> sortedKits.put(value.id(), value));
-        return new Snapshot(java.util.Collections.unmodifiableMap(sortedSpawns), java.util.Collections.unmodifiableMap(sortedKits), selection);
+        return new Snapshot(java.util.Collections.unmodifiableMap(sortedSpawns), java.util.Collections.unmodifiableMap(sortedKits),
+                java.util.Collections.unmodifiableMap(cinematics), selection);
     }
 
     private static final class Loader extends SimplePreparableReloadListener<Snapshot> {
@@ -84,6 +91,7 @@ public final class HeritageCatalog {
             Map<ResourceLocation, JsonElement> resources = new LinkedHashMap<>();
             manager.listResources("heritage", id -> id.getPath().endsWith(".json")
                     && (id.getPath().startsWith("heritage/spawns/") || id.getPath().startsWith("heritage/kits/")
+                    || id.getPath().startsWith("heritage/cinematics/")
                     || id.equals(SELECTION.withPath("heritage/selection.json"))))
                     .forEach((id, resource) -> {
                         try (var reader = resource.openAsReader()) {
