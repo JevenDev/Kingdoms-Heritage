@@ -8,7 +8,8 @@ const canvas=$('preview'), ctx=canvas.getContext('2d'), renderer=new HeritageCan
 let jsonState=P.readJson(JSON.stringify({intro:P.defaults}));
 let config=jsonState.config, main=[], sub=[], all=[], blocks=[], cues=[], revealEnds=[];
 let time=0, playing=false, previewing=true, muted=false, lastFrame=0, frameRequest=0, slant=P.sampleSlant(crypto.randomUUID()), activeField=$('text'), valid=true;
-let audioContext, audioBuffer, gain;
+const speech=HeritageDialogueAudio.create({muted:()=>muted});
+let playRequest=0;
 let history=[], historyIndex=-1, restoringHistory=false, historyGroup=null, historyTime=0, currentValidation={error:null,fromJson:false};
 let workspace,saveTimer,saveUnavailable=false,saveBlocked=false,restoredLibrary=false,author,packContext;
 let selectedBlock=null,drag=null,timelineEditor,richEditors=new Map(),visualText=true;
@@ -133,7 +134,6 @@ function restoreHistory(direction) {
   restoringHistory=false;
   updateHistoryButtons();draftOptions();scheduleSave();
 }
-const sources=new Set();
 const hex=n=>'#'+n.toString(16).padStart(6,'0');
 const fields=[...document.querySelectorAll('[data-field]')];
 for(const field of fields)if(!field.id)field.id='intro-field-'+field.dataset.field.replaceAll('.','-');
@@ -152,7 +152,7 @@ function random(seed) {
 }
 function configValue(config,field) {
   const [key,part]=field.split('.');
-  return part?(config[key]?.[part]??({x:50,y:50,width:50})[part]):config[key];
+  return key==='timeline'?P.trackTiming(config)[part]:part?(config[key]?.[part]??({x:50,y:50,width:50})[part]):config[key];
 }
 function fillFields() {
   for(const field of fields) {
@@ -171,44 +171,9 @@ function updateCoordinateControls() {
     $(kind+'-position-label').textContent=(kind==='title'?'Title':'Subtitle')+(custom?' anchor':' position');
   }
 }
-function stopSounds() { for(const source of sources) source.stop(); sources.clear(); }
-function pause() { playing=false;if(frameRequest)cancelAnimationFrame(frameRequest);frameRequest=0; HeritageIcons.action('play','play','Play'); stopSounds(); if(blocks.length)draw(); }
-async function prepareAudio() {
-  if(audioBuffer) { await audioContext.resume(); return; }
-  audioContext ||= new AudioContext();
-  await audioContext.resume();
-  if(!gain) {
-    gain=audioContext.createGain();
-    gain.connect(audioContext.destination);
-  }
-  gain.gain.value=muted?0:.35;
-  const bytes=Uint8Array.from(atob(HeritageAssets.blip.split(',')[1]),ch=>ch.charCodeAt(0));
-  audioBuffer=await audioContext.decodeAudioData(bytes.buffer);
-}
-function blip(pitch) {
-  if(muted || !audioBuffer) return;
-  const source=audioContext.createBufferSource();
-  source.buffer=audioBuffer;
-  source.playbackRate.value=pitch;
-  source.connect(gain);
-  sources.add(source);
-  source.onended=()=>sources.delete(source);
-  source.start();
-}
-function buildCues() {
-  const rng=random(3529), list=[];
-  let last=0,next=3;
-  const end=config.black_hold_ticks+(['word_by_word','letter_by_letter'].includes(config.animation)?config.reveal_ticks:1);
-  for(let age=1;age<P.duration(config)&&age<=end;age++) {
-    if(age<config.black_hold_ticks) continue;
-    const count=P.visible(config,all,age-config.black_hold_ticks,revealEnds);
-    if(count<next) continue;
-    if(all.slice(Math.min(last,all.length),Math.min(count,all.length)).some(g=>/[\p{L}\p{N}]/u.test(g.ch))) list.push({tick:age,pitch:.9+rng()*.2});
-    last=count;
-    next=count+3+Math.floor(rng()*3);
-  }
-  return list;
-}
+function stopSounds(){speech.stop();}
+function pause(){playRequest++;playing=false;if(frameRequest)cancelAnimationFrame(frameRequest);frameRequest=0;HeritageIcons.action('play','play','Play');stopSounds();if(blocks.length)draw();}
+
 const advance=renderer.advance;
 function updateGuiScale(requested=Number($('viewport').value)) {
   if(packContext?.guiScale)requested=packContext.guiScale;
@@ -234,7 +199,7 @@ function rebuild() {
   canvas.width=preview.width;canvas.height=preview.height;
   canvas.style.aspectRatio=preview.width+' / '+preview.height;canvas.style.setProperty('--preview-aspect',preview.width/preview.height);
   blocks=P.layout(config,main,sub,w,h,advance);
-  cues=buildCues();
+  cues=P.blipCues(config,names(),random(3529));
   const missing=[...new Set(all.filter(g=>!font.has(g.ch)&&g.ch!=='\n').map(g=>g.ch))];
   $('font-warning').hidden=!missing.length;
   $('font-warning').textContent=missing.length?'The preview font is missing these characters: '+missing.join(' ')+'. Check them in Minecraft.':'';
@@ -244,7 +209,7 @@ function rebuild() {
   syncConditionalControls();timelineEditor?.update(time,valid);for(const editor of richEditors.values())editor.refresh();
 }
 function syncConditionalControls(){
-  for(const field of document.querySelectorAll('[data-field=hide_hud_during_bars],[data-field=bar_height],[data-field=bar_style],[data-field=bar_transition_ticks],#bar-height-range'))field.disabled=!config.cinematic_bars&&field.getAttribute('aria-invalid')!=='true';
+  for(const field of document.querySelectorAll('[data-field=hide_hud_during_bars],[data-field=bar_height],[data-field=bar_style],[data-field^="timeline.bar_"],#bar-height-range'))field.disabled=!config.cinematic_bars&&field.getAttribute('aria-invalid')!=='true';
   $('new-angle').disabled=!config.cinematic_bars||config.bar_style!=='random';
   const reveal=document.querySelector('[data-field=reveal_ticks]');reveal.disabled=config.animation==='immediate'&&reveal.getAttribute('aria-invalid')!=='true';reveal.closest('label').dataset.tooltip=JSON.stringify(['Text reveal',config.animation==='immediate'?'Immediate text does not use a reveal duration.':'Time for all text to appear. 20 ticks = 1 second.']);
 }
@@ -285,7 +250,7 @@ function validation(error=null,fromJson=false) {
 }
 function refreshPreview() {
   rebuild();
-  time=Math.min(config.black_hold_ticks+config.reveal_ticks+10,P.duration(config)-config.fade_out_ticks-1);
+  time=Math.min(P.textStart(config)+config.reveal_ticks+10,P.textStart(config)+P.textDuration(config)-config.fade_out_ticks-1);
   previewing=true;
   draw();
 }
@@ -312,7 +277,7 @@ function editing(event,{record=true}={}) {
     for(const field of changedFields) {
       if(field.readOnly)continue;
       const [key,part]=field.dataset.field.split('.');
-      if(part&&!$(key.replace('_coordinates','')+'-custom').checked)continue;
+      if(part&&key!=='timeline'&&!$(key.replace('_coordinates','')+'-custom').checked)continue;
       let value=field.value;
       if(field.type==='checkbox') value=field.checked;
       else if(field.dataset.field==='outline')value=field.value==='true';
@@ -321,11 +286,13 @@ function editing(event,{record=true}={}) {
         value=Number(field.value);
       }
       if(part) {
-        changes[key]??={...base.config[key]};
-        changes[key][part]=value;
+        if(key==='timeline'){if(value===configValue(base.config,field.dataset.field))continue;const next=HeritageTimeline.changes(base.config,field.dataset.field,value);changes.timeline={...next.timeline,...changes.timeline,[part]:value};if(!base.config.timeline)changes.hold_ticks??=next.hold_ticks;}
+        else{changes[key]??={...base.config[key]};changes[key][part]=value;}
       } else if(value!==base.config[key]) changes[key]=value;
     }
     for(const kind of ['title','subtitle'])if(!$(kind+'-custom').checked&&(!invalidSource||event?.target?.id===kind+'-custom'))changes[kind+'_coordinates']=undefined;
+    const timingField=event?.target?.dataset.field;
+    if(!base.config.timeline&&['black_hold_ticks','fade_from_black_ticks','reveal_ticks','hold_ticks','fade_out_ticks'].includes(timingField))Object.assign(changes,HeritageTimeline.changes(base.config,timingField,changes[timingField]??base.config[timingField]));
     const draft=P.updateJson(base,changes,{validate:false});
     $('json').value=JSON.stringify(draft.document,null,2);sourceUpdated=true;
     const next=P.readJson($('json').value);
@@ -451,13 +418,13 @@ function draw() {
   const w=preview.guiWidth,h=preview.guiHeight;
   ctx.setTransform(preview.scale,0,0,preview.scale,0,0);ctx.imageSmoothingEnabled=false;ctx.globalAlpha=1;
   ctx.fillStyle=$('background').value;ctx.fillRect(0,0,w,h);
-  const elapsed=time-config.black_hold_ticks, total=P.duration(config);
+  const elapsed=time-P.textStart(config),worldElapsed=time-config.black_hold_ticks,total=P.duration(config);
   if(time<total) {
-    const progress=P.clamp(elapsed/config.fade_from_black_ticks), reveal=progress*progress*(3-2*progress);
+    const progress=P.clamp(worldElapsed/config.fade_from_black_ticks), reveal=progress*progress*(3-2*progress);
     ctx.globalAlpha=Math.round(255*(1-reveal))/255;ctx.fillStyle='#000';ctx.fillRect(0,0,w,h);ctx.globalAlpha=1;
+    bars(w,h,worldElapsed);
     if(elapsed>=0) {
-      bars(w,h,elapsed);
-      let alpha=P.clamp((P.presentation(config)-elapsed)/config.fade_out_ticks);
+      let alpha=P.clamp((P.textDuration(config)-elapsed)/config.fade_out_ticks);
       if(config.animation==='fade_in') alpha*=P.clamp(elapsed/config.reveal_ticks);
       alpha=Math.round(alpha*255);
       if(alpha>=4) {
@@ -475,17 +442,15 @@ function draw() {
     $('clock').textContent=clock;
     $('timeline').setAttribute('aria-valuetext',(time/20).toFixed(1)+' seconds of '+(total/20).toFixed(1));
   }
-  const phase=time>=total?'Complete':elapsed<0?'Black screen':elapsed>=P.presentation(config)-config.fade_out_ticks?'Text fade out':config.animation!=='immediate'&&elapsed<config.reveal_ticks?'Text reveal':'Text hold';
+  const phase=time>=total?'Complete':elapsed<0?'Black screen':elapsed>=P.textDuration(config)-config.fade_out_ticks?'Text fade out':config.animation!=='immediate'&&elapsed<config.reveal_ticks?'Text reveal':'Text hold';
   if($('phase').textContent!==phase)$('phase').textContent=phase;
 }
 function frame(now) {
   frameRequest=0;
   if(playing) {
-    const before=time;
-    time=Math.min(P.duration(config),time+Math.min(250,now-lastFrame)/50);
-    if(config.blip) for(const cue of cues) if(cue.tick>before&&cue.tick<=time) blip(cue.pitch);
+    time=Math.min(P.duration(config),time+Math.max(0,now-lastFrame)/50);
     if(time>=P.duration(config)) {
-      if($('loop').checked) {time=0;stopSounds();}
+      if($('loop').checked){time=0;stopSounds();speech.start(cues,0).catch(error=>{$('audio-status').textContent=error.message;});}
       else pause();
     }
     draw();
@@ -495,12 +460,14 @@ function frame(now) {
 }
 async function play(restart=false) {
   if(playing&&!restart) {pause();return;}
-  if(!font.size)return;
+  if(!font.size)return;const request=++playRequest;
   if(config.blip&&!muted) {
-    try {await prepareAudio();$('audio-status').textContent='';}
+    try {await speech.prepare();$('audio-status').textContent='';}
     catch(error) {$('audio-status').textContent='Preview audio could not load: '+error.message;}
   }
-  if(restart||previewing||time>=P.duration(config)) time=0;
+  if(request!==playRequest)return;
+  if(restart||previewing||time>=P.duration(config))time=0;
+  if(config.blip&&!muted){await speech.start(cues,()=>time).catch(error=>{$('audio-status').textContent='Preview audio could not load: '+error.message;});if(request!==playRequest){stopSounds();return;}}
   previewing=false;
   playing=true;
   lastFrame=performance.now();
@@ -557,11 +524,11 @@ $('timeline').addEventListener('input',()=>{
 });
 $('mute').addEventListener('click',()=>{
   muted=!muted;
-  if(gain) gain.gain.value=muted?0:.35;
+  speech.syncMute();
   if(muted)stopSounds();
   HeritageIcons.action('mute',muted?'volume-x':'volume-2',muted?'Unmute':'Mute');
   $('mute').setAttribute('aria-label',muted?'Unmute preview sound':'Mute preview sound');
-  if(!muted&&playing&&config.blip) prepareAudio().catch(error=>{$('audio-status').textContent=error.message;});
+  if(!muted&&playing&&config.blip)speech.start(cues,()=>time).catch(error=>{$('audio-status').textContent=error.message;});
 });
 $('background').addEventListener('input',()=>{draw();scheduleSave();});
 for(const id of ['resolution','viewport'])$(id).addEventListener('change',()=>{rebuild();draw();scheduleSave();});
@@ -647,10 +614,10 @@ function textMode(visual){
 }
 $('text-mode-visual').addEventListener('click',()=>textMode(true));$('text-mode-markup').addEventListener('click',()=>textMode(false));
 const timelineHost=document.createElement('div');timelineHost.className='intro-timeline-host';document.querySelector('.playback').after(timelineHost);
-timelineEditor=HeritageTimeline.create(timelineHost,{get:()=>config,seek:value=>{pause();previewing=false;time=value;draw();},
-  change:(key,value,record)=>{const field=fields.find(field=>field.dataset.field===key);field.value=value;editing({type:'change',target:field},{record});previewing=false;const segment=HeritageTimeline.layout(config).tracks.flatMap(track=>track.segments).find(segment=>segment.key===key);time=Math.min(P.duration(config),segment?.to??time);draw();},
+timelineEditor=HeritageTimeline.create(timelineHost,{get:()=>config,snapshot:()=>JSON.parse(JSON.stringify(jsonState.document)),seek:value=>{pause();previewing=false;time=value;draw();},
+  change:(changes,record,key)=>{pause();jsonState=P.updateJson(jsonState,changes);config=jsonState.config;$('json').value=JSON.stringify(jsonState.document,null,2);$('preset').value='custom';fillFields();validation();rebuild();previewing=false;const segment=HeritageTimeline.layout(config).tracks.flatMap(track=>track.segments).find(segment=>segment.key===key);time=Math.min(P.duration(config),key.endsWith('start_ticks')?configValue(config,key):segment?.to??time);draw();if(record)recordHistory({type:'change',target:fields.find(field=>field.dataset.field===key)});},
   commit:key=>recordHistory({type:'change',target:fields.find(field=>field.dataset.field===key)}),
-  cancel:original=>{for(const [key,value] of Object.entries(original))fields.find(field=>field.dataset.field===key).value=value;editing({target:fields.find(field=>field.dataset.field==='black_hold_ticks')},{record:false});scheduleSave();}
+  cancel:original=>{pause();jsonState=P.readJson(JSON.stringify(original));config=jsonState.config;$('json').value=JSON.stringify(jsonState.document,null,2);fillFields();validation();rebuild();time=Math.min(time,P.duration(config));draw();scheduleSave();}
 });
 author=HeritageAuthoring.create({kind:'intro',active:()=>workspace.active,
   stages:[{id:'text',label:'text',heading:'Write the arrival intro',help:'Name the intro, then write the text players see when they arrive.'},{id:'layout',label:'layout & style',heading:'Place and style the text',help:'Choose positions or drag the text boxes in the live preview.'},{id:'cinematic',label:'timing & bars',heading:'Set the cinematic pacing',help:'Adjust the timing and bars while checking the live preview.'},{id:'review',label:'review',heading:'Review this intro',help:'Play the full intro, then use it in your pack or create another.'}],

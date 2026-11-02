@@ -3,6 +3,8 @@
 const P=HeritagePreview,F=HeritageFlow,$=id=>document.getElementById(id);
 function create({editLocation,editIntro,testFlow,selectContext,reorder,editText,undo,crop,textFits}){
   let current,packView='cards',previewKit='',previewLocation='',expanded=false,poolIndex='',frame=0,lastFrame=0,playing=false,time=0,introKey='',request=0,ready,monitors,currentModel,currentStory;
+  const speech=HeritageDialogueAudio.create({muted:()=>$('flow-mute').checked});let speechRunning=false,playAttempt=0;
+  const stopSpeech=()=>{speech.stop();speechRunning=false;};
   const seconds=ticks=>(Math.round(ticks/2)/10)+' s';
   const nodes={pack:$('pack-player-view'),location:$('location-card')};
   const tools=HeritageCardTools.create({editLocation,selectContext,reorder,editText,undo,crop,fit:spawn=>monitors.pack.textFit(spawn),collapse:()=>{expanded=false;}});
@@ -31,12 +33,14 @@ function create({editLocation,editIntro,testFlow,selectContext,reorder,editText,
     return {config,error,names:F.locations(spawn??{}),spawn};
   }
   function draw(now){
-    frame=0;if(!current||!monitors||document.hidden||$('flow-dialog').open||current.embedded||!['pack','locations'].includes(current.step))return;
+    frame=0;if(!current||!monitors||document.hidden||$('flow-dialog').open||current.embedded||!['pack','locations'].includes(current.step)){stopSpeech();return;}
     const scope=current.step==='pack'?'pack':'location',phase=scope==='pack'?packView:current.part==='details'?'cards':current.part==='intro'?'intro':'kits';
     try{
       const model=currentModel,story=currentStory,config=story.config;
-      if(playing){time+=Math.min(100,Math.max(0,now-lastFrame))/50;if(time>=P.duration(config??P.packDefaults)){time=P.duration(config??P.packDefaults);playing=false;}}
+      if(playing){time+=Math.max(0,now-lastFrame)/50;if(time>=P.duration(config??P.packDefaults)){time=P.duration(config??P.packDefaults);playing=false;}}
       lastFrame=now;
+      if(phase==='intro'&&playing&&config?.blip){if(!speechRunning){speechRunning=true;speech.start(P.blipCues(config,story.names),()=>time).catch(error=>status(scope,'Preview audio could not load: '+error.message,true));}}
+      else if(speechRunning)stopSpeech();
       const resolution=$(scope==='pack'?'pack-preview-resolution':'location-preview-resolution').value.split('x').map(Number),guiScale=current.state.guiScale||Number($('flow-scale').value)||3;
       nodes[scope].parentElement.style.setProperty('--monitor-ratio',resolution[0]/resolution[1]);
       const view=monitors[scope].draw({spawns:tools.preview(model.ordered),page:tools.page(),selectedId:model.id,guiScale,width:resolution[0],height:resolution[1],phase,expanded:scope==='location'&&expanded,intro:config,time,names:story.names,pictureData:current.pictureData,kit:model.kit});
@@ -49,7 +53,7 @@ function create({editLocation,editIntro,testFlow,selectContext,reorder,editText,
   }
   function start(){if(!frame&&monitors&&currentModel){lastFrame=performance.now();frame=requestAnimationFrame(draw);}}
   async function update(value){
-    current=value;const token=++request;if(frame){cancelAnimationFrame(frame);frame=0;}
+    playAttempt++;stopSpeech();current=value;const token=++request;if(frame){cancelAnimationFrame(frame);frame=0;}
     $('pack-file-label').textContent=HeritagePack.slug(value.state.name)+(value.output.resourceFiles.length?'-data':'')+'.zip';$('pack-description-preview').textContent=value.state.description;
     const disabled=$('preview-flow').disabled;$('pack-try-flow').disabled=$('location-try-flow').disabled=disabled;
     const scope=value.step==='pack'?'pack':'location';
@@ -58,7 +62,8 @@ function create({editLocation,editIntro,testFlow,selectContext,reorder,editText,
       const pictures=Object.values(value.pictureData).map(data=>({data}));await Promise.all(Object.values(monitors).map(monitor=>monitor.pictures(pictures)));if(token!==request)return;
       const model=documents(),field=$('intro-preview-destination');field.replaceChildren(new Option('Pool default',''),...(model.spawn?.pool??[]).map((destination,index)=>new Option('Place '+(index+1)+' · '+(F.place(destination.target)||destination.type),String(index))));
       if(poolIndex!==''&&!model.spawn?.pool?.[Number(poolIndex)])poolIndex='';field.value=poolIndex;$('arrival-destination-field').hidden=value.part!=='intro'||model.spawn?.type!=='pool';
-      currentModel=model;tools.update({...value,model,packCards:packView==='cards',translations:monitors.pack.defaults.translations});if(value.embedded)return;currentStory=arrival(model);const story=currentStory,config=story.config,key=JSON.stringify([model.id,poolIndex,config]);if(key!==introKey){introKey=key;playing=false;time=config?Math.min(P.duration(config)-1,config.black_hold_ticks+config.reveal_ticks+20):0;}
+      currentModel=model;tools.update({...value,model,packCards:packView==='cards',translations:monitors.pack.defaults.translations});if(value.embedded)return;currentStory=arrival(model);const story=currentStory,config=story.config,key=JSON.stringify([model.id,poolIndex,config]);if(key!==introKey){introKey=key;playing=false;time=config?Math.min(P.duration(config)-1,P.textStart(config)+config.reveal_ticks+20):0;}
+      $('pack-preview-mute').hidden=packView!=='intro';
       $('arrival-transport').hidden=value.part!=='intro'||!config;$('arrival-scrub').max=String(config?P.duration(config):0);
       $('card-description-toggle').hidden=value.part!=='details';$('card-description-toggle').setAttribute('aria-pressed',String(expanded));$('card-description-toggle').textContent=expanded?'Hide description':'Show description';
       $('location-visual-heading').textContent=value.part==='intro'?'Arrival preview':value.part==='kits'?'Kit selection preview':'Selection screen';
@@ -76,19 +81,25 @@ function create({editLocation,editIntro,testFlow,selectContext,reorder,editText,
       start();
     }catch(error){if(token===request){nodes[scope].hidden=true;status(scope,'Player view could not load. '+error.message,true);}}
   }
-  for(const button of document.querySelectorAll('[data-workspace-view]'))button.addEventListener('click',()=>{packView=button.dataset.workspaceView;for(const tab of document.querySelectorAll('[data-workspace-view]'))tab.setAttribute('aria-pressed',String(tab===button));if(packView==='intro'){playing=true;time=0;}update(current);});
+  for(const button of document.querySelectorAll('[data-workspace-view]'))button.addEventListener('click',async()=>{const selected=button.dataset.workspaceView;packView=selected;for(const tab of document.querySelectorAll('[data-workspace-view]'))tab.setAttribute('aria-pressed',String(tab===button));if(packView==='intro'){try{await speech.prepare();}catch(error){status('pack',error.message,true);}if(packView!==selected)return;playing=true;time=0;}update(current);});
   for(const id of ['pack-preview-resolution','location-preview-resolution'])$(id).addEventListener('change',()=>{const value=$(id).value;$('pack-preview-resolution').value=$('location-preview-resolution').value=value;update(current);});
   for(const id of ['pack-try-flow','location-try-flow'])$(id).addEventListener('click',testFlow);
   $('card-description-toggle').addEventListener('click',()=>{expanded=!expanded;update(current);});
   document.addEventListener('focusin',event=>{if(event.target.matches('[data-location-field=description]')&&!expanded){expanded=true;update(current);}});
   $('intro-preview-destination').addEventListener('change',event=>{poolIndex=event.target.value;update(current);});
-  $('arrival-play').addEventListener('click',()=>{if(time>=Number($('arrival-scrub').max))time=0;playing=!playing;start();});
-  $('arrival-restart').addEventListener('click',()=>{time=0;playing=true;start();});
-  $('arrival-scrub').addEventListener('input',event=>{time=Number(event.target.value);playing=false;start();});
+  async function playArrival(restart=false){
+    if(playing&&!restart){playAttempt++;playing=false;stopSpeech();start();return;}
+    const attempt=++playAttempt;if(currentStory?.config?.blip&&!$('flow-mute').checked)try{await speech.prepare();}catch(error){status('location',error.message,true);}if(attempt!==playAttempt)return;
+    if(restart||time>=Number($('arrival-scrub').max))time=0;stopSpeech();playing=true;lastFrame=performance.now();start();
+  }
+  $('arrival-play').addEventListener('click',()=>playArrival());$('arrival-restart').addEventListener('click',()=>playArrival(true));
+  $('arrival-scrub').addEventListener('input',event=>{playAttempt++;time=Number(event.target.value);playing=false;stopSpeech();start();});
+  function syncMute(){stopSpeech();speech.syncMute();const muted=$('flow-mute').checked,label=muted?'Unmute preview sound':'Mute preview sound';for(const id of ['arrival-mute','pack-preview-mute']){HeritageIcons.action(id,muted?'volume-x':'volume-2','');$(id).setAttribute('aria-label',label);$(id).dataset.tooltip=JSON.stringify(['Preview audio',label]);}}
+  for(const id of ['arrival-mute','pack-preview-mute'])$(id).addEventListener('click',()=>{$('flow-mute').checked=!$('flow-mute').checked;$('flow-mute').dispatchEvent(new Event('change'));});$('flow-mute').addEventListener('change',syncMute);syncMute();
   document.addEventListener('click',event=>{const button=event.target.closest('[data-preview-kit]');if(button){previewKit=button.dataset.previewKit;update(current);}const intro=event.target.closest('[data-intro-stage]');if(intro)editIntro(intro.dataset.introStage);});
   for(const node of Object.values(nodes))node.tabIndex=0;
-  document.addEventListener('visibilitychange',()=>{if(!document.hidden)start();});$('flow-dialog').addEventListener('close',start);
-  return {update,detach:tools.detach,select:selectContext};
+  document.addEventListener('visibilitychange',()=>{if(document.hidden){playAttempt++;stopSpeech();}else start();});$('flow-dialog').addEventListener('close',start);
+  return {update,detach:tools.detach,select:selectContext,cards:()=>monitors&&current?documents().ordered:[]};
 }
 globalThis.HeritageWorkspaceVisuals={create};
 })();

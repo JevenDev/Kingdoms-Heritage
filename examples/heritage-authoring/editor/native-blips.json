@@ -1,0 +1,152 @@
+{
+  "nativeSources": {
+    "client/SpawnIntroOverlay.java": "9d85cb6d165472647d7a51ac3ab94da2ae6cc57f406389617e32d8900f42a678",
+    "data/IntroDefinition.java": "955b5ee684ea030f926c92e4e08d800e7ca77670674191f10055be9d5bb5ce39"
+  },
+  "samples": [
+    {
+      "animation": "fade_in",
+      "start": 0,
+      "cues": [
+        {
+          "tick": 1,
+          "count": 20
+        }
+      ]
+    },
+    {
+      "animation": "fade_in",
+      "start": 15,
+      "cues": [
+        {
+          "tick": 15,
+          "count": 20
+        }
+      ]
+    },
+    {
+      "animation": "word_by_word",
+      "start": 0,
+      "cues": [
+        {
+          "tick": 10,
+          "count": 3
+        },
+        {
+          "tick": 20,
+          "count": 10
+        },
+        {
+          "tick": 30,
+          "count": 16
+        },
+        {
+          "tick": 40,
+          "count": 20
+        }
+      ]
+    },
+    {
+      "animation": "word_by_word",
+      "start": 15,
+      "cues": [
+        {
+          "tick": 25,
+          "count": 3
+        },
+        {
+          "tick": 35,
+          "count": 10
+        },
+        {
+          "tick": 45,
+          "count": 16
+        },
+        {
+          "tick": 55,
+          "count": 20
+        }
+      ]
+    },
+    {
+      "animation": "letter_by_letter",
+      "start": 0,
+      "cues": [
+        {
+          "tick": 6,
+          "count": 3
+        },
+        {
+          "tick": 12,
+          "count": 6
+        },
+        {
+          "tick": 18,
+          "count": 9
+        },
+        {
+          "tick": 24,
+          "count": 12
+        },
+        {
+          "tick": 30,
+          "count": 15
+        },
+        {
+          "tick": 36,
+          "count": 18
+        }
+      ]
+    },
+    {
+      "animation": "letter_by_letter",
+      "start": 15,
+      "cues": [
+        {
+          "tick": 21,
+          "count": 3
+        },
+        {
+          "tick": 27,
+          "count": 6
+        },
+        {
+          "tick": 33,
+          "count": 9
+        },
+        {
+          "tick": 39,
+          "count": 12
+        },
+        {
+          "tick": 45,
+          "count": 15
+        },
+        {
+          "tick": 51,
+          "count": 18
+        }
+      ]
+    },
+    {
+      "animation": "immediate",
+      "start": 0,
+      "cues": [
+        {
+          "tick": 1,
+          "count": 20
+        }
+      ]
+    },
+    {
+      "animation": "immediate",
+      "start": 15,
+      "cues": [
+        {
+          "tick": 15,
+          "count": 20
+        }
+      ]
+    }
+  ]
+}

@@ -83,7 +83,7 @@ function create(config){
   });
   $('locations').addEventListener('keydown',event=>{
     const button=event.target.closest('[data-open-location]');if(!button||!event.altKey||!['ArrowUp','ArrowDown'].includes(event.key))return;
-    event.preventDefault();const ids=config.ordered(),index=ids.indexOf(button.dataset.openLocation),next=index+(event.key==='ArrowUp'?-1:1);if(next<0||next>=ids.length)return;
+    event.preventDefault();if(config.move){config.move(button.dataset.openLocation,event.key==='ArrowUp'?-1:1);$('locations').querySelector('[data-open-location="'+CSS.escape(button.dataset.openLocation)+'"]')?.focus();return;}const ids=config.ordered(),index=ids.indexOf(button.dataset.openLocation),next=index+(event.key==='ArrowUp'?-1:1);if(next<0||next>=ids.length)return;
     [ids[index],ids[next]]=[ids[next],ids[index]];config.reorder(ids);$('locations').querySelector('[data-open-location="'+CSS.escape(button.dataset.openLocation)+'"]').focus();
   });
   function openBulk(kind){

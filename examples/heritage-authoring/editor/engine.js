@@ -3,7 +3,7 @@
 const colors = {black:0x000000,dark_blue:0x0000aa,dark_green:0x00aa00,dark_aqua:0x00aaaa,dark_red:0xaa0000,dark_purple:0xaa00aa,gold:0xffaa00,gray:0xaaaaaa,dark_gray:0x555555,blue:0x5555ff,green:0x55ff55,aqua:0x55ffff,red:0xff5555,light_purple:0xff55ff,yellow:0xffff55,white:0xffffff};
 const aliases = {i:'italic',italics:'italic',b:'bold',u:'underline',underlined:'underline',s:'strike',strikethrough:'strike',obfuscate:'obfuscated',magic:'obfuscated',wavy:'wave',shaky:'shake',pulsing:'pulse',jumping:'jump',bounce:'jump',bouncy:'jump'};
 const positions = {mid_center:[1,1],top_center:[1,0],bottom_center:[1,2],left_center:[0,1],right_center:[2,1],top_left:[0,0],top_right:[2,0],bottom_left:[0,2],bottom_right:[2,2]};
-const defaults = {text:'You woke up in <wave><gold><biome></gold></wave>...',subtitle:'<italic>A new journey begins.</italic>',title:false,large_subtitle:false,outline:true,animation:'word_by_word',control:'after_title',blip:true,black_hold_ticks:60,fade_from_black_ticks:60,reveal_ticks:40,hold_ticks:60,fade_out_ticks:20,cinematic_bars:true,bar_style:'random',bar_transition_ticks:40,bar_height:26,hide_hud_during_bars:true,title_position:'left_center',subtitle_position:'left_center'};
+const defaults = {text:'You woke up in <wave><gold><biome></gold></wave>...',subtitle:'<italic>A new journey begins.</italic>',title:false,large_subtitle:false,outline:true,animation:'word_by_word',control:'after_title',blip:true,black_hold_ticks:60,fade_from_black_ticks:60,reveal_ticks:40,hold_ticks:60,fade_out_ticks:20,cinematic_bars:true,bar_style:'random',bar_transition_ticks:40,bar_height:26,timeline:null,hide_hud_during_bars:true,title_position:'left_center',subtitle_position:'left_center'};
 const packDefaults = {...defaults,text:'',subtitle:'',animation:'fade_in',blip:false,cinematic_bars:false,hide_hud_during_bars:false,title_position:'mid_center',subtitle_position:'mid_center'};
 const positionAliases = {center:'mid_center',mc:'mid_center',mid_c:'mid_center',tc:'top_center',top_c:'top_center',bc:'bottom_center',bottom_c:'bottom_center',lc:'left_center',left_c:'left_center',rc:'right_center',right_c:'right_center',tl:'top_left',tr:'top_right',bl:'bottom_left',br:'bottom_right'};
 function readJson(source,{validate:check=true}={}) {
@@ -295,7 +295,23 @@ function sampleSlant(token,style='random') {
   return Math.fround(-12+Math.fround(Number(seed>>24n)/16777216*24));
 }
 function presentation(cfg) { return Math.max(cfg.fade_from_black_ticks,(cfg.animation==='immediate'?0:cfg.reveal_ticks)+cfg.hold_ticks+cfg.fade_out_ticks); }
-function duration(cfg) { return cfg.black_hold_ticks+presentation(cfg); }
+function trackTiming(cfg) {
+  if(cfg.timeline)return {...cfg.timeline};
+  const total=presentation(cfg),bar=Math.min(cfg.bar_transition_ticks,total/2);
+  return {text_start_ticks:cfg.black_hold_ticks,bar_start_ticks:cfg.black_hold_ticks,bar_enter_ticks:bar,bar_hold_ticks:total-bar*2,bar_exit_ticks:bar};
+}
+function textStart(cfg){return cfg.timeline?.text_start_ticks??cfg.black_hold_ticks;}
+function textDuration(cfg){return cfg.timeline?(cfg.animation==='immediate'?0:cfg.reveal_ticks)+cfg.hold_ticks+cfg.fade_out_ticks:presentation(cfg);}
+function barProgress(cfg,time){
+  if(!cfg.timeline)return barVisibility(time-cfg.black_hold_ticks,presentation(cfg),cfg.bar_transition_ticks);
+  const timing=cfg.timeline,ticks=time-timing.bar_start_ticks,entry=clamp(Math.fround(ticks/timing.bar_enter_ticks)),exit=clamp(Math.fround((ticks-timing.bar_enter_ticks-timing.bar_hold_ticks)/timing.bar_exit_ticks)),f=Math.fround;
+  return f(f(1-f((1-entry)**3))*f(1-f(f(exit*exit)*exit)));
+}
+function duration(cfg) {
+  if(!cfg.timeline)return cfg.black_hold_ticks+presentation(cfg);
+  const timing=cfg.timeline,bars=cfg.cinematic_bars?timing.bar_start_ticks+timing.bar_enter_ticks+timing.bar_hold_ticks+timing.bar_exit_ticks:0;
+  return Math.max(cfg.black_hold_ticks+cfg.fade_from_black_ticks,textStart(cfg)+textDuration(cfg),bars);
+}
 function wordEnds(all) {return all.filter((g,i)=>!/\s/u.test(g.ch)&&(i+1===all.length||/\s/u.test(all[i+1].ch))).map(g=>g.index+1);}
 function visible(cfg,all,ticks,ends) {
   if(cfg.animation==='immediate'||cfg.animation==='fade_in') return all.length;
@@ -304,6 +320,20 @@ function visible(cfg,all,ticks,ends) {
   ends??=wordEnds(all);
   const count=Math.floor(ends.length*progress);
   return count===0?0:ends[count-1];
+}
+function revealCues(glyphs,visibleAt,total,{start=0,first=3,step=3,pitch=.9,spread=.2}={},random=Math.random){
+  const cues=[];let last=0,next=first;
+  for(let tick=1;tick<total;tick++){
+    if(tick<start)continue;const count=Math.min(glyphs.length,visibleAt(tick));if(count<next)continue;
+    if(glyphs.slice(last,count).some(glyph=>/[\p{L}\p{Nd}]/u.test(glyph.ch)))cues.push({tick,pitch:pitch+random()*spread,count});
+    last=count;next=count+step+Math.floor(random()*3);
+  }
+  return cues;
+}
+function blipCues(cfg,names={},random=Math.random){
+  if(!cfg.blip)return [];
+  const main=parse(cfg.text,names),sub=parse(cfg.subtitle,names,main.length+1),glyphs=[...main,{ch:'\n',index:main.length},...sub],ends=wordEnds(glyphs),start=textStart(cfg);
+  return revealCues(glyphs,tick=>visible(cfg,glyphs,tick-start,ends),duration(cfg),{start},random);
 }
 function glyphFrame(g,tick,alpha) {
   const e=g.effect, i=g.phase;
@@ -325,6 +355,13 @@ function validate(cfg) {
     const min=field==='black_hold_ticks'?0:1;
     if(!Number.isInteger(cfg[field])||cfg[field]<min||cfg[field]>1200) throw Object.assign(new Error(({black_hold_ticks:'Black screen',fade_from_black_ticks:'World fade',reveal_ticks:'Text reveal',hold_ticks:'Text hold',fade_out_ticks:'Text fade out',bar_transition_ticks:'Bar movement'})[field]+' must be a whole number from '+min+' to 1200.'),{field});
   }
+  if(cfg.timeline!==null&&cfg.timeline!==undefined){
+    if(typeof cfg.timeline!=='object'||Array.isArray(cfg.timeline))throw Object.assign(new Error('Timeline must be an object.'),{field:'timeline'});
+    for(const key of ['text_start_ticks','bar_start_ticks','bar_enter_ticks','bar_hold_ticks','bar_exit_ticks']){
+      const value=cfg.timeline[key],minimum=['bar_enter_ticks','bar_exit_ticks'].includes(key)?1:0,maximum=key==='bar_hold_ticks'?3600:1200;
+      if(!Number.isInteger(value)||value<minimum||value>maximum)throw Object.assign(new Error(key+' must be a whole number from '+minimum+' to '+maximum+'.'),{field:'timeline.'+key});
+    }
+  }
   if(!Number.isInteger(cfg.bar_height)||cfg.bar_height<1||cfg.bar_height>1200)throw Object.assign(new Error('Bar thickness must be a whole number from 1 to 1200 GUI pixels.'),{field:'bar_height'});
   for(const key of ['title_position','subtitle_position']) if(!Object.hasOwn(positions,cfg[key])) throw Object.assign(new Error('Unknown text position.'),{field:key});
   for(const key of ['title_coordinates','subtitle_coordinates'])if(cfg[key]!=null) {
@@ -340,7 +377,7 @@ function validate(cfg) {
   if(!['random','straight'].includes(cfg.bar_style)) throw Object.assign(new Error('Unknown bar style.'),{field:'bar_style'});
   return cfg;
 }
-const api={effects,canonical,barHeight,barVisibility,sampleSlant,componentText,validateComponent,colors,positions,defaults,packDefaults,readJson,updateJson,parse,wrap,padding,bounds,guiViewport,layout,presentation,duration,wordEnds,visible,glyphFrame,validate,clamp,active};
+const api={effects,canonical,barHeight,barVisibility,sampleSlant,componentText,validateComponent,colors,positions,defaults,packDefaults,readJson,updateJson,parse,wrap,padding,bounds,guiViewport,layout,presentation,trackTiming,textStart,textDuration,barProgress,duration,wordEnds,visible,revealCues,blipCues,glyphFrame,validate,clamp,active};
 if(typeof module!=='undefined') module.exports=api;
 else globalThis.HeritagePreview=api;
 })();

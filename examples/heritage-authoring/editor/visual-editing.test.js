@@ -22,12 +22,21 @@ test('collapsed formatting selections style the whole visible field',()=>{
 test('timeline tracks use the same total duration and black-screen offset as the native preview',()=>{
   const config={...P.defaults},model=T.layout(config);assert.equal(model.total,P.duration(config));assert.equal(model.tracks[2].segments[0].from,config.black_hold_ticks);assert.equal(model.tracks[1].segments.at(-1).to,model.total);assert.equal(model.tracks[0].segments[1].to,config.black_hold_ticks+config.fade_from_black_ticks);
 });
-test('long world fades show the extended text hold and disable misleading boundary edits',()=>{
-  const config={...P.defaults,fade_from_black_ticks:500},model=T.layout(config);assert.equal(model.extended,true);assert.equal(model.tracks[1].segments[1].to,model.total-config.fade_out_ticks);assert.equal(model.tracks[1].segments[1].disabled,true);assert.equal(model.tracks[1].segments[2].disabled,true);
+test('long world fades retain their legacy layout while keeping text boundaries editable',()=>{
+  const config={...P.defaults,fade_from_black_ticks:500},model=T.layout(config);assert.equal(model.extended,true);assert.equal(model.tracks[1].segments[1].to,model.total-config.fade_out_ticks);assert.equal(model.tracks[1].segments[1].disabled,false);assert.equal(model.tracks[1].segments[2].disabled,false);
 });
 test('bar tracks use the native half-duration cap without rewriting configured values',()=>{
   const config={...P.defaults,bar_transition_ticks:1200},model=T.layout(config),enter=model.tracks[2].segments[0],exit=model.tracks[2].segments[2];assert.equal(enter.to-enter.from,P.presentation(config)/2);assert.equal(exit.to-exit.from,P.presentation(config)/2);assert.equal(config.bar_transition_ticks,1200);
 });
 test('immediate reveals and disabled bars remain visible as non-editable timing dependencies',()=>{
   const model=T.layout({...P.defaults,animation:'immediate',cinematic_bars:false});assert.equal(model.tracks[1].segments[0].to,model.start);assert.equal(model.tracks[1].segments[0].disabled,true);assert.equal(model.tracks[2].disabled,true);
+});
+
+test('editing a bar exit materializes independent tracks without changing the enter or text timing',()=>{
+  const config={...P.defaults,fade_from_black_ticks:500},original=JSON.stringify(config),before=T.layout(config),patch=T.changes(config,'timeline.bar_exit_ticks',15),next=P.updateJson(P.readJson(JSON.stringify(config)),patch).config,after=T.layout(next);assert.equal(next.timeline.bar_enter_ticks,before.tracks[2].segments[0].value);assert.equal(next.timeline.bar_exit_ticks,15);assert.equal(next.hold_ticks,before.tracks[1].segments[1].value);assert.deepEqual(after.tracks[1].segments.map(segment=>[segment.from,segment.to]),before.tracks[1].segments.map(segment=>[segment.from,segment.to]));assert.equal(JSON.stringify(config),original);
+  const moved=P.updateJson(P.readJson(JSON.stringify(next)),T.changes(next,'timeline.bar_start_ticks',5)).config;assert.equal(P.textStart(moved),P.textStart(next));assert.equal(moved.black_hold_ticks,next.black_hold_ticks);assert.equal(moved.timeline.bar_enter_ticks,next.timeline.bar_enter_ticks);
+});
+test('world fade changes and text hold changes no longer resize other tracks',()=>{
+  const config=P.updateJson(P.readJson(JSON.stringify(P.defaults)),T.changes(P.defaults,'fade_from_black_ticks',500)).config,model=T.layout(config);assert.equal(model.tracks[1].segments.at(-1).to,P.defaults.black_hold_ticks+P.presentation(P.defaults));assert.equal(model.tracks[0].segments.at(-1).to,560);assert.equal(model.tracks[2].segments.at(-1).to,180);
+  const next=P.updateJson(P.readJson(JSON.stringify(config)),T.changes(config,'hold_ticks',10)).config;assert.equal(T.layout(next).tracks[2].segments.at(-1).to,180);assert.equal(next.fade_from_black_ticks,500);assert.equal(T.layout(next).tracks[1].segments[1].value,10);
 });

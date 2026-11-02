@@ -44,6 +44,12 @@ public final class IntroCinematicBars {
         return (1 - (float) Math.pow(1 - entry, 3)) * (1 - exit * exit * exit);
     }
 
+    static float visibility(float ticks, int enterTicks, int holdTicks, int exitTicks) {
+        float entry = Mth.clamp(ticks / enterTicks, 0, 1);
+        float exit = Mth.clamp((ticks - enterTicks - holdTicks) / exitTicks, 0, 1);
+        return (1 - (float) Math.pow(1 - entry, 3)) * (1 - exit * exit * exit);
+    }
+
     static void render(GuiGraphics graphics, int width, int height, float visibility, float slant) {
         render(graphics, width, height, visibility, slant, 26);
     }

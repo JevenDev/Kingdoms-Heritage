@@ -79,7 +79,12 @@ public final class SpawnIntroOverlay {
     }
 
     public static boolean active() { return intro != null; }
-    static boolean hidesHud() { return active() && intro.cinematicBars() && intro.hideHudDuringBars(); }
+    static boolean hidesHud() {
+        if (!active() || !intro.cinematicBars() || !intro.hideHudDuringBars()) return false;
+        var timing = intro.timeline();
+        return timing == null || age >= timing.barStartTicks()
+                && age < timing.barStartTicks() + timing.barEnterTicks() + timing.barHoldTicks() + timing.barExitTicks();
+    }
     public static boolean blocked() { return SelectionTransition.active() || active() && (!ready || intro.control() == IntroDefinition.Control.AFTER_TITLE); }
 
     static void tick() {
@@ -101,7 +106,7 @@ public final class SpawnIntroOverlay {
             finish();
             return;
         }
-        if (age >= intro.blackHoldTicks()) blip(minecraft, visible(age - intro.blackHoldTicks()));
+        if (age >= intro.textStartTicks()) blip(minecraft, visible(age - intro.textStartTicks()));
     }
 
     private static void finish() {
@@ -166,18 +171,22 @@ public final class SpawnIntroOverlay {
         float elapsed = elapsed(partialTick);
         int black = Math.round(255 * (1 - worldReveal(elapsed)));
         if (black > 0) graphics.fill(0, 0, width, height, black << 24);
-        if (!ready || elapsed < intro.blackHoldTicks()) return;
-        float ticks = elapsed - intro.blackHoldTicks();
+        if (!ready) return;
         if (intro.cinematicBars()) {
-            IntroCinematicBars.render(graphics, width, height,
-                    IntroCinematicBars.visibility(ticks, intro.presentationTicks(), intro.barTransitionTicks()), barSlant, intro.barHeight());
+            var timing = intro.timeline();
+            float visibility = timing == null
+                    ? IntroCinematicBars.visibility(elapsed - intro.blackHoldTicks(), intro.presentationTicks(), intro.barTransitionTicks())
+                    : IntroCinematicBars.visibility(elapsed - timing.barStartTicks(), timing.barEnterTicks(), timing.barHoldTicks(), timing.barExitTicks());
+            IntroCinematicBars.render(graphics, width, height, visibility, barSlant, intro.barHeight());
         }
+        float ticks = elapsed - intro.textStartTicks();
+        if (ticks < 0) return;
         if (layout == null || layoutWidth != width || layoutHeight != height) {
             layoutWidth = width;
             layoutHeight = height;
             layout = IntroLayout.create(minecraft.font, width, height, intro, text, subtitle);
         }
-        float alpha = Mth.clamp((intro.presentationTicks() - ticks) / intro.fadeOutTicks(), 0, 1);
+        float alpha = Mth.clamp((intro.textDurationTicks() - ticks) / intro.fadeOutTicks(), 0, 1);
         if (intro.animation() == IntroDefinition.Animation.FADE_IN) alpha *= Mth.clamp(ticks / intro.revealTicks(), 0, 1);
         int opacity = Math.round(alpha * 255);
         if (opacity < 4) return;

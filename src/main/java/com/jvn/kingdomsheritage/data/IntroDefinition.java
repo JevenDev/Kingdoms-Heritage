@@ -13,7 +13,49 @@ public record IntroDefinition(Component text, Component subtitle, boolean title,
                               int fadeOutTicks, int fadeFromBlackTicks, boolean cinematicBars, BarStyle barStyle,
                               int barTransitionTicks, Position titlePosition, Position subtitlePosition, int blackHoldTicks,
                               boolean outline, boolean hideHudDuringBars,
-                              Coordinates titleCoordinates, Coordinates subtitleCoordinates, boolean largeSubtitle, int barHeight) {
+                              Coordinates titleCoordinates, Coordinates subtitleCoordinates, boolean largeSubtitle, int barHeight, Timeline timeline) {
+    public IntroDefinition(Component text, Component subtitle, boolean title, Animation animation,
+                           Control control, boolean blip, int revealTicks, int holdTicks,
+                           int fadeOutTicks, int fadeFromBlackTicks, boolean cinematicBars, BarStyle barStyle,
+                           int barTransitionTicks, Position titlePosition, Position subtitlePosition, int blackHoldTicks,
+                           boolean outline, boolean hideHudDuringBars, Coordinates titleCoordinates,
+                           Coordinates subtitleCoordinates, boolean largeSubtitle, int barHeight) {
+        this(text, subtitle, title, animation, control, blip, revealTicks, holdTicks, fadeOutTicks, fadeFromBlackTicks,
+                cinematicBars, barStyle, barTransitionTicks, titlePosition, subtitlePosition, blackHoldTicks,
+                outline, hideHudDuringBars, titleCoordinates, subtitleCoordinates, largeSubtitle, barHeight, null);
+    }
+
+    public record Timeline(int textStartTicks, int barStartTicks, int barEnterTicks, int barHoldTicks, int barExitTicks) {
+        private static Timeline parse(JsonObject json) {
+            return new Timeline(value(json, "text_start_ticks", 0, 1200), value(json, "bar_start_ticks", 0, 1200),
+                    value(json, "bar_enter_ticks", 1, 1200), value(json, "bar_hold_ticks", 0, 3600),
+                    value(json, "bar_exit_ticks", 1, 1200));
+        }
+
+        private static int value(JsonObject json, String key, int minimum, int maximum) {
+            if (!json.has(key)) throw new IllegalArgumentException("timeline requires " + key);
+            var value = json.get(key);
+            if (!value.isJsonPrimitive() || !value.getAsJsonPrimitive().isNumber()) {
+                throw new IllegalArgumentException(key + " must be a whole number of ticks");
+            }
+            double number = value.getAsDouble();
+            if (!Double.isFinite(number) || number != Math.rint(number) || number < minimum || number > maximum) {
+                throw new IllegalArgumentException(key + " must be between " + minimum + " and " + maximum + " ticks");
+            }
+            return (int) number;
+        }
+
+        private JsonObject json() {
+            JsonObject json = new JsonObject();
+            json.addProperty("text_start_ticks", textStartTicks);
+            json.addProperty("bar_start_ticks", barStartTicks);
+            json.addProperty("bar_enter_ticks", barEnterTicks);
+            json.addProperty("bar_hold_ticks", barHoldTicks);
+            json.addProperty("bar_exit_ticks", barExitTicks);
+            return json;
+        }
+    }
+
     public enum Animation { FADE_IN, WORD_BY_WORD, LETTER_BY_LETTER, IMMEDIATE }
     public enum Control { AFTER_TITLE, DURING_TITLE }
     public enum BarStyle { RANDOM, STRAIGHT }
@@ -82,7 +124,9 @@ public record IntroDefinition(Component text, Component subtitle, boolean title,
                 Position.parse(GsonHelper.getAsString(json, "subtitle_position", "mid_center")), ticks(json, "black_hold_ticks", 60, 0),
                 GsonHelper.getAsBoolean(json, "outline", true), GsonHelper.getAsBoolean(json, "hide_hud_during_bars", false),
                 coordinates(json, "title_coordinates"), coordinates(json, "subtitle_coordinates"),
-                GsonHelper.getAsBoolean(json, "large_subtitle", false), barHeight(json));
+                GsonHelper.getAsBoolean(json, "large_subtitle", false), barHeight(json),
+                json.has("timeline") && !json.get("timeline").isJsonNull()
+                        ? Timeline.parse(GsonHelper.getAsJsonObject(json, "timeline")) : null);
     }
 
     private static int barHeight(JsonObject json) {
@@ -146,7 +190,16 @@ public record IntroDefinition(Component text, Component subtitle, boolean title,
     }
 
     public int durationTicks() {
-        return blackHoldTicks + presentationTicks();
+        if (timeline == null) return blackHoldTicks + presentationTicks();
+        int barsEnd = cinematicBars ? timeline.barStartTicks() + timeline.barEnterTicks()
+                + timeline.barHoldTicks() + timeline.barExitTicks() : 0;
+        return Math.max(blackHoldTicks + fadeFromBlackTicks, Math.max(textStartTicks() + textDurationTicks(), barsEnd));
+    }
+
+    public int textStartTicks() { return timeline == null ? blackHoldTicks : timeline.textStartTicks(); }
+
+    public int textDurationTicks() {
+        return timeline == null ? presentationTicks() : (animation == Animation.IMMEDIATE ? 0 : revealTicks) + holdTicks + fadeOutTicks;
     }
 
     public int presentationTicks() {
@@ -173,6 +226,7 @@ public record IntroDefinition(Component text, Component subtitle, boolean title,
         json.addProperty("bar_style", barStyle.name().toLowerCase(Locale.ROOT));
         json.addProperty("bar_transition_ticks", barTransitionTicks);
         json.addProperty("bar_height", barHeight);
+        if (timeline != null) json.add("timeline", timeline.json());
         json.addProperty("title_position", titlePosition.name().toLowerCase(Locale.ROOT));
         json.addProperty("subtitle_position", subtitlePosition.name().toLowerCase(Locale.ROOT));
         if (titleCoordinates != null) json.add("title_coordinates", titleCoordinates.json());

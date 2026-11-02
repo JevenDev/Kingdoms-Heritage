@@ -5,7 +5,12 @@ const kinds=['kits','intros'];
 const empty=kind=>({version:2,active:'',[kind]:[]});
 const library=(value,kind)=>copy(value??empty(kind));
 const draft=(value,kind,id)=>value?.[kind]?.find(entry=>entry.id===id)?.state??null;
-const packContent=pack=>{const result=copy(pack);delete result.active;return result;};
+const packContent=pack=>{const {active,...result}=pack;return result;};
+const actionSizes=new WeakMap();
+function actionSize(action){
+  if(!actionSizes.has(action))actionSizes.set(action,JSON.stringify(action).length);
+  return actionSizes.get(action);
+}
 function workspace(pack,libraries){return {pack:copy(pack),libraries:Object.fromEntries(kinds.map(kind=>[kind,library(libraries[kind],kind)]))};}
 function applyDrafts(libraries,changes,direction){
   const result=Object.fromEntries(kinds.map(kind=>[kind,library(libraries[kind],kind)]));
@@ -34,12 +39,12 @@ class History {
     this.actions.splice(this.index);
     const previous=this.actions.at(-1),combine=group&&previous?.group===group&&now-previous.time<700;
     if(combine){
-      previous.after=next.pack;previous.time=now;
+      previous.after=next.pack;previous.time=now;actionSizes.delete(previous);
       for(const change of changes){const existing=previous.drafts.find(entry=>entry.kind===change.kind&&entry.id===change.id);if(existing)existing.after=change.after;else previous.drafts.push(change);}
     }else this.actions.push({before:this.present.pack,after:next.pack,drafts:changes,group,label,time:now});
     this.present=next;this.index=this.actions.length;
-    let bytes=this.actions.reduce((total,action)=>total+JSON.stringify(action).length,0);
-    while(this.actions.length>1&&(this.actions.length>50||bytes>16*1024*1024)){bytes-=JSON.stringify(this.actions.shift()).length;this.index--;}
+    let bytes=this.actions.reduce((total,action)=>total+actionSize(action),0);
+    while(this.actions.length>1&&(this.actions.length>50||bytes>16*1024*1024)){bytes-=actionSize(this.actions.shift());this.index--;}
     return true;
   }
   plan(direction,pack,libraries){
@@ -62,9 +67,22 @@ function assign(pack,ids,{kitIds,intro}={}){
   if(intro!==undefined)for(const entry of targets)entry.intro=intro;
   return result;
 }
-function reorder(pack,ids){
+function reorder(pack,ids,spawns=null){
   if(ids.length!==pack.locations.length||new Set(ids).size!==ids.length||ids.some(id=>!pack.locations.some(entry=>entry.id===id)))throw new Error('Choose each location once when reordering.');
+  if(pack.keepLocations&&(spawns?.length||pack.bundledLocations)){
+    const custom=new Map(pack.locations.map(entry=>[pack.namespace+':'+entry.path,entry])),text=(a,b)=>a<b?-1:a>b?1:0;
+    const locations=(spawns?.length?[...spawns]:[...Object.entries(pack.bundledLocations).filter(([id])=>!custom.has(id)).map(([id,document])=>({...copy(document),id})),...pack.locations.map(entry=>({id:pack.namespace+':'+entry.path,order:Number(entry.fields.order)||0}))]).sort((a,b)=>(a.order??0)-(b.order??0)||text(a.id.split(':')[1],b.id.split(':')[1])||text(a.id.split(':')[0],b.id.split(':')[0]));
+    const queue=ids.map(id=>pack.locations.find(entry=>entry.id===id)).map(entry=>pack.namespace+':'+entry.path);
+    return reorderCards(pack,locations.map(spawn=>custom.has(spawn.id)?queue.shift():spawn.id),locations);
+  }
   const result=copy(pack);ids.forEach((id,index)=>{result.locations.find(entry=>entry.id===id).fields.order=String(index);});return result;
+}
+function reorderCards(pack,ids,spawns=[]){
+  const custom=new Map(pack.locations.map(entry=>[pack.namespace+':'+entry.path,entry.id])),defaults=pack.keepLocations?['default','random','plains','village'].map(id=>'kingdomsheritage:'+id).filter(id=>!custom.has(id)):[],available=[...custom.keys(),...defaults];
+  if(!Array.isArray(ids)||ids.length!==available.length||new Set(ids).size!==ids.length||ids.some(id=>!available.includes(id)))throw new Error('Choose each starting location once when reordering.');
+  const result=copy(pack);if(defaults.length)result.bundledLocations={};
+  ids.forEach((id,index)=>{if(custom.has(id))result.locations.find(entry=>entry.id===custom.get(id)).fields.order=String(index);else{const source=spawns.find(spawn=>spawn.id===id);if(!source)throw new Error('Default locations are still loading. Try again.');const document=copy(source);delete document.id;document.order=index;result.bundledLocations[id]=document;}});
+  return result;
 }
 function reorderKits(pack,ids){
   const available=[...pack.kits.map(entry=>entry.id),...(pack.keepKits?['bundled-empty']:[])];
@@ -125,6 +143,6 @@ function restoreCheckpoint(saved,pack,libraries){
   }
   return {...result,drafts};
 }
-const api={History,workspace,assign,reorder,reorderKits,duplicateDraft,privateCopy,checkpoint,restoreCheckpoint};
+const api={History,workspace,assign,reorder,reorderCards,reorderKits,duplicateDraft,privateCopy,checkpoint,restoreCheckpoint};
 if(typeof module!=='undefined')module.exports=api;else globalThis.HeritageEditing=api;
 })();

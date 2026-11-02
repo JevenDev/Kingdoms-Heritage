@@ -58,3 +58,28 @@ test('project imports remap kit order alongside colliding draft IDs',()=>{
 test('the built-in empty kit can be duplicated without adding a fake shared draft',()=>{
   const before=pack(),libraries=libs(),result=E.duplicateDraft(before,libraries,'kit','builtin-empty','b','empty-copy');assert.deepEqual(result.libraries.kits.kits.at(-1).state.document,{title:'Empty-handed copy',items:[]});assert.equal(result.libraries.kits.kits.some(entry=>entry.id==='builtin-empty'),false);assert.deepEqual(result.pack.locations[1].kits,['k','empty-copy']);assert.equal(libraries.kits.kits.length,2);
 });
+
+test('mixed card ordering preserves default definitions and custom assignments through undo and redo',()=>{
+ const Flow=require('./flow.js'),defaults=require('./assets/defaults.json'),input=pack();input.keepLocations=true;input.locations.forEach((entry,index)=>{entry.path=entry.id;entry.fields.type='default';});const source=clone(input),spawns=[...defaults.spawns,...input.locations.map(entry=>({id:'test:'+entry.path,order:Number(entry.fields.order)}))],ids=['kingdomsheritage:random','test:b','kingdomsheritage:default','test:a','kingdomsheritage:village','kingdomsheritage:plains'],result=E.reorderCards(input,ids,spawns);
+ const baseline=spawns.slice().sort(Flow.compare).map(spawn=>spawn.id),projected=E.reorder(input,['b','a'],spawns),customQueue=['test:b','test:a'];const expected=baseline.map(id=>id.startsWith('test:')?customQueue.shift():id);for(const id of expected){const rank=id.startsWith('test:')?Number(projected.locations.find(entry=>'test:'+entry.path===id).fields.order):projected.bundledLocations[id].order;assert.equal(rank,expected.indexOf(id));}
+ assert.deepEqual(input,source);assert.equal(result.active,'a');assert.equal(result.locations[0].fields.order,'3');assert.equal(result.locations[1].fields.order,'1');assert.deepEqual(result.locations.map(entry=>entry.kits),input.locations.map(entry=>entry.kits));
+ for(const spawn of defaults.spawns){const {id,order,...rest}=spawn,{order:next,...saved}=result.bundledLocations[id];assert.deepEqual(saved,rest);assert.equal(next,ids.indexOf(id));}
+ const libraries=libs(),history=new E.History(input,libraries);history.record(result,libraries);const undo=history.plan(-1,result,libraries);assert.deepEqual(undo.pack,input);history.accept(-1,undo);assert.deepEqual(history.plan(1,input,libraries).pack,result);
+ const subset=E.reorder(result,['a','b']);assert.equal(subset.locations[0].fields.order,'1');assert.equal(subset.locations[1].fields.order,'3');assert.deepEqual(subset.bundledLocations,result.bundledLocations);
+ for(const invalid of [ids.slice(1),[...ids.slice(0,-1),ids[0]],[...ids.slice(0,-1),'external:missing']])assert.throws(()=>E.reorderCards(input,invalid,spawns),/each starting location/);
+ assert.throws(()=>E.reorderCards(input,ids,[]),/still loading/);
+});
+test('reordering an override of a bundled location does not create a duplicate default',()=>{
+ const input=pack();input.namespace='kingdomsheritage';input.keepLocations=true;input.locations[0].path='default';input.locations[1].path='custom';const defaults=require('./assets/defaults.json').spawns,ids=['kingdomsheritage:custom','kingdomsheritage:random','kingdomsheritage:default','kingdomsheritage:village','kingdomsheritage:plains'],result=E.reorderCards(input,ids,defaults);assert.equal(result.bundledLocations['kingdomsheritage:default'],undefined);assert.equal(result.locations[0].fields.order,'2');
+});
+
+test('grouped history growth recalculates the memory budget and preserves image undo',()=>{
+  const initial=pack(),libraries=libs();initial.locations[0].picture={name:'Card',data:'a'.repeat(1024*1024)};const history=new E.History(initial,libraries);let current=initial;
+  for(let index=0;index<4;index++){current=clone(current);current.name='Edit '+index;history.record(current,libraries,{group:'edit-'+index,now:index*1000});}
+  current=clone(current);current.locations[0].picture.data='b'.repeat(6*1024*1024);history.record(current,libraries,{group:'image',now:5000});const count=history.actions.length;
+  current=clone(current);current.locations[0].picture.data='c'.repeat(10*1024*1024);history.record(current,libraries,{group:'image',now:5100});assert.ok(history.actions.length<count);assert.ok(history.actions.reduce((bytes,action)=>bytes+JSON.stringify(action).length,0)<=16*1024*1024);
+  const undo=history.plan(-1,current,libraries);assert.equal(undo.pack.locations[0].picture.data,initial.locations[0].picture.data);history.accept(-1,undo);assert.equal(history.plan(1,undo.pack,libraries).pack.locations[0].picture.data,current.locations[0].picture.data);
+});
+test('selecting another location does not create an edit or mutate history snapshots',()=>{
+  const initial=pack(),libraries=libs(),history=new E.History(initial,libraries),next={...initial,active:'b'};assert.equal(history.record(next,libraries),false);assert.equal(history.actions.length,0);assert.equal(initial.active,'a');next.locations[0].fields.title='Changed';assert.equal(history.present.pack.locations[0].fields.title,'Forest');
+});

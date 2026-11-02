@@ -24,16 +24,21 @@ function resource(value,label,tags=false) {
 }
 const usesPicture=entry=>entry.imageMode!=='manual'&&entry.picture!==undefined;
 const pictureId=(namespace,path)=>namespace+':textures/gui/locations/'+path+'.png';
+const decodedPictures=new WeakMap();
 function pictureBytes(picture) {
+  const cached=object(picture)?decodedPictures.get(picture):null;
+  if(cached&&cached.name===picture.name&&cached.data===picture.data&&cached.keepResolution===picture.keepResolution)return cached.bytes.slice();
   if(!object(picture)||typeof picture.name!=='string'||typeof picture.data!=='string'||picture.keepResolution!==undefined&&typeof picture.keepResolution!=='boolean'||picture.data.length>(picture.keepResolution===true?24*1024*1024:150000)||(picture.data.length-22)%4!==0||!/^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/.test(picture.data))throw fieldError('image','This saved picture is invalid. Choose the image again.');
-  const bytes=Uint8Array.from(atob(picture.data.slice(22)),char=>char.charCodeAt(0));
+  const decoded=atob(picture.data.slice(22)),bytes=new Uint8Array(decoded.length);
+  for(let index=0;index<decoded.length;index++)bytes[index]=decoded.charCodeAt(index);
   const signature=[137,80,78,71,13,10,26,10,0,0,0,13,73,72,68,82],end=[0,0,0,0,73,69,78,68,174,66,96,130];
   if(bytes.length<57||signature.some((byte,index)=>bytes[index]!==byte)||end.some((byte,index)=>bytes[bytes.length-end.length+index]!==byte))throw fieldError('image','This saved picture is not a PNG. Choose the image again.');
   const view=new DataView(bytes.buffer);
   const width=view.getUint32(16),height=view.getUint32(20);
   if(picture.keepResolution===true){if(width<1||height<1||width>8192||height>8192||width*height>16777216||Math.abs(width*3-height*2)>3)throw fieldError('image','This saved picture must fit the card ratio and stay within 8192 pixels per side and 16 megapixels. Choose the image again.');}
   else if(width!==128||height!==192)throw fieldError('image','This saved picture must be 128 × 192 pixels. Choose the image again.');
-  return bytes;
+  decodedPictures.set(picture,{name:picture.name,data:picture.data,keepResolution:picture.keepResolution,bytes});
+  return bytes.slice();
 }
 function integer(value,min,max,label) {
   if(!Number.isInteger(value)||value<min||value>max)throw new Error(label+' must be a whole number from '+min+' to '+max+'.');
@@ -97,8 +102,14 @@ function settings(values,allowed,strict=true) {
   }
   return result;
 }
+function dimensionSuggestion(value) {
+  const name=/^(?:minecraft:)?(nether|end)$/.exec(value)?.[1];
+  return name?'minecraft:the_'+name:'';
+}
 function knownResource(value,kind,allowUnknown=false) {
   const field=kind==='dimension'?'dimension':'target';
+  const suggestion=kind==='dimension'&&!allowUnknown?dimensionSuggestion(value):'';
+  if(suggestion)throw fieldError(field,(suggestion.endsWith('nether')?'The Nether':'The End')+' uses '+suggestion+'.');
   try{resource(value,kind==='biome'?'Biome':kind==='structure'?'Structure':'Dimension',kind!=='dimension');}
   catch(error){throw fieldError(field,error.message);}
   const tag=value.startsWith('#'),id=value.replace(/^#/,'');
@@ -164,6 +175,7 @@ function previewFiles(state,catalog) {
     kitIds.set(selected.id,namespace+':'+selected.path);
     if(draft){const document=copy(draft.document);if(state.kitOrder&&!draft.error)document.order=ranks.get(selected.id);files.push({path:'data/'+namespace+'/heritage/kits/'+selected.path+'.json',content:state.kitOrder&&!draft.error?JSON.stringify(document,null,2):typeof draft.source==='string'?draft.source:JSON.stringify(document,null,2)});}
   }
+  if(state.keepLocations&&object(state.bundledLocations))for(const [id,document] of Object.entries(state.bundledLocations)){const name=id.replace('kingdomsheritage:',''),path='data/kingdomsheritage/heritage/spawns/'+name+'.json';if(bundledSpawns.includes(name)&&object(document)&&!state.locations.some(entry=>state.namespace==='kingdomsheritage'&&entry.path===name))files.push({path,content:JSON.stringify(document,null,2)});}
   for(const entry of state.locations) {
     const document=copy(entry.document??{}),type=entry.fields?.type;
     for(const key of [...fields,'pool','intro','kits','enabled'])if(key!=='outline'||entry.fields?.outline!==undefined)delete document[key];
@@ -270,6 +282,10 @@ function build(state,catalog) {
     if(picture)resourceFiles.push({path:'assets/'+namespace+'/textures/gui/locations/'+path+'.png',content:picture});
     else if(document.image)warnings.push('Pictures entered as resource paths must be supplied by an enabled resource pack.');
   },entry.id,'data/'+namespace+'/heritage/spawns/'+entry.path+'.json');
+  if(state.keepLocations&&state.bundledLocations!==undefined)report('Default location order',()=>{
+    if(!object(state.bundledLocations)||Object.keys(state.bundledLocations).some(id=>!bundledSpawns.some(name=>id==='kingdomsheritage:'+name)))throw fieldError('keepLocations','The saved default locations are invalid.');
+    for(const [id,document] of Object.entries(state.bundledLocations)){const path='data/kingdomsheritage/heritage/spawns/'+id.split(':')[1]+'.json';if(paths.has(path))continue;validateSpawn(document.type==='structure'&&document.target==='minecraft:village'?{...document,target:'#minecraft:village'}:document,state.allowCustomTargets===true);integer(document.order,-2147483648,2147483647,'Order');add(path,copy(document));}
+  });
   if(spawnIds.size>50)errors.push('A datapack can contain at most 50 starting locations, including bundled locations.');
   add('pack.mcmeta',{pack:{pack_format:48,description:state.description}});
   if(!state.keepLocations)for(const id of bundledSpawns) {
@@ -282,7 +298,7 @@ function build(state,catalog) {
   if(pictureCount)resourceFiles.unshift({path:'pack.mcmeta',content:JSON.stringify({pack:{pack_format:34,description:state.description}},null,2)+'\n'});
   return {files:errors.length?[]:files,resourceFiles:errors.length?[]:resourceFiles,pictureCount,previewFiles:errors.length?previewFiles(state,catalog):files,errors,issues,warnings:[...new Set(warnings)],kitCount:count,locationCount:spawnIds.size};
 }
-const api={copy,orderedKitIds,slug,fileId,resource,drafts,location,importSpawn,knownResource,validateSpawn,build,emptyKit,types,fields,destinationFields,usesPicture,pictureId,pictureBytes,selectionPath};
+const api={copy,orderedKitIds,slug,fileId,resource,drafts,location,importSpawn,dimensionSuggestion,knownResource,validateSpawn,build,emptyKit,types,fields,destinationFields,usesPicture,pictureId,pictureBytes,selectionPath};
 if(typeof module!=='undefined')module.exports=api;
 else globalThis.HeritagePack=api;
 })();

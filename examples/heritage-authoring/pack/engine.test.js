@@ -227,3 +227,51 @@ test('high-resolution image opt-in retains ratio, size and format validation',()
   for(const [width,height] of [[0,192],[256,192],[9000,13500],[4096,6144]]){const invalid={...high},bytes=Buffer.from(invalid.data.slice(22),'base64');bytes.writeUInt32BE(width,16);bytes.writeUInt32BE(height,20);invalid.data='data:image/png;base64,'+bytes.toString('base64');assert.throws(()=>Pack.pictureBytes(invalid));}
   assert.throws(()=>Pack.pictureBytes({...high,data:'data:image/png;base64,'+'A'.repeat(24*1024*1024)}));
 });
+
+test('interleaved default and custom locations export the same native order as the preview',()=>{
+ const Editing=require('./editing.js'),Flow=require('./flow.js'),defaults=require('./assets/defaults.json'),input=state();input.keepLocations=true;const id=input.namespace+':'+input.locations[0].path,ids=['kingdomsheritage:village',id,'kingdomsheritage:default','kingdomsheritage:plains','kingdomsheritage:random'],reordered=Editing.reorderCards(input,ids,defaults.spawns),result=Pack.build(reordered,catalog);assert.deepEqual(result.errors,[]);assert.equal(result.locationCount,5);assert.deepEqual(Flow.catalog(result,defaults).spawns.map(entry=>entry.id),ids);
+ for(const spawn of defaults.spawns){const document=JSON.parse(result.files.find(file=>file.path==='data/kingdomsheritage/heritage/spawns/'+spawn.id.split(':')[1]+'.json').content),{id:ignored,order,...native}=spawn,{order:rank,...saved}=document;assert.deepEqual(saved,native);assert.equal(rank,ids.indexOf(spawn.id));}
+ assert.deepEqual(Project.merge(Project.backup(reordered,null,null),{kits:null,intros:null}).pack,reordered);
+ const invalid=Pack.copy(reordered);invalid.locations[0].fields.title='';const draft=Pack.build(invalid,catalog);assert.ok(draft.errors.length);assert.deepEqual(Flow.catalog({files:draft.previewFiles,errors:[]},defaults).spawns.map(entry=>entry.id),ids);
+ reordered.keepLocations=false;const without=Pack.build(reordered,catalog);assert.deepEqual(without.errors,[]);assert.deepEqual(Flow.catalog(without,defaults).spawns.map(entry=>entry.id),[id]);reordered.keepLocations=true;assert.deepEqual(Flow.catalog(Pack.build(reordered,catalog),defaults).spawns.map(entry=>entry.id),ids);
+});
+test('invalid saved default definitions are rejected and ordinary packs do not copy defaults',()=>{
+ const input=state();input.keepLocations=true;assert.equal(Pack.build(input,catalog).files.filter(file=>file.path.startsWith('data/kingdomsheritage/heritage/spawns/')).length,0);
+ for(const value of [null,[],{'other:default':{order:0}},{'kingdomsheritage:default':null},{'kingdomsheritage:default':{order:'1'}}]){const invalid={...input,bundledLocations:value};assert.throws(()=>Project.validatePack(invalid));assert.ok(Pack.build(invalid,catalog).errors.length);}
+ const invalid={...input,bundledLocations:{'kingdomsheritage:default':{title:'Broken',type:'fixed',order:0}}};assert.ok(Pack.build(invalid,catalog).errors.length);
+});
+
+test('default card overrides retain the native game definitions',()=>{
+ for(const spawn of require('./assets/defaults.json').spawns){const {id,...document}=spawn;assert.deepEqual(document,JSON.parse(fs.readFileSync(path.join(__dirname,'../../../src/main/resources/data/kingdomsheritage/heritage/spawns',id.split(':')[1]+'.json'),'utf8')));}
+ const input=state();input.keepLocations=true;input.bundledLocations={'kingdomsheritage:village':{...Pack.copy(require('./assets/defaults.json').spawns.find(spawn=>spawn.id==='kingdomsheritage:village')),dimension:'minecraft:missing',order:0}};assert.ok(Pack.build(input,catalog).errors.length);
+});
+test('mistyped vanilla dimension names identify the canonical ID without rewriting drafts',()=>{
+  for(const [name,id] of [['nether','minecraft:the_nether'],['end','minecraft:the_end']])for(const value of [name,'minecraft:'+name]){
+    const input=state();input.locations[0].fields.dimension=value;const result=Pack.build(input,catalog),issue=result.issues.find(issue=>issue.field==='dimension');
+    assert.match(issue.message,new RegExp(id));assert.doesNotMatch(issue.message,/another datapack/);assert.deepEqual(result.files,[]);assert.equal(input.locations[0].fields.dimension,value);
+    input.locations[0].fields.dimension=Pack.dimensionSuggestion(value);const corrected=Pack.build(input,catalog);assert.deepEqual(corrected.errors,[]);assert.equal(spawn(corrected).dimension,id);
+  }
+});
+test('dimension suggestions preserve canonical IDs, custom namespaces and custom Minecraft dimensions',()=>{
+  for(const value of ['minecraft:overworld','minecraft:the_nether','minecraft:the_end','the_nether','the_end','other:nether','other:end']){
+    assert.equal(Pack.dimensionSuggestion(value),'');const input=state();input.locations[0].fields.dimension=value;assert.deepEqual(Pack.build(input,catalog).errors,[]);
+  }
+  const input=state();input.locations[0].fields.dimension='minecraft:nether';input.allowCustomTargets=true;const result=Pack.build(input,catalog);assert.deepEqual(result.errors,[]);assert.equal(spawn(result).dimension,'minecraft:nether');
+  input.allowCustomTargets=false;input.locations[0].fields.dimension='minecraft:missing';assert.equal(Pack.dimensionSuggestion('minecraft:missing'),'');assert.match(Pack.build(input,catalog).issues.find(issue=>issue.field==='dimension').message,/Unknown Minecraft dimension/);
+});
+test('pool dimension corrections identify the destination and retain inherited dimensions',()=>{
+  const input=state(),entry=input.locations[0];entry.fields.type='pool';entry.fields.dimension='minecraft:overworld';entry.destinations=[{type:'default',dimension:'minecraft:end'},{type:'default'}];
+  const invalid=Pack.build(input,catalog),issue=invalid.issues.find(issue=>issue.field==='dimension');assert.equal(issue.destination,0);assert.match(issue.message,/minecraft:the_end/);assert.deepEqual(invalid.files,[]);
+  entry.destinations[0].dimension=Pack.dimensionSuggestion(entry.destinations[0].dimension);const result=Pack.build(input,catalog);assert.deepEqual(result.errors,[]);assert.equal(spawn(result).dimension,'minecraft:overworld');assert.equal(spawn(result).pool[0].dimension,'minecraft:the_end');assert.equal(spawn(result).pool[1].dimension,undefined);
+});
+
+test('decoded picture reuse keeps returned bytes isolated and revalidates changed image settings',()=>{
+  const image=nativePicture(512,768),original=Pack.pictureBytes(image),next=Pack.pictureBytes(image);assert.deepEqual(next,original);assert.notEqual(next,original);next.fill(0);assert.deepEqual(Pack.pictureBytes(image),original);
+  image.name=null;assert.throws(()=>Pack.pictureBytes(image),/invalid/);image.name='Changed.png';assert.deepEqual(Pack.pictureBytes(image),original);image.keepResolution=false;assert.throws(()=>Pack.pictureBytes(image),/128 × 192/);image.keepResolution=true;image.data='data:image/png;base64,invalid';assert.throws(()=>Pack.pictureBytes(image));image.data=picture().data;image.keepResolution=false;assert.deepEqual(Buffer.from(Pack.pictureBytes(image)),png);
+});
+
+test('typing changes reuse decoded image bytes until the source changes',()=>{
+  let decodes=0;const sandbox={module:{exports:{}},require,atob:value=>{decodes++;return atob(value);}};require('node:vm').runInNewContext(fs.readFileSync(require.resolve('./engine.js'),'utf8'),sandbox);const engine=sandbox.module.exports,input=state();input.locations[0].picture=picture();
+  for(const field of ['title','subtitle','description']){input.locations[0].fields[field]='Updated '+field;assert.equal(engine.build(input,catalog).errors.length,0);}assert.equal(decodes,1);
+  Object.assign(input.locations[0].picture,nativePicture(512,768));assert.equal(engine.build(input,catalog).errors.length,0);assert.equal(decodes,2);
+});
