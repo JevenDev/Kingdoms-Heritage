@@ -4,5 +4,7 @@
   "heritage_example.spawn.meadow.title": "Meadow",
   "heritage_example.spawn.settler.title": "Settler",
   "structure.minecraft.village_savanna": "Sunhaven Village",
-  "biome.minecraft.plains": "Open Plains"
+  "biome.minecraft.plains": "Open Plains",
+  "heritage_example.dialogue.faction": "The Meadow Wardens",
+  "heritage_example.dialogue.guide": "A local guide"
 }

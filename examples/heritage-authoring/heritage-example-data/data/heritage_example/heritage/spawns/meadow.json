@@ -6,8 +6,8 @@
   "search_radius": 6400,
   "order": 30,
   "intro": {
-    "text": "<gradient:#ffe8a3:#83c986>The open <biome> awaits.</gradient>",
-    "subtitle": "<italic>A new journey begins.</italic>",
+    "text": "<gradient:#ffe8a3:#83c986>The open <biome> awaits, <player>.</gradient>",
+    "subtitle": "<var:heritage_example:narrator>: Begin your story with <var:heritage_example:faction>.",
     "title_position": "left_center",
     "subtitle_position": "left_center",
     "cinematic_bars": true,
@@ -22,7 +22,25 @@
     "fade_out_ticks": 20,
     "control": "after_title",
     "blip": true,
-    "title": true
+    "title": true,
+    "variables": {
+      "heritage_example:narrator": "The Chronicler",
+      "heritage_example:faction": {
+        "translate": "heritage_example.dialogue.faction",
+        "fallback": "The Meadow Wardens",
+        "color": "gold"
+      },
+      "heritage_example:chapter": 1
+    },
+    "variants": [
+      {
+        "when": {
+          "tag": "var:heritage_example:chapter",
+          "min": 2
+        },
+        "subtitle": "Chapter <var:heritage_example:chapter>: <var:heritage_example:narrator> remembers your return."
+      }
+    ]
   },
   "title_key": "heritage_example.spawn.meadow.title",
   "image": "heritage_example:textures/gui/locations/meadow.png",

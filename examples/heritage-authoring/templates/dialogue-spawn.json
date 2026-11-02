@@ -1,0 +1,67 @@
+{
+  "title": "A new chapter",
+  "type": "default",
+  "intro": {
+    "text": "Welcome, <player>.<pause=500> <speed=0.5>Your story begins.<speed=1>",
+    "subtitle": "<var:my_pack:narrator>: You bring <equipment> to <place>.\nPress <key:inventory> to see your belongings.\nYou travel with <companions>.",
+    "variables": {
+      "my_pack:narrator": "The Chronicler",
+      "my_pack:chapter": 1
+    },
+    "fallbacks": {
+      "companions": "your own courage",
+      "var:my_pack:faction": "an unknown banner",
+      "key:my_mod.journal": "not installed"
+    },
+    "variants": [
+      {
+        "when": {
+          "tag": "keeps_belongings",
+          "equals": true
+        },
+        "subtitle": "<var:my_pack:narrator>: Your belongings made the journey.\nPress <key:inventory> to look inside."
+      },
+      {
+        "when": {
+          "all": [
+            {
+              "tag": "party_size",
+              "min": 2
+            },
+            {
+              "not": {
+                "tag": "keeps_belongings",
+                "equals": true
+              }
+            }
+          ]
+        },
+        "subtitle": "<var:my_pack:narrator>: <party_leader> leads <party_size> travelers.\nYou arrived with <companions> and <equipment>."
+      },
+      {
+        "when": {
+          "any": [
+            {
+              "tag": "var:my_pack:chapter",
+              "min": 2
+            },
+            {
+              "tag": "var:my_pack:faction",
+              "present": true
+            }
+          ]
+        },
+        "subtitle": "Chapter <var:my_pack:chapter> begins under <var:my_pack:faction>.\nJournal control: <key:my_mod.journal>."
+      }
+    ],
+    "animation": "letter_by_letter",
+    "control": "after_title",
+    "reveal_ticks": 40,
+    "hold_ticks": 60,
+    "fade_out_ticks": 20,
+    "black_hold_ticks": 0,
+    "fade_from_black_ticks": 20,
+    "cinematic_bars": true,
+    "hide_hud_during_bars": true
+  }
+}

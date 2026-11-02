@@ -6,8 +6,8 @@
   "search_radius": 6400,
   "order": 40,
   "intro": {
-    "text": "You woke up in a <gold><structure></gold>...",
-    "subtitle": "<biome> / <dimension>",
+    "text": "A <gold><structure|new settlement></gold> waits for you, <player>.",
+    "subtitle": "<biome> / <dimension>\nChosen kit: <kit>. You bring <equipment>.\n<var:heritage_example:guide>: Press <key:inventory> to look inside.",
     "title_position": "left_center",
     "subtitle_position": "left_center",
     "cinematic_bars": true,
@@ -22,7 +22,38 @@
     "fade_out_ticks": 20,
     "control": "after_title",
     "blip": true,
-    "title": true
+    "title": true,
+    "fallbacks": {
+      "var:heritage_example:guide": {
+        "translate": "heritage_example.dialogue.guide",
+        "fallback": "A local guide",
+        "color": "green"
+      }
+    },
+    "variants": [
+      {
+        "when": {
+          "tag": "keeps_belongings",
+          "equals": true
+        },
+        "subtitle": "<var:heritage_example:guide>: Your belongings made the journey.\nPress <key:inventory> to see <equipment>."
+      },
+      {
+        "when": {
+          "all": [
+            {
+              "tag": "kit",
+              "equals": "heritage_example:farmer"
+            },
+            {
+              "tag": "receives_kit",
+              "equals": true
+            }
+          ]
+        },
+        "subtitle": "<var:heritage_example:guide>: The fields need a farmer.\nYour <kit> supplies are ready. Press <key:inventory>."
+      }
+    ]
   },
   "title_key": "heritage_example.spawn.settler.title",
   "image": "heritage_example:textures/gui/locations/settler.png",
