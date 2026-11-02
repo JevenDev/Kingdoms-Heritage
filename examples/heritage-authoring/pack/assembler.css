@@ -18,6 +18,15 @@
 .assembler :is(input:not([type=checkbox]),textarea,select) { width:100%; min-width:0; }
 .assembler .section-heading { display:flex; justify-content:space-between; align-items:baseline; gap:12px; margin:0; }
 .assembler h3 { font-size:15px; font-weight:600; line-height:1.5; margin:0; }
+.pack-introduction { display:flex; flex-wrap:wrap; gap:16px 32px; margin-bottom:24px; padding-bottom:24px; border-bottom:1px solid var(--line-soft); }
+.pack-model { flex:1 1 380px; }
+.pack-model ul { margin:8px 0; padding-left:20px; }
+.pack-model .hint, .example-start .hint { margin:8px 0 0; }
+.example-start { flex:0 1 280px; }
+.export-checks { margin:0 0 20px; }
+.export-checks > div + div { margin-top:12px; }
+.export-checks dt { font-weight:500; }
+.export-checks dd { margin:4px 0 0; color:var(--muted); overflow-wrap:anywhere; }
 .pack-setup-layout { display:grid; grid-template-columns:minmax(360px,440px) minmax(0,1fr); gap:32px; align-items:start; }
 .pack-settings { display:grid; gap:12px; min-width:0; padding:0 24px 16px 0; border-right:1px solid var(--line-soft); }
 .pack-options { padding-top:16px; border-top:1px solid var(--line-soft); }

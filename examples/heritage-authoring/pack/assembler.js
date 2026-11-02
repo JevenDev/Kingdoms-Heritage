@@ -156,7 +156,7 @@ function renderOverview() {
     if(issues.length)content.append(element('span',{class:'review-location-issue'},issues.length+' issue'+(issues.length===1?'':'s')+' to fix'));
     button.append(locationThumbnail(entry),content);row.append(button);const actions=element('div',{class:'review-location-actions'});
     for(const [part,label] of [['kits','Kits'],['intro',entry.intro?'Intro':'Add intro']])actions.append(element('button',{type:'button','data-review-location':entry.id,'data-review-part':part,'aria-label':(part==='intro'&&!entry.intro?'Add intro':'Edit '+part)+' for '+(entry.fields.title||entry.path)},label));
-    const action=element('button',{type:'button',...(issues.length?{'data-review-issue':String(output.issues.indexOf(issues[0]))}:{'data-review-test':entry.id}),'aria-label':(issues.length?'Fix issues for ':'Test location ')+(entry.fields.title||entry.path)},issues.length?'Fix':'Test');action.disabled=!issues.length&&(!!output?.errors.length||preparing);if(action.disabled)action.title=preparing?'Wait for the card pictures to finish processing.':'Resolve the pack issues before testing.';actions.append(action);row.append(actions);list.append(row);
+    const action=element('button',{type:'button',...(issues.length?{'data-review-issue':String(output.issues.indexOf(issues[0]))}:{'data-review-test':entry.id}),'aria-label':(issues.length?'Fix issues for ':'Preview location ')+(entry.fields.title||entry.path)},issues.length?'Fix':'Preview');action.disabled=!issues.length&&(!!output?.errors.length||preparing);if(action.disabled)action.title=preparing?'Wait for the card pictures to finish processing.':'Resolve the pack issues before previewing.';actions.append(action);row.append(actions);list.append(row);
   }
   if(state.keepLocations)list.append(element('li',{class:'review-note hint'},'Also includes Heritage’s 4 default starting locations.'));
   if(focusId){const main=list.querySelector('.review-location-open[data-review-location="'+CSS.escape(focusId)+'"]'),row=main?.parentElement,selector=focusAction==='details'?'.review-location-open':focusAction==='test'?'[data-review-test]':focusAction==='issue'?'[data-review-issue]':'[data-review-part="'+focusAction+'"]';(row?.querySelector(selector)??main)?.focus({preventScroll:true});}
@@ -599,14 +599,15 @@ function renderOutput() {
   $('export-pack').disabled=!!output.errors.length||preparing;
   $('preview-flow').disabled=$('export-pack').disabled;
   $('flow-readiness').textContent=preparing?'Your picture is being prepared.':output.errors.length?output.errors.length+' issue'+(output.errors.length===1?' blocks':'s block')+' the preview.':previewCurrent?'Preview completed for one path in this version.':previewed?'This pack has changed since your last preview.':'Preview is ready.';
-  $('export-preview-status').textContent=previewCurrent?'A complete selection path was previewed for this version.':'Preview the selection flow before installing the pack.';$('export-preview-again').disabled=$('preview-flow').disabled;$('export-preview-again').textContent=previewed?'Test again':'Preview selection flow';
+  $('export-file-check').textContent=preparing?'Waiting for pictures to finish processing.':output.errors.length?output.errors.length+' issue'+(output.errors.length===1?' needs':'s need')+' fixing in Preview.':'Passed the builder’s file and reference checks.';
+  $('export-preview-status').textContent=output.errors.length?'Unavailable until file issues are resolved.':'Checking saved browser preview coverage…';$('export-preview-again').disabled=$('preview-flow').disabled;$('export-preview-again').textContent=previewed?'Preview again':'Preview selection flow';
   $('export-pack').textContent=output.resourceFiles.length?'Download datapack & resource pack':'Download datapack';
   $('export-file').disabled=!output.previewFiles.length;
   $('preview-state').textContent=output.errors.length?'Draft preview. Fix the highlighted issues before downloading.':'Read-only preview';
   const kitCount=state.kits.filter(kit=>kit.included).length+(state.keepKits?1:0),locationCount=state.locations.length+(state.keepLocations?4:0);
   $('pack-summary').textContent=locationCount+' starting location'+(locationCount===1?'':'s')+' · '+kitCount+' included kit'+(kitCount===1?'':'s');
   $('export-name').textContent=output.resourceFiles.length?'Datapack and resource pack':'Datapack';$('export-blocked').hidden=!output.errors.length;$('export-fix').hidden=!output.errors.length;
-  $('export-readiness').textContent=preparing?'Wait for your picture to finish processing.':output.errors.length?'A few things need fixing before you download.':output.resourceFiles.length?'Includes a datapack ZIP and a resource-pack ZIP '+(output.pictureCount?'for '+output.pictureCount+' card picture'+(output.pictureCount===1?'':'s'):'with imported resources')+'. Extract both ZIPs from the download before installing.':'Files checked for Minecraft 1.21.1. Test the installed pack in-game.';
+  $('export-readiness').textContent=preparing?'Wait for your picture to finish processing.':output.errors.length?'A few things need fixing before you download.':output.resourceFiles.length?'Includes a datapack ZIP and a resource-pack ZIP '+(output.pictureCount?'for '+output.pictureCount+' card picture'+(output.pictureCount===1?'':'s'):'with imported resources')+'. Extract both ZIPs from the download before installing.':'Datapack ZIP for Minecraft 1.21.1. Check the installed pack in Minecraft before distributing it.';
   const errors=$('export-errors');errors.replaceChildren();
   if(output.errors.length){errors.append(element('p',{},output.errors.length+' issue'+(output.errors.length===1?' needs':'s need')+' fixing before preview or download:'));const list=element('ul');
     for(const issue of output.issues){const row=element('li'),entry=state.locations.find(entry=>entry.id===issue.locationId),button=element('button',{type:'button'},(issue.label||entry?.fields.title||entry?.path||'Pack')+': '+issue.message);button.addEventListener('click',()=>fixIssue(issue));row.append(button);list.append(row);}
@@ -815,32 +816,46 @@ $('save-project').addEventListener('click',()=>{
     $('project-status').textContent='Downloaded '+filename+'.';
   }catch(error){$('project-status').textContent='Could not save project: '+error.message;}
 });
+async function restoreProject(input) {
+  return navigator.locks.request('heritage-editor:'+HeritageProject.keys.intros,{ifAvailable:true},introLock=>{
+    if(!introLock)throw new Error('Close the intro editor tab before opening a project.');
+    return navigator.locks.request('heritage-editor:'+HeritageProject.keys.kits,{ifAvailable:true},kitLock=>{
+      if(!kitLock)throw new Error('Close the kit creator tab before opening a project.');
+      if(!save())throw new Error('Your current project could not be saved. Download a project backup before importing another pack.');
+      const read=key=>JSON.parse(localStorage.getItem(key)??'null');
+      const result=HeritageProject.merge(input,{kits:read(HeritageProject.keys.kits),intros:read(HeritageProject.keys.intros)});
+      const previous=projects.serialize();
+      projects.add(result.pack);
+      try{HeritageProject.write(localStorage,{[HeritageProject.keys.kits]:result.kits,[HeritageProject.keys.intros]:result.intros,[HeritageProject.keys.packs]:projects.serialize()});}
+      catch(error){projects.projects=previous.projects;projects.active=previous.active;throw error;}
+      state=projects.state();returnToReview=false;reviewReturn=null;revealValidation=false;touched.clear();previewed='';loadCatalog();discoverKits();render();setStep('locations');
+      $('project-status').textContent='Project opened. Existing saved work was kept.';
+    });
+  });
+}
+function setOpeningProject(value){openingProject=value;$('open-project').disabled=value;$('start-example').disabled=value;}
+async function startExample(){
+  if(openingProject||!closeEmbedded())return;
+  try{
+    if(saveBlocked)throw new Error(storageError);
+    setOpeningProject(true);$('project-status').textContent='Creating the starter example…';
+    await restoreProject(await HeritagePackExample.create());setStep('pack');
+    $('project-status').textContent='Example ready. Home and Open Plains share the Traveler kit and Arrival intro. Open Locations to edit them.';
+  }catch(error){$('project-status').textContent='Could not start the example: '+error.message;}
+  finally{setOpeningProject(false);}
+}
+$('start-example').addEventListener('click',startExample);
 $('open-project').addEventListener('change',async()=>{
   const file=$('open-project').files[0];if(!file||openingProject)return;if(!closeEmbedded()){$('open-project').value='';return;}
   try {
     if(saveBlocked)throw new Error(storageError);
     if(file.size>64*1024*1024)throw new Error('Pack and project imports must be no larger than 64 MiB.');
-    openingProject=true;$('open-project').disabled=true;
+    setOpeningProject(true);
     $('project-status').textContent='Opening '+file.name+'…';
     const input=/\.zip$/i.test(file.name)?await HeritagePackImport.read(new Uint8Array(await file.arrayBuffer()),file.name):JSON.parse(await file.text());
-    const restore=()=>navigator.locks.request('heritage-editor:'+HeritageProject.keys.intros,{ifAvailable:true},introLock=>{
-      if(!introLock)throw new Error('Close the intro editor tab before opening a project.');
-      return navigator.locks.request('heritage-editor:'+HeritageProject.keys.kits,{ifAvailable:true},kitLock=>{
-        if(!kitLock)throw new Error('Close the kit creator tab before opening a project.');
-        if(!save())throw new Error('Your current project could not be saved. Download a project backup before importing another pack.');
-        const read=key=>JSON.parse(localStorage.getItem(key)??'null');
-        const result=HeritageProject.merge(input,{kits:read(HeritageProject.keys.kits),intros:read(HeritageProject.keys.intros)});
-        const previous=projects.serialize();
-        projects.add(result.pack);
-        try{HeritageProject.write(localStorage,{[HeritageProject.keys.kits]:result.kits,[HeritageProject.keys.intros]:result.intros,[HeritageProject.keys.packs]:projects.serialize()});}
-        catch(error){projects.projects=previous.projects;projects.active=previous.active;throw error;}
-        state=projects.state();returnToReview=false;reviewReturn=null;revealValidation=false;touched.clear();previewed='';loadCatalog();discoverKits();render();setStep('locations');
-        $('project-status').textContent='Project opened. Existing saved work was kept.';
-      });
-    });
-    await restore();
+    await restoreProject(input);
   }catch(error){$('project-status').textContent='Could not open project: '+error.message;}
-  $('open-project').value='';$('open-project').disabled=false;openingProject=false;
+  $('open-project').value='';setOpeningProject(false);
 });
 for(const button of document.querySelectorAll('[data-pack-step],[data-go-step]'))button.addEventListener('click',()=>setStep(button.dataset.packStep??button.dataset.goStep));
 $('step-back').addEventListener('click',()=>advance('back'));$('step-next').addEventListener('click',()=>advance('next'));
@@ -894,11 +909,12 @@ function editPreviewChoice(detail){
   if(!closeEmbedded())return;const entry=state.locations.find(entry=>entry.id===detail.locationId);if(!entry){$('project-status').textContent='This location is unavailable.';return;}
   state.active=entry.id;renderLocation();save();setStep('locations');returnToReview=true;updateSteps();if(detail.kind==='location'){setLocationPart('details');document.querySelector('[data-location-field=title]').focus();}else openEmbedded(detail.kind,detail.id,false,detail.kind==='intro'&&Number.isInteger(detail.resume?.poolIndex)?detail.resume.poolIndex:null);
 }
-coverageView=HeritageCoverageView.create({get:()=>({id:projects?.active??'',state,output}),visible:()=>currentStep==='preview',prepare:closeEmbedded,started:()=>{previewing=fingerprint();},completed:()=>{previewed=previewing;renderOutput();},
+coverageView=HeritageCoverageView.create({get:()=>({id:projects?.active??'',state,output}),visible:()=>currentStep==='preview'||currentStep==='export',summary:text=>{$('export-preview-status').textContent=text;},prepare:closeEmbedded,started:()=>{previewing=fingerprint();},completed:()=>{previewed=previewing;renderOutput();},
   editable:route=>state.locations.some(entry=>state.namespace+':'+entry.path===route.spawnId),edit:editPreviewChoice,
   editRoute:route=>{const entry=state.locations.find(entry=>state.namespace+':'+entry.path===route.spawnId);if(entry)editPreviewChoice({kind:'location',locationId:entry.id});}
 });
 if(route.get('editing')&&route.get('entry'))openEmbedded(route.get('editing')==='kit'?'kit':'intro',route.get('entry'),false,route.has('destination')?Number(route.get('destination')):null);
-const clean=new URL(location.href);clean.searchParams.delete('kit');clean.searchParams.delete('intro');clean.searchParams.set('step',currentStep);if(projects)clean.searchParams.set('pack',projects.active);if(state.active)clean.searchParams.set('location',state.active);window.history.replaceState(null,'',clean);
+if(route.get('example')==='starter')await startExample();
+const clean=new URL(location.href);clean.searchParams.delete('example');clean.searchParams.delete('kit');clean.searchParams.delete('intro');clean.searchParams.set('step',currentStep);if(projects)clean.searchParams.set('pack',projects.active);if(state.active)clean.searchParams.set('location',state.active);window.history.replaceState(null,'',clean);
 
 })();

@@ -10,21 +10,22 @@ function create(config){
   function refresh(){
     resumeState();const request=++revision,value=config.get();if(!config.visible())return;
     if(value.id!==lastPack){lastPack=value.id;filter='';offset=0;}
-    if(value.output.errors.length){$('coverage-summary').textContent='Resolve the pack issues to inspect test paths.';$('coverage-rows').replaceChildren();$('coverage-pagination').hidden=true;return;}
+    if(value.output.errors.length){$('coverage-summary').textContent='Resolve the pack issues to inspect preview paths.';config.summary?.('Unavailable until file issues are resolved.');$('coverage-rows').replaceChildren();$('coverage-pagination').hidden=true;return;}
     HeritageFlowPreview.catalog(value.output).then(data=>{
       if(request!==revision||value.id!==config.get().id)return;const choices=data.choices,images=C.pictures(value.output),summary=ledger.summary(value.id,choices,images),select=$('coverage-location');
       select.replaceChildren(new Option('All locations',''),...choices.spawns.map(spawn=>new Option(name(spawn,'title',data.translations),spawn.id)));if(!choices.spawns.some(spawn=>spawn.id===filter))filter='';select.value=filter;
       const total=C.count(choices,filter);offset=Math.max(0,Math.min(offset,Math.floor(Math.max(0,total-1)/25)*25));rows=C.page(choices,images,{filter,offset});
-      $('coverage-summary').textContent=summary.tested+' of '+summary.total+' paths tested'+(summary.changed?' · '+summary.changed+' need retesting':'')+(summary.partial?' · '+summary.partial+' partly tested':'');
+      const text=summary.tested+' of '+summary.total+' paths previewed in the browser'+(summary.changed?' · '+summary.changed+' changed since preview':'')+(summary.partial?' · '+summary.partial+' partly previewed':'');
+      $('coverage-summary').textContent=text;config.summary?.(text);
       const body=$('coverage-rows');body.replaceChildren();
       for(const [index,route] of rows.entries()){
-        const row=document.createElement('tr'),status=ledger.status(value.id,route),destination=route.arrival.type==='fixed'?'Coordinates '+[route.arrival.x,route.arrival.y,route.arrival.z].join(', '):HeritageFlow.place(route.arrival.target)||HeritageFlow.place(route.arrival.type),labels=[name(route.spawn,'title',data.translations),name(route.kit,'title',data.translations),(route.poolIndex===null?'':(route.poolIndex+1)+'. ')+destination,{tested:'Tested',changed:'Needs retest',partial:'Partly tested',untested:'Not tested'}[status.state]];
-        for(const [column,text] of labels.entries()){const cell=document.createElement('td');cell.textContent=text;if(column===3){cell.className='coverage-state-'+status.state;if(status.record)cell.title='Last played '+new Date(status.record.updatedAt).toLocaleString()+' · '+(status.record.settings?.resolution??'')+' · GUI '+(status.record.settings?.guiScale??'')+' · '+(status.record.settings?.inventory??'');}row.append(cell);}
-        const actions=document.createElement('td'),tryPath=document.createElement('button');tryPath.type='button';tryPath.dataset.tryPath=index;tryPath.textContent='Try path';actions.append(tryPath);
+        const row=document.createElement('tr'),status=ledger.status(value.id,route),destination=route.arrival.type==='fixed'?'Coordinates '+[route.arrival.x,route.arrival.y,route.arrival.z].join(', '):HeritageFlow.place(route.arrival.target)||HeritageFlow.place(route.arrival.type),labels=[name(route.spawn,'title',data.translations),name(route.kit,'title',data.translations),(route.poolIndex===null?'':(route.poolIndex+1)+'. ')+destination,{tested:'Previewed',changed:'Changed since preview',partial:'Partly previewed',untested:'Not previewed'}[status.state]];
+        for(const [column,text] of labels.entries()){const cell=document.createElement('td');cell.textContent=text;if(column===3){cell.className='coverage-state-'+status.state;if(status.record)cell.title='Last previewed '+new Date(status.record.updatedAt).toLocaleString()+' · '+(status.record.settings?.resolution??'')+' · GUI '+(status.record.settings?.guiScale??'')+' · '+(status.record.settings?.inventory??'');}row.append(cell);}
+        const actions=document.createElement('td'),tryPath=document.createElement('button');tryPath.type='button';tryPath.dataset.tryPath=index;tryPath.textContent='Preview path';actions.append(tryPath);
         if(config.editable(route)){const edit=document.createElement('button');edit.type='button';edit.dataset.editPath=index;edit.textContent='Edit location';actions.append(edit);}row.append(actions);body.append(row);
       }
       $('coverage-pagination').hidden=total<=25;$('coverage-page').textContent=total?'Paths '+(offset+1)+'–'+Math.min(offset+25,total)+' of '+total:'No playable paths';$('coverage-previous').disabled=offset===0;$('coverage-next').disabled=offset+25>=total;report(message);
-    }).catch(error=>{if(request===revision)report('Test paths could not load: '+error.message);});
+    }).catch(error=>{if(request===revision){report('Preview paths could not load: '+error.message);config.summary?.('Preview coverage unavailable: '+error.message);}});
   }
   async function open(options={}){
     if(opening||$('flow-dialog').open)return;opening=true;resumeState();
@@ -40,7 +41,7 @@ function create(config){
   function complete(detail){
     if(!snapshot||!detail)return;const spawn=snapshot.choices.spawns.find(entry=>entry.id===detail.spawnId),indices=spawn?.type==='pool'&&detail.poolIndex===null?spawn.pool.map((entry,index)=>index):[detail.poolIndex];let done=false;
     for(const index of indices){const route=C.scene(snapshot.choices,snapshot.images,detail.spawnId,detail.kitId,index);if(route)done=ledger.record(snapshot.id,route,detail.parts??[],detail.settings??{})||done;}
-    if(!blocked){try{HeritageProject.write(localStorage,{[key]:ledger.serialize()});message='';}catch(error){message='Preview completed. Test results could not be saved: '+error.message;}}
+    if(!blocked){try{HeritageProject.write(localStorage,{[key]:ledger.serialize()});message='';}catch(error){message='Preview completed. Preview results could not be saved: '+error.message;}}
     if(done&&detail.phase==='complete')config.completed();refresh();
   }
   $('coverage-location').addEventListener('change',event=>{filter=event.target.value;offset=0;refresh();});

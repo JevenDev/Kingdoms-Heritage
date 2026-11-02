@@ -67,7 +67,7 @@ async function acquire(key) {
   notice.className='session-notice';
   const heading=document.createElement('h2'),message=document.createElement('p'),button=document.createElement('button');
   heading.textContent=navigator.locks&&!lockError?'Already open in another tab':'Editing is unavailable';
-  message.textContent=lockError?'Editing could not start: '+lockError+'. Reload this page to try again.':navigator.locks?'This tool allows one editing tab at a time to protect your saved work. Close the other tab, then continue here to load your latest changes. You can use the intro editor, kit creator and pack assembler together.':'Open this site in a current browser using HTTPS or localhost to save safely.';
+  message.textContent=lockError?'Editing could not start: '+lockError+'. Reload this page to try again.':navigator.locks?'This tool allows one editing tab at a time to protect your saved work. Close the other tab, then continue here to load your latest changes. You can use the intro editor, kit creator and pack builder together.':'Open this site in a current browser using HTTPS or localhost to save safely.';
   button.type='button';button.className='primary';button.textContent='Continue editing';
   button.hidden=!navigator.locks;
   button.addEventListener('click',()=>location.reload());
