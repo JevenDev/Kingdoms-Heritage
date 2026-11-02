@@ -30,7 +30,15 @@ function overview(width,height,value,displayWidth,displayHeight){
   return {image,window:{x:image.x+window.x*scale,y:image.y+window.y*scale,width:window.width*scale,height:window.height*scale},scale};
 }
 function source(picture){
-  if(!picture.source)return {data:picture.data,width:128,height:192,crop:defaults(),original:false};
+  if(!picture.source){
+    let width=128,height=192;
+    if(picture.keepResolution===true){
+      const bytes=Uint8Array.from(atob(picture.data.slice(22,54)),char=>char.charCodeAt(0));
+      if(bytes.length<24)throw new Error('The saved PNG header is invalid.');
+      const view=new DataView(bytes.buffer);width=view.getUint32(16);height=view.getUint32(20);dimensions(width,height,defaults(),true);
+    }
+    return {data:picture.data,width,height,crop:defaults(),original:false};
+  }
   const saved=picture.source;
   if(typeof saved.data!=='string'||saved.data.length>(saved.preserved===true?14*1024*1024:450000)||!new RegExp('^data:image[/](?:png|webp'+(saved.preserved===true?'|jpeg':'')+');base64,[A-Za-z0-9+/]+={0,2}$').test(saved.data)||!Number.isInteger(saved.width)||!Number.isInteger(saved.height)||saved.width<1||saved.height<1||saved.width>(saved.preserved===true?8192:1536)||saved.height>(saved.preserved===true?8192:1536)||saved.width*saved.height>16777216)throw new Error('This saved source image is invalid. Choose the image again.');
   return {...saved,crop:crop(picture.crop),original:true};

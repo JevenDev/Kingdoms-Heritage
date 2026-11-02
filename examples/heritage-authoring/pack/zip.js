@@ -49,6 +49,61 @@ function zip(files,date=new Date()) {
   u32(offset+12,offset-central);u32(offset+16,central);
   return bytes;
 }
-if(typeof module!=='undefined')module.exports={zip,crc32};
-else globalThis.HeritageZip={zip};
+function safePath(path,directory=false) {
+  if(typeof path!=='string'||!path||path.includes('\\')||path.includes(':')||/[\x00-\x1f]/.test(path))throw new Error('Unsafe ZIP path.');
+  const name=directory&&path.endsWith('/')?path.slice(0,-1):path;
+  if(name.split('/').some(part=>!part||/^\.+$/.test(part)))throw new Error('Unsafe ZIP path.');
+  return name;
+}
+const maxBytes=64*1024*1024;
+async function inflate(bytes,size) {
+  const reader=new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw')).getReader(),chunks=[];
+  let length=0;
+  try {
+    for(;;){const {done,value}=await reader.read();if(done)break;length+=value.length;if(length>size)throw new Error('ZIP entry exceeds its declared size.');chunks.push(value);}
+  } finally {await reader.cancel();}
+  const result=new Uint8Array(length);let offset=0;
+  for(const chunk of chunks){result.set(chunk,offset);offset+=chunk.length;}
+  return result;
+}
+async function unzip(bytes) {
+  if(!(bytes instanceof Uint8Array)||bytes.length<22)throw new Error('Choose a valid ZIP archive.');
+  if(bytes.length>maxBytes)throw new Error('ZIP archives must be no larger than 64 MiB.');
+  const view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength),u16=at=>view.getUint16(at,true),u32=at=>view.getUint32(at,true);
+  let end=-1;
+  for(let at=bytes.length-22;at>=Math.max(0,bytes.length-65557);at--)if(u32(at)===0x06054b50&&at+22+u16(at+20)===bytes.length){end=at;break;}
+  if(end<0)throw new Error('ZIP directory is missing or truncated.');
+  const count=u16(end+10),central=u32(end+16),length=u32(end+12);
+  if(u16(end+4)||u16(end+6)||u16(end+8)!==count)throw new Error('Split ZIP archives are not supported.');
+  if(count===65535||central===0xffffffff||length===0xffffffff)throw new Error('ZIP64 archives are not supported.');
+  if(!count||count>4096||central+length!==end)throw new Error('Invalid ZIP directory or too many files.');
+  const decoder=new TextDecoder('utf-8',{fatal:true}),names=new Set(),entries=[];
+  let at=central,total=0;
+  for(let index=0;index<count;index++){
+    if(at+46>end||u32(at)!==0x02014b50)throw new Error('Invalid ZIP entry.');
+    const flags=u16(at+8),method=u16(at+10),crc=u32(at+16),compressed=u32(at+20),size=u32(at+24),nameLength=u16(at+28),extra=u16(at+30),comment=u16(at+32),local=u32(at+42);
+    const next=at+46+nameLength+extra+comment;
+    if(next>end||u16(at+34)||flags&1||![0,8].includes(method))throw new Error('Encrypted, split or unsupported ZIP entry.');
+    if(size>32*1024*1024||(total+=size)>maxBytes)throw new Error('Unpacked ZIP contents exceed the import size limit.');
+    const path=decoder.decode(bytes.subarray(at+46,at+46+nameLength)),directory=path.endsWith('/');safePath(path,directory);
+    if(names.has(path))throw new Error('Duplicate ZIP path: '+path);names.add(path);
+    if(local+30>central||u32(local)!==0x04034b50||u16(local+6)!==flags||u16(local+8)!==method)throw new Error('Invalid ZIP file header.');
+    const localName=u16(local+26),start=local+30+localName+u16(local+28);
+    if(start+compressed>central||decoder.decode(bytes.subarray(local+30,local+30+localName))!==path)throw new Error('Truncated or mismatched ZIP entry.');
+    if(!(flags&8)&&(u32(local+14)!==crc||u32(local+18)!==compressed||u32(local+22)!==size))throw new Error('ZIP file sizes or checksum disagree.');
+    if(directory&&(size||compressed))throw new Error('ZIP directory contains file data.');
+    entries.push({path,directory,method,crc,size,start,compressed});at=next;
+  }
+  if(at!==end)throw new Error('Invalid ZIP directory size.');
+  const files=[];
+  for(const entry of entries){
+    if(entry.directory)continue;
+    const packed=bytes.subarray(entry.start,entry.start+entry.compressed),content=entry.method===0?packed.slice():await inflate(packed,entry.size);
+    if(content.length!==entry.size||crc32(content)!==entry.crc)throw new Error('ZIP entry failed its checksum: '+entry.path);
+    files.push({path:entry.path,content});
+  }
+  return files;
+}
+if(typeof module!=='undefined')module.exports={zip,unzip,crc32};
+else globalThis.HeritageZip={zip,unzip};
 })();

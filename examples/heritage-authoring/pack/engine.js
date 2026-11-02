@@ -200,6 +200,19 @@ function previewFiles(state,catalog) {
   files.push({path:'pack.mcmeta',content:JSON.stringify({pack:{pack_format:48,description:state.description}},null,2)+'\n'});
   return files;
 }
+function importedFiles(files) {
+  if(files===undefined)return [];
+  if(!Array.isArray(files)||files.length>4096)throw new Error('Imported pack files are invalid.');
+  const names=new Set();let total=0;
+  return files.map(file=>{
+    if(!object(file)||typeof file.path!=='string'||file.path.includes('\\')||file.path.includes(':')||/[\x00-\x1f]/.test(file.path)||file.path.split('/').some(part=>!part||/^\.+$/.test(part))||names.has(file.path))throw new Error('Unsafe or duplicate imported file path.');
+    names.add(file.path);
+    if(typeof file.base64!=='string'||file.base64.length>44*1024*1024)throw new Error('Imported file data is invalid or too large.');
+    const decoded=atob(file.base64);total+=decoded.length;if(total>64*1024*1024)throw new Error('Imported pack files exceed 64 MiB.');
+    const bytes=Uint8Array.from(decoded,char=>char.charCodeAt(0));
+    return {path:file.path,content:/\.(json|mcmeta)$/.test(file.path)?new TextDecoder('utf-8',{fatal:true}).decode(bytes):bytes};
+  });
+}
 function build(state,catalog) {
   const errors=[],warnings=[],files=[],issues=[],resourceFiles=[];
   const report=(label,action,locationId,filePath,kitId)=>{try{return action();}catch(error){
@@ -222,7 +235,7 @@ function build(state,catalog) {
   report('GUI scale',()=>{
     const guiScale=state.guiScale===undefined?0:state.guiScale;
     if(!Number.isInteger(guiScale)||guiScale<0||guiScale>16)throw Object.assign(fieldError('guiScale','Use a whole number from 0 to 16.'),{path:['gui_scale']});
-    add(selectionPath,{gui_scale:guiScale});
+    add(selectionPath,{...copy(state.selectionMetadata??{}),gui_scale:guiScale});
   },undefined,selectionPath);
   report('Kit order',()=>{if(state.kitOrder!==undefined&&(!Array.isArray(state.kitOrder)||state.kitOrder.some(id=>typeof id!=='string')||new Set(state.kitOrder).size!==state.kitOrder.length))throw fieldError('kitOrder','List each kit at most once.');});
   const selected=(Array.isArray(state.kits)?state.kits:[]).filter(entry=>entry.included);
@@ -237,7 +250,7 @@ function build(state,catalog) {
     kitIds.set(selection.id,id);documents.set(id,document);
     warnings.push(...draft.warnings);
   },undefined,'data/'+namespace+'/heritage/kits/'+selection.path+'.json',selection.id);
-  if(state.keepKits&&!documents.has('kingdomsheritage:default')){const document=copy(emptyKit.document);if(state.kitOrder){Object.assign(document,{title_key:'heritage.kingdomsheritage.kits.default.title',description_key:'heritage.kingdomsheritage.kits.default.description',order:kitRanks.get('bundled-empty')});add('data/kingdomsheritage/heritage/kits/default.json',document);}documents.set('kingdomsheritage:default',document);}
+  if(state.keepKits&&!documents.has('kingdomsheritage:default')){const document=copy(state.bundledKit??emptyKit.document);if(state.kitOrder)Object.assign(document,{title_key:document.title_key??'heritage.kingdomsheritage.kits.default.title',description_key:document.description_key??'heritage.kingdomsheritage.kits.default.description',order:kitRanks.get('bundled-empty')});if(state.kitOrder||state.bundledKit)add('data/kingdomsheritage/heritage/kits/default.json',document);documents.set('kingdomsheritage:default',document);}
   const count=documents.size;
   if(count<1)errors.push('Include at least one kit, or keep the bundled Empty-handed kit.');
   if(count>128)errors.push('A datapack can contain at most 128 enabled kits, including bundled kits.');
@@ -272,6 +285,11 @@ function build(state,catalog) {
     if(entry.kitMode!=='selected'&&state.keepKits)allowed.push('kingdomsheritage:default');
     if(!allowed.length)throw fieldError('kits','Choose at least one allowed kit.');
     document.kits=[...new Set(allowed)];
+    const imported=entry.importedKitSelectors;
+    if(Array.isArray(imported)){
+      const matching=[...documents].filter(([id,kit])=>imported.some(selector=>selector.startsWith('#')?(kit.tags??[]).includes(selector.slice(1)):selector===id)).map(([id])=>id);
+      if(!imported.length&&entry.kitMode!=='selected'||imported.length&&document.kits.length===matching.length&&document.kits.every(id=>matching.includes(id)))document.kits=copy(imported);
+    }
     if(document.kits.length>128)throw fieldError('kits','A location can allow at most 128 kits.');
     validateSpawn(document,state.allowCustomTargets===true);
     for(const place of [document,...(document.pool??[])]) {
@@ -287,7 +305,11 @@ function build(state,catalog) {
     for(const [id,document] of Object.entries(state.bundledLocations)){const path='data/kingdomsheritage/heritage/spawns/'+id.split(':')[1]+'.json';if(paths.has(path))continue;validateSpawn(document.type==='structure'&&document.target==='minecraft:village'?{...document,target:'#minecraft:village'}:document,state.allowCustomTargets===true);integer(document.order,-2147483648,2147483647,'Order');add(path,copy(document));}
   });
   if(spawnIds.size>50)errors.push('A datapack can contain at most 50 starting locations, including bundled locations.');
-  add('pack.mcmeta',{pack:{pack_format:48,description:state.description}});
+  const originalDescription=state.packMetadata?.pack?.description;
+  const descriptionChanged=state.description!==(typeof originalDescription==='string'?originalDescription:JSON.stringify(originalDescription));
+  const metadata=(saved,format)=>{const result=copy(saved??{});result.pack={...result.pack,pack_format:format};if(!saved||descriptionChanged)result.pack.description=state.description;return result;};
+  add('pack.mcmeta',metadata(state.packMetadata,48));
+  report('Imported datapack files',()=>{for(const file of importedFiles(state.importedFiles?.data))if(!paths.has(file.path)){paths.add(file.path);files.push(file);}});
   if(!state.keepLocations)for(const id of bundledSpawns) {
     const path='data/kingdomsheritage/heritage/spawns/'+id+'.json';
     if(!paths.has(path))add(path,{enabled:false});
@@ -295,8 +317,9 @@ function build(state,catalog) {
   if(!state.keepKits&&!paths.has('data/kingdomsheritage/heritage/kits/default.json'))add('data/kingdomsheritage/heritage/kits/default.json',{enabled:false});
   files.sort((a,b)=>a.path==='pack.mcmeta'?-1:b.path==='pack.mcmeta'?1:a.path.localeCompare(b.path));
   const pictureCount=resourceFiles.length;
-  if(pictureCount)resourceFiles.unshift({path:'pack.mcmeta',content:JSON.stringify({pack:{pack_format:34,description:state.description}},null,2)+'\n'});
-  return {files:errors.length?[]:files,resourceFiles:errors.length?[]:resourceFiles,pictureCount,previewFiles:errors.length?previewFiles(state,catalog):files,errors,issues,warnings:[...new Set(warnings)],kitCount:count,locationCount:spawnIds.size};
+  report('Imported resource files',()=>{const paths=new Set(resourceFiles.map(file=>file.path));for(const file of importedFiles(state.importedFiles?.resources))if(!paths.has(file.path)&&file.path!=='pack.mcmeta'){paths.add(file.path);resourceFiles.push(file);}});
+  if(resourceFiles.length)resourceFiles.unshift({path:'pack.mcmeta',content:JSON.stringify(metadata(state.resourceMetadata,34),null,2)+'\n'});
+  return {files:errors.length?[]:files,resourceFiles:errors.length?[]:resourceFiles,pictureCount,previewFiles:errors.length?previewFiles(state,catalog):files.filter(file=>typeof file.content==='string'),errors,issues,warnings:[...new Set(warnings)],kitCount:count,locationCount:spawnIds.size};
 }
 const api={copy,orderedKitIds,slug,fileId,resource,drafts,location,importSpawn,dimensionSuggestion,knownResource,validateSpawn,build,emptyKit,types,fields,destinationFields,usesPicture,pictureId,pictureBytes,selectionPath};
 if(typeof module!=='undefined')module.exports=api;

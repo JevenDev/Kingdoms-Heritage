@@ -5,7 +5,7 @@ if(!await HeritageSession.acquire(storageKey))return;
 const validators={kit:source=>HeritageKit.read(source),intro:source=>HeritagePreview.readJson(source)};
 const code=new HeritageJsonEditor($('export-json'),$('line-count'));
 HeritageIcons.action('copy','copy','Copy JSON');
-let catalog={kits:[],intros:[]},state,output,saveTimer,saveBlocked=false,storageError='',projects;
+let catalog={kits:[],intros:[]},state,output,saveTimer,saveBlocked=false,storageError='',projects,openingProject=false;
 const W=HeritageWorkflow,route=new URLSearchParams(location.search),touched=new Set();
 const saveMessage=$('nav-save-message'),saveSources=[$('project-status'),$('embedded-editor-status'),$('save-status')];
 new MutationObserver(()=>{const source=saveSources.find(node=>node.textContent),message=source?.textContent??'';if(saveMessage.textContent!==message)saveMessage.textContent=message;saveMessage.title=source?.title||message;}).observe(saveMessage.parentElement,{childList:true,subtree:true});
@@ -208,9 +208,9 @@ function projectOptions() {
 }
 function save() {
   clearTimeout(saveTimer);
-  if(saveBlocked){$('save-status').textContent='Read only';$('save-status').title=storageError;$('project-status').textContent=storageError;return;}
-  try{projects.update(state);projects.save();projectOptions();$('save-status').textContent='Saved';$('save-status').title='Saved in this browser';}
-  catch(error){$('save-status').textContent='Save failed';$('save-status').title=error.message;$('project-status').textContent='Your changes could not be saved. Download a copy. '+error.message;}
+  if(saveBlocked){$('save-status').textContent='Read only';$('save-status').title=storageError;$('project-status').textContent=storageError;return false;}
+  try{projects.update(state);projects.save();projectOptions();$('save-status').textContent='Saved';$('save-status').title='Saved in this browser';return true;}
+  catch(error){$('save-status').textContent='Save failed';$('save-status').title=error.message;$('project-status').textContent='Your changes could not be saved. Download a copy. '+error.message;return false;}
 }
 function changed() {
   packTools?.capture({drafts:historyDrafts,group:historyGroup,label:historyLabel||'Edit pack'});historyDrafts=[];historyGroup='';historyLabel='';refreshShared();
@@ -606,7 +606,7 @@ function renderOutput() {
   const kitCount=state.kits.filter(kit=>kit.included).length+(state.keepKits?1:0),locationCount=state.locations.length+(state.keepLocations?4:0);
   $('pack-summary').textContent=locationCount+' starting location'+(locationCount===1?'':'s')+' · '+kitCount+' included kit'+(kitCount===1?'':'s');
   $('export-name').textContent=output.resourceFiles.length?'Datapack and resource pack':'Datapack';$('export-blocked').hidden=!output.errors.length;$('export-fix').hidden=!output.errors.length;
-  $('export-readiness').textContent=preparing?'Wait for your picture to finish processing.':output.errors.length?'A few things need fixing before you download.':output.resourceFiles.length?'Includes a datapack ZIP and a resource-pack ZIP for '+output.pictureCount+' card picture'+(output.pictureCount===1?'':'s')+'. Extract both ZIPs from the download before installing.':'Files checked for Minecraft 1.21.1. Test the installed pack in-game.';
+  $('export-readiness').textContent=preparing?'Wait for your picture to finish processing.':output.errors.length?'A few things need fixing before you download.':output.resourceFiles.length?'Includes a datapack ZIP and a resource-pack ZIP '+(output.pictureCount?'for '+output.pictureCount+' card picture'+(output.pictureCount===1?'':'s'):'with imported resources')+'. Extract both ZIPs from the download before installing.':'Files checked for Minecraft 1.21.1. Test the installed pack in-game.';
   const errors=$('export-errors');errors.replaceChildren();
   if(output.errors.length){errors.append(element('p',{},output.errors.length+' issue'+(output.errors.length===1?' needs':'s need')+' fixing before preview or download:'));const list=element('ul');
     for(const issue of output.issues){const row=element('li'),entry=state.locations.find(entry=>entry.id===issue.locationId),button=element('button',{type:'button'},(issue.label||entry?.fields.title||entry?.path||'Pack')+': '+issue.message);button.addEventListener('click',()=>fixIssue(issue));row.append(button);list.append(row);}
@@ -816,15 +816,18 @@ $('save-project').addEventListener('click',()=>{
   }catch(error){$('project-status').textContent='Could not save project: '+error.message;}
 });
 $('open-project').addEventListener('change',async()=>{
-  const file=$('open-project').files[0];if(!file)return;if(!closeEmbedded()){$('open-project').value='';return;}
+  const file=$('open-project').files[0];if(!file||openingProject)return;if(!closeEmbedded()){$('open-project').value='';return;}
   try {
     if(saveBlocked)throw new Error(storageError);
-    const input=JSON.parse(await file.text());
+    if(file.size>64*1024*1024)throw new Error('Pack and project imports must be no larger than 64 MiB.');
+    openingProject=true;$('open-project').disabled=true;
+    $('project-status').textContent='Opening '+file.name+'…';
+    const input=/\.zip$/i.test(file.name)?await HeritagePackImport.read(new Uint8Array(await file.arrayBuffer()),file.name):JSON.parse(await file.text());
     const restore=()=>navigator.locks.request('heritage-editor:'+HeritageProject.keys.intros,{ifAvailable:true},introLock=>{
       if(!introLock)throw new Error('Close the intro editor tab before opening a project.');
       return navigator.locks.request('heritage-editor:'+HeritageProject.keys.kits,{ifAvailable:true},kitLock=>{
         if(!kitLock)throw new Error('Close the kit creator tab before opening a project.');
-        save();
+        if(!save())throw new Error('Your current project could not be saved. Download a project backup before importing another pack.');
         const read=key=>JSON.parse(localStorage.getItem(key)??'null');
         const result=HeritageProject.merge(input,{kits:read(HeritageProject.keys.kits),intros:read(HeritageProject.keys.intros)});
         const previous=projects.serialize();
@@ -837,7 +840,7 @@ $('open-project').addEventListener('change',async()=>{
     });
     await restore();
   }catch(error){$('project-status').textContent='Could not open project: '+error.message;}
-  $('open-project').value='';
+  $('open-project').value='';$('open-project').disabled=false;openingProject=false;
 });
 for(const button of document.querySelectorAll('[data-pack-step],[data-go-step]'))button.addEventListener('click',()=>setStep(button.dataset.packStep??button.dataset.goStep));
 $('step-back').addEventListener('click',()=>advance('back'));$('step-next').addEventListener('click',()=>advance('next'));
