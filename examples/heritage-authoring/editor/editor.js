@@ -3,7 +3,7 @@
 const P=HeritagePreview, $=id=>document.getElementById(id),storageKey='heritage.introEditor.v1';
 if(!await HeritageSession.acquire(storageKey))return;
 const editorRoute=new URLSearchParams(location.search),requested=editorRoute.get('draft');
-const previewFields=['resolution','viewport','background','biome','structure','dimension','loop','show-text-boxes'];
+const previewFields=['resolution','viewport','background',...Object.keys(P.contextDefaults),'loop','show-text-boxes'];
 const canvas=$('preview'), ctx=canvas.getContext('2d'), renderer=new HeritageCanvas(ctx),font=renderer.font,sprite=renderer.sprite;
 let jsonState=P.readJson(JSON.stringify({intro:P.defaults}));
 let config=jsonState.config, main=[], sub=[], all=[], blocks=[], cues=[], revealEnds=[];
@@ -142,7 +142,7 @@ document.querySelector('[data-wrap="italic"]').prepend(HeritageIcons.create('ita
 document.querySelector('[data-wrap="underline"]').prepend(HeritageIcons.create('underline'));
 HeritageIcons.action('play','play','Play');
 HeritageIcons.action('mute','volume-2','Mute');
-const names=()=>Object.fromEntries(['biome','structure','dimension'].map(id=>[id,$(id).value]));
+const names=()=>Object.fromEntries(Object.keys(P.contextDefaults).map(id=>[id,$(id).value]));
 const code=new HeritageJsonEditor($('json'),$('line-count'));
 const syncCode=()=>code.sync();
 const syncCodeScroll=()=>code.syncScroll();
@@ -553,12 +553,14 @@ document.querySelectorAll('[data-wrap]').forEach(button=>button.addEventListener
 $('apply-effect').addEventListener('click',()=>wrapSelection('<'+$('effect').value+'>','</'+$('effect').value+'>'));
 $('apply-color').addEventListener('click',()=>wrapSelection('<color:'+$('color').value+'>','</color>'));
 $('apply-gradient').addEventListener('click',()=>wrapSelection('<gradient:'+$('color').value+':'+$('gradient-end').value+'>','</gradient>'));
-document.querySelectorAll('[data-token]').forEach(button=>button.addEventListener('click',()=>{
+function insertTag(tag){
   if(activeField.readOnly){$('copy-status').textContent='Edit structured text in JSON. Your component has been kept.';return;}
-  if(visualText&&richEditors.has(activeField.id)){richEditors.get(activeField.id).insert('<'+button.dataset.token+'>');return;}
-  activeField.setRangeText('<'+button.dataset.token+'>',activeField.selectionStart,activeField.selectionEnd,'end');
+  if(visualText&&richEditors.has(activeField.id)){richEditors.get(activeField.id).insert('<'+tag+'>');return;}
+  activeField.setRangeText('<'+tag+'>',activeField.selectionStart,activeField.selectionEnd,'end');
   activeField.focus();editing({target:activeField});
-}));
+}
+document.querySelectorAll('[data-token]').forEach(button=>button.addEventListener('click',()=>insertTag(button.dataset.token)));
+$('insert-context-tag').addEventListener('click',()=>insertTag($('context-tag').value));
 $('preset').addEventListener('change',()=>{
   const value=$('preset').value;if(value==='custom')return;
   const name=$('preset').selectedOptions[0].textContent;

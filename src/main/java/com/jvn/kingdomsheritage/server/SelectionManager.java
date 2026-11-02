@@ -285,6 +285,9 @@ public final class SelectionManager {
                 review.add("companions", SelectionParty.companions(player));
                 SelectionParty.stage(player, 3);
                 review.add("locations", SpawnIntro.locations(preparation.search().definition(), destination));
+                review.add("dialogue_context", DialogueContexts.create(player,
+                        HeritageCatalog.spawns().get(ResourceLocation.parse(preparation.request().spawn())),
+                        HeritageCatalog.kits().get(ResourceLocation.parse(preparation.request().kit())), inventoryPolicy(player)).json());
                 JsonObject message = new JsonObject();
                 message.add("review", review);
                 REVIEWS.put(player.getUUID(), new Review(token, preparation));
@@ -321,8 +324,11 @@ public final class SelectionManager {
             try {
                 for (var entry : requests.entrySet()) {
                     var member = entry.getKey();
-                    intros.put(member, SpawnIntro.prepare(preparation.search().definition(), destination));
                     var kit = HeritageCatalog.kits().get(ResourceLocation.parse(entry.getValue().kit()));
+                    var intro = SpawnIntro.prepare(preparation.search().definition(), destination);
+                    intro.add("dialogue_context", DialogueContexts.create(member,
+                            HeritageCatalog.spawns().get(ResourceLocation.parse(entry.getValue().spawn())), kit, inventoryPolicy(member)).json());
+                    intros.put(member, intro);
                     KitService.apply(member, kit, kit.decode(member.registryAccess()), inventoryPolicy(member));
                 }
             } catch (RuntimeException error) {

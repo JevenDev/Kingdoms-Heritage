@@ -1,7 +1,6 @@
 package com.jvn.kingdomsheritage.client;
 
 import com.google.gson.JsonObject;
-import com.jvn.kingdomsheritage.compat.EquipmentCompat;
 import com.jvn.kingdomsheritage.network.HeritageNetwork;
 import com.jvn.toucanlib.client.ToucanGlyphLayout;
 import com.jvn.toucanlib.client.ToucanGuiText;
@@ -37,14 +36,7 @@ final class FinalConfirmationScreen extends Screen {
     FinalConfirmationScreen(JsonObject catalog, JsonObject review) {
         super(Component.translatable("screen.kingdomsheritage.review_title"));
         token = UUID.fromString(review.get("token").getAsString());
-        var kit = catalog.getAsJsonArray("kits").asList().stream().map(value -> value.getAsJsonObject())
-                .filter(choice -> choice.get("id").getAsString().equals(review.get("kit").getAsString())).findFirst().orElseThrow();
-        var player = Minecraft.getInstance().player;
-        boolean hasBelongings = !player.getInventory().isEmpty()
-                || EquipmentCompat.slots(player).stream().anyMatch(slot -> !slot.get().get().isEmpty());
-        var narration = SelectionNarration.create(player.getName(), review.getAsJsonObject("locations"), kit,
-                catalog.get("inventory_policy").getAsString(), hasBelongings,
-                review.has("companions") ? review.getAsJsonArray("companions").asList().stream().map(value -> value.getAsString()).toList() : List.of());
+        var narration = SelectionNarration.create(DialogueText.context(review));
         timeline = narration.timeline();
         glyphs = ToucanGlyphLayout.glyphs(narration.text(), 0);
     }

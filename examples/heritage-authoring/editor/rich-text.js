@@ -1,7 +1,6 @@
 (() => {
 'use strict';
 const P=typeof module!=='undefined'?require('./engine.js'):HeritagePreview;
-const defaults={biome:'Plains',structure:'Wilderness',dimension:'Overworld'};
 function atoms(source,names={}){
   const tags=[...source.matchAll(/<(\/?)([^<>]+)>/g)].map(match=>({start:match.index,end:match.index+match[0].length,name:P.canonical(match[2].trim().toLowerCase().split(':')[0]),closing:!!match[1],effect:P.effects(match[2].trim().toLowerCase())})),hidden=new Map(),stack=[];
   const closed=(index,name)=>{let depth=1;for(const next of tags.slice(index+1))if(next.name===name){if(next.closing){if(--depth===0)return true;}else if(next.effect)depth++;}return false;};
@@ -10,7 +9,7 @@ function atoms(source,names={}){
   for(let index=0;index<source.length;){
     if(hidden.has(index)){index=hidden.get(index);continue;}
     if(source[index]==='§'&&index+1<source.length){index+=2;continue;}
-    const token=/^<(biome|structure|dimension)>/.exec(source.slice(index)),text=token?(names[token[1]]||defaults[token[1]]):source[index]==='\r'?'\n':String.fromCodePoint(source.codePointAt(index)),length=token?token[0].length:source[index]==='\r'&&source[index+1]==='\n'?2:String.fromCodePoint(source.codePointAt(index)).length;
+    const match=/^<([a-z_][a-z0-9_:./-]*(?:\|[^<>]*)?)>/.exec(source.slice(index)),resolved=match?P.token(match[1],names):null,token=resolved?match:null,text=resolved?resolved.text:source[index]==='\r'?'\n':String.fromCodePoint(source.codePointAt(index)),length=token?token[0].length:source[index]==='\r'&&source[index+1]==='\n'?2:String.fromCodePoint(source.codePointAt(index)).length;
     result.push({start:index,end:index+length,text,token:token?.[1]??null,style:glyphs[glyph]??{effect:{},tint:0xffffff}});glyph+=Array.from(text).length;index+=length;
   }
   return result;

@@ -2,6 +2,13 @@
 'use strict';
 const colors = {black:0x000000,dark_blue:0x0000aa,dark_green:0x00aa00,dark_aqua:0x00aaaa,dark_red:0xaa0000,dark_purple:0xaa00aa,gold:0xffaa00,gray:0xaaaaaa,dark_gray:0x555555,blue:0x5555ff,green:0x55ff55,aqua:0x55ffff,red:0xff5555,light_purple:0xff55ff,yellow:0xffff55,white:0xffffff};
 const aliases = {i:'italic',italics:'italic',b:'bold',u:'underline',underlined:'underline',s:'strike',strikethrough:'strike',obfuscate:'obfuscated',magic:'obfuscated',wavy:'wave',shaky:'shake',pulsing:'pulse',jumping:'jump',bounce:'jump',bouncy:'jump'};
+const contextDefaults={player:'Alex',kit:'Traveler',spawn:'Homeland',biome:'Plains',structure:'Wilderness',dimension:'Overworld',place:'the plains',companions:'',party_size:'1',party_leader:'Alex',equipment:'Traveler'};
+function token(raw,names={}) {
+  const [key,...fallback]=raw.split('|'),known=Object.hasOwn(contextDefaults,key)||Object.hasOwn(names,key);
+  if(!known&&!fallback.length)return null;
+  const value=Object.hasOwn(names,key)?names[key]:contextDefaults[key];
+  return {key,text:!value&&fallback.length?fallback.join('|'):value??''};
+}
 const positions = {mid_center:[1,1],top_center:[1,0],bottom_center:[1,2],left_center:[0,1],right_center:[2,1],top_left:[0,0],top_right:[2,0],bottom_left:[0,2],bottom_right:[2,2]};
 const defaults = {text:'You woke up in <wave><gold><biome></gold></wave>...',subtitle:'<italic>A new journey begins.</italic>',title:false,large_subtitle:false,outline:true,animation:'word_by_word',control:'after_title',blip:true,black_hold_ticks:60,fade_from_black_ticks:60,reveal_ticks:40,hold_ticks:60,fade_out_ticks:20,cinematic_bars:true,bar_style:'random',bar_transition_ticks:40,bar_height:26,timeline:null,hide_hud_during_bars:true,title_position:'left_center',subtitle_position:'left_center'};
 const packDefaults = {...defaults,text:'',subtitle:'',animation:'fade_in',blip:false,cinematic_bars:false,hide_hud_during_bars:false,title_position:'mid_center',subtitle_position:'mid_center'};
@@ -113,7 +120,7 @@ function parse(text, names={}, offset=0, inherited={}) {
     return result;
   }
 
-  text=text.replace(/\r\n?/g,'\n').replace(/<(biome|structure|dimension)>/g,(_,key)=>names[key] || ({biome:'Plains',structure:'Wilderness',dimension:'Overworld'})[key]);
+  text=text.replace(/\r\n?/g,'\n').replace(/<([a-z_][a-z0-9_:./-]*(?:\|[^<>]*)?)>/g,(literal,raw)=>token(raw,names)?.text??literal);
   const base=[], chars=[];
   let style={};
   for(const [key,target] of [['bold','bold'],['italic','italic'],['underlined','underline'],['strikethrough','strike'],['obfuscated','obfuscated']])if(typeof inherited[key]==='boolean')style[target]=inherited[key];
@@ -377,7 +384,7 @@ function validate(cfg) {
   if(!['random','straight'].includes(cfg.bar_style)) throw Object.assign(new Error('Unknown bar style.'),{field:'bar_style'});
   return cfg;
 }
-const api={effects,canonical,barHeight,barVisibility,sampleSlant,componentText,validateComponent,colors,positions,defaults,packDefaults,readJson,updateJson,parse,wrap,padding,bounds,guiViewport,layout,presentation,trackTiming,textStart,textDuration,barProgress,duration,wordEnds,visible,revealCues,blipCues,glyphFrame,validate,clamp,active};
+const api={contextDefaults,token,effects,canonical,barHeight,barVisibility,sampleSlant,componentText,validateComponent,colors,positions,defaults,packDefaults,readJson,updateJson,parse,wrap,padding,bounds,guiViewport,layout,presentation,trackTiming,textStart,textDuration,barProgress,duration,wordEnds,visible,revealCues,blipCues,glyphFrame,validate,clamp,active};
 if(typeof module!=='undefined') module.exports=api;
 else globalThis.HeritagePreview=api;
 })();

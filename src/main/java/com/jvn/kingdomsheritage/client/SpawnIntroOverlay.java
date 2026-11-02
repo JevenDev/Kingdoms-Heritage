@@ -6,7 +6,6 @@ import com.jvn.kingdomsheritage.network.HeritageNetwork;
 import com.jvn.toucanlib.client.ToucanGlyphLayout;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -58,11 +57,9 @@ public final class SpawnIntroOverlay {
         barSlant = IntroCinematicBars.sampleSlant(token, intro.barStyle());
         JsonObject locations = message.getAsJsonObject("locations");
         dimension = ResourceLocation.parse(locations.get("dimension").getAsString());
-        var names = Map.of("biome", IntroText.location("biome", id(locations, "biome")),
-                "structure", IntroText.location("structure", id(locations, "structure")),
-                "dimension", IntroText.location("dimension", id(locations, "dimension")));
-        var styledText = IntroMarkup.style(IntroText.resolve(intro.text(), names));
-        var styledSubtitle = IntroMarkup.style(IntroText.resolve(intro.subtitle(), names));
+        var context = DialogueText.context(message);
+        var styledText = IntroMarkup.style(context.resolve(intro.text()));
+        var styledSubtitle = IntroMarkup.style(context.resolve(intro.subtitle()));
         text = ToucanGlyphLayout.glyphs(styledText, 0);
         subtitle = ToucanGlyphLayout.glyphs(styledSubtitle, text.size() + 1);
         var combined = new ArrayList<>(text);
@@ -72,10 +69,6 @@ public final class SpawnIntroOverlay {
         wordEnds = ToucanGlyphLayout.wordEnds(all);
         Minecraft.getInstance().getNarrator().sayNow(
                 styledText.copy().append("\n").append(styledSubtitle));
-    }
-
-    private static String id(JsonObject locations, String key) {
-        return locations.has(key) ? locations.get(key).getAsString() : "";
     }
 
     public static boolean active() { return intro != null; }

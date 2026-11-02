@@ -13,6 +13,7 @@
   "screen.kingdomsheritage.choose_another": "Choose another",
   "screen.kingdomsheritage.confirm_kit": "Yes, choose kit",
   "screen.kingdomsheritage.confirm_begin": "Continue",
+  "dialogue.kingdomsheritage.equipment_merged": "%s and your carried belongings",
   "screen.kingdomsheritage.review_title": "Your story begins",
   "screen.kingdomsheritage.review_player": "%s...",
   "screen.kingdomsheritage.review_location": " you woke up in %s...",
