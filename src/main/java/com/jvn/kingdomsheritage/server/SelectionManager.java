@@ -479,12 +479,14 @@ public final class SelectionManager {
         json.addProperty("error", error.getString());
         json.addProperty("error_component", Component.Serializer.toJson(error, player.registryAccess()));
         json.addProperty("inventory_policy", inventoryPolicy(player).name());
+        if (HeritageCatalog.guiScale() > 0) json.addProperty("gui_scale", HeritageCatalog.guiScale());
         JsonArray spawns = new JsonArray();
         for (var spawn : HeritageCatalog.spawns().values()) {
             JsonObject choice = new JsonObject();
             choice.addProperty("id", spawn.id().toString());
             choice.addProperty("title", spawn.title());
             choice.addProperty("subtitle", spawn.subtitle());
+            choice.addProperty("outline", spawn.outline());
             choice.addProperty("description", spawn.description());
             choice.addProperty("image", spawn.image().toString());
             choice.addProperty("title_key", spawn.titleKey());

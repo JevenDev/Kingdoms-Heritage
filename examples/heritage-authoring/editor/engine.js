@@ -3,7 +3,7 @@
 const colors = {black:0x000000,dark_blue:0x0000aa,dark_green:0x00aa00,dark_aqua:0x00aaaa,dark_red:0xaa0000,dark_purple:0xaa00aa,gold:0xffaa00,gray:0xaaaaaa,dark_gray:0x555555,blue:0x5555ff,green:0x55ff55,aqua:0x55ffff,red:0xff5555,light_purple:0xff55ff,yellow:0xffff55,white:0xffffff};
 const aliases = {i:'italic',italics:'italic',b:'bold',u:'underline',underlined:'underline',s:'strike',strikethrough:'strike',obfuscate:'obfuscated',magic:'obfuscated',wavy:'wave',shaky:'shake',pulsing:'pulse',jumping:'jump',bounce:'jump',bouncy:'jump'};
 const positions = {mid_center:[1,1],top_center:[1,0],bottom_center:[1,2],left_center:[0,1],right_center:[2,1],top_left:[0,0],top_right:[2,0],bottom_left:[0,2],bottom_right:[2,2]};
-const defaults = {text:'You woke up in <wave><gold><biome></gold></wave>...',subtitle:'<italic>A new journey begins.</italic>',title:false,large_subtitle:false,outline:true,animation:'word_by_word',control:'after_title',blip:true,black_hold_ticks:60,fade_from_black_ticks:60,reveal_ticks:40,hold_ticks:60,fade_out_ticks:20,cinematic_bars:true,bar_style:'random',bar_transition_ticks:40,hide_hud_during_bars:true,title_position:'left_center',subtitle_position:'left_center'};
+const defaults = {text:'You woke up in <wave><gold><biome></gold></wave>...',subtitle:'<italic>A new journey begins.</italic>',title:false,large_subtitle:false,outline:true,animation:'word_by_word',control:'after_title',blip:true,black_hold_ticks:60,fade_from_black_ticks:60,reveal_ticks:40,hold_ticks:60,fade_out_ticks:20,cinematic_bars:true,bar_style:'random',bar_transition_ticks:40,bar_height:26,hide_hud_during_bars:true,title_position:'left_center',subtitle_position:'left_center'};
 const packDefaults = {...defaults,text:'',subtitle:'',animation:'fade_in',blip:false,cinematic_bars:false,hide_hud_during_bars:false,title_position:'mid_center',subtitle_position:'mid_center'};
 const positionAliases = {center:'mid_center',mc:'mid_center',mid_c:'mid_center',tc:'top_center',top_c:'top_center',bc:'bottom_center',bottom_c:'bottom_center',lc:'left_center',left_c:'left_center',rc:'right_center',right_c:'right_center',tl:'top_left',tr:'top_right',bl:'bottom_left',br:'bottom_right'};
 function readJson(source,{validate:check=true}={}) {
@@ -212,14 +212,10 @@ function guiViewport(width,height,requested=0) {
   const scale=requested===0?maxScale:Math.max(1,Math.min(requested,maxScale));
   return {width,height,scale,maxScale,guiWidth:Math.ceil(width/scale),guiHeight:Math.ceil(height/scale)};
 }
-function layout(cfg,main,sub,width,height,slant,advance) {
+function barHeight(screenHeight,requestedHeight=26) { return Math.min(requestedHeight,Math.trunc(screenHeight/4)); }
+function layout(cfg,main,sub,width,height,advance) {
   const pads=padding([...main,...sub]), margin=Math.min(20+Math.max(...pads)*1.5,Math.min(width,height)/4);
-  let top=margin,bottom=height-margin;
-  if(cfg.cinematic_bars) {
-    const bar=Math.min(26,height/4);
-    top=Math.min(height/2-1,top+bar+Math.max(0,slant));
-    bottom=Math.max(height/2+1,bottom-bar+Math.min(0,slant));
-  }
+  const top=margin,bottom=height-margin;
   const aw=Math.max(1,width-margin*2), ah=Math.max(1,bottom-top);
   const p=positions[cfg.title_position], q=positions[cfg.subtitle_position];
   const ts=cfg.title?1.5:1, ss=cfg.large_subtitle?1.5:1, lh=12+pads[1]*2;
@@ -288,6 +284,16 @@ function layout(cfg,main,sub,width,height,slant,advance) {
   const groupTop=clamp((titleY+subtitleY-groupHeight)/2,top,bottom-groupHeight);
   return [{...title,y:groupTop,scale:title.scale*fit},{...subtitle,y:groupTop+(th+8)*fit,scale:subtitle.scale*fit}];
 }
+function barVisibility(ticks,duration,transitionTicks) {
+  const f=Math.fround,transition=Math.min(transitionTicks,duration/2),entry=clamp(f(ticks/transition)),exit=clamp(f((ticks-f(duration-transition))/transition));
+  return f(f(1-f((1-entry)**3))*f(1-f(f(exit*exit)*exit)));
+}
+function sampleSlant(token,style='random') {
+  if(style==='straight')return 0;
+  const bits=BigInt('0x'+token.replaceAll('-','').slice(-16)),mask=(1n<<48n)-1n;
+  const seed=(((bits^0x5deece66dn)&mask)*0x5deece66dn+11n)&mask;
+  return Math.fround(-12+Math.fround(Number(seed>>24n)/16777216*24));
+}
 function presentation(cfg) { return Math.max(cfg.fade_from_black_ticks,(cfg.animation==='immediate'?0:cfg.reveal_ticks)+cfg.hold_ticks+cfg.fade_out_ticks); }
 function duration(cfg) { return cfg.black_hold_ticks+presentation(cfg); }
 function wordEnds(all) {return all.filter((g,i)=>!/\s/u.test(g.ch)&&(i+1===all.length||/\s/u.test(all[i+1].ch))).map(g=>g.index+1);}
@@ -319,6 +325,7 @@ function validate(cfg) {
     const min=field==='black_hold_ticks'?0:1;
     if(!Number.isInteger(cfg[field])||cfg[field]<min||cfg[field]>1200) throw Object.assign(new Error(({black_hold_ticks:'Black screen',fade_from_black_ticks:'World fade',reveal_ticks:'Text reveal',hold_ticks:'Text hold',fade_out_ticks:'Text fade out',bar_transition_ticks:'Bar movement'})[field]+' must be a whole number from '+min+' to 1200.'),{field});
   }
+  if(!Number.isInteger(cfg.bar_height)||cfg.bar_height<1||cfg.bar_height>1200)throw Object.assign(new Error('Bar thickness must be a whole number from 1 to 1200 GUI pixels.'),{field:'bar_height'});
   for(const key of ['title_position','subtitle_position']) if(!Object.hasOwn(positions,cfg[key])) throw Object.assign(new Error('Unknown text position.'),{field:key});
   for(const key of ['title_coordinates','subtitle_coordinates'])if(cfg[key]!=null) {
     const value=cfg[key];
@@ -333,7 +340,7 @@ function validate(cfg) {
   if(!['random','straight'].includes(cfg.bar_style)) throw Object.assign(new Error('Unknown bar style.'),{field:'bar_style'});
   return cfg;
 }
-const api={componentText,validateComponent,colors,positions,defaults,packDefaults,readJson,updateJson,parse,wrap,padding,bounds,guiViewport,layout,presentation,duration,wordEnds,visible,glyphFrame,validate,clamp,active};
+const api={effects,canonical,barHeight,barVisibility,sampleSlant,componentText,validateComponent,colors,positions,defaults,packDefaults,readJson,updateJson,parse,wrap,padding,bounds,guiViewport,layout,presentation,duration,wordEnds,visible,glyphFrame,validate,clamp,active};
 if(typeof module!=='undefined') module.exports=api;
 else globalThis.HeritagePreview=api;
 })();

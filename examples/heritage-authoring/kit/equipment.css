@@ -7,20 +7,22 @@
 .equipment-view-controls label { display: flex; align-items: center; gap: 5px; }
 .equipment-view-controls input { width: 13px; height: 13px; margin: 0; }
 .equipment-view-controls button { font-size: calc(11px + var(--reading-increase)); min-height: 26px; padding: 3px 5px; }
-.equipment-view-controls a { color: var(--muted); margin-left: auto; }
 .equipment-edit { grid-column: 1/3; justify-content: flex-start; color: var(--text); }
-#slot-layout-dialog { width: min(660px,calc(100vw - 32px)); max-height: calc(100dvh - 48px); border: 1px solid var(--line); border-radius: 6px; padding: 20px; color: var(--text); background: var(--panel); overflow: auto; }
+#slot-layout-dialog { width: min(840px,calc(100vw - 32px)); max-height: calc(100dvh - 48px); border: 1px solid var(--line); border-radius: 6px; padding: 20px; color: var(--text); background: var(--panel); overflow: auto; }
 #slot-layout-dialog::backdrop { background: rgba(0,0,0,.65); }
 .slot-layout-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .slot-layout-heading h2 { font-size: 18px; }
 .slot-layout-heading button { padding: 5px 8px; }
-#slot-layout-rows { display: flex; flex-direction: column; gap: 12px; margin: 18px 0; max-height: 50dvh; overflow: auto; padding: 2px; }
-.slot-layout-row { display: grid; grid-template-columns: minmax(120px,1.5fr) 62px 76px minmax(90px,1fr) auto; align-items: end; gap: 8px; }
-.slot-layout-row.curios { grid-template-columns: minmax(120px,1fr) 62px 76px auto; }
+#slot-layout-rows { display: flex; flex-direction: column; gap: 8px; margin: 8px 0 12px; max-height: calc(100dvh - 300px); overflow: auto; padding: 2px; }
+#slot-layout-dialog { --slot-layout-columns:minmax(180px,1.5fr) 72px 112px minmax(100px,1fr) 80px; }
+#slot-layout-dialog[data-mode=curios] { --slot-layout-columns:minmax(180px,1fr) 72px 112px 80px; }
+.slot-layout-row, .slot-layout-columns { display:grid; grid-template-columns:var(--slot-layout-columns); align-items:end; gap:8px; }
+.slot-layout-columns { margin-top:16px; padding:0 2px; color:var(--muted); }
+@media(min-width:621px) { .slot-layout-label { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); } }
 .slot-layout-row label { display: flex; flex-direction: column; gap: 4px; min-width: 0; color: var(--muted); font-size: calc(11px + var(--reading-increase)); }
 .slot-layout-row input { width: 100%; min-width: 0; padding: 5px 7px; font: 11px/1.6 Monocraft,monospace; }
 .slot-layout-row input[type=number] { width: 100%; }
 .slot-layout-row button { padding: 5px; font-size: calc(11px + var(--reading-increase)); }
 .slot-layout-actions { display: flex; justify-content: space-between; gap: 10px; padding-top: 14px; margin-top: 12px; border-top: 1px solid var(--line-soft); }
 #slot-layout-error { color: #f2a2a2; font-size: calc(12px + var(--reading-increase)); }
-@media(max-width:620px) { .slot-layout-row, .slot-layout-row.curios { grid-template-columns: minmax(0,1fr) 62px 76px; } .slot-layout-row .layout-group { grid-column: 1/3; } }
+@media(max-width:620px) { .slot-layout-columns { display:none; } .slot-layout-row, .slot-layout-row.curios { grid-template-columns: repeat(2,minmax(0,1fr)); } .slot-layout-row :is(.layout-group,label:has([data-field=name])) { grid-column: 1/-1; } .slot-layout-row button { justify-self:start; } }

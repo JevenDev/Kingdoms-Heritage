@@ -37,7 +37,8 @@
     },
     "outline": {
       "type": "boolean",
-      "default": true
+      "default": true,
+      "description": "Use an outline for intro text. False uses the default text shadow."
     },
     "animation": {
       "type": "string",

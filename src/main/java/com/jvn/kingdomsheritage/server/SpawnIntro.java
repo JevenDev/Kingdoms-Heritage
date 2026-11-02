@@ -1,6 +1,7 @@
 package com.jvn.kingdomsheritage.server;
 
 import com.google.gson.JsonObject;
+import com.jvn.kingdomsheritage.data.HeritageCatalog;
 import com.jvn.kingdomsheritage.data.IntroDefinition;
 import com.jvn.kingdomsheritage.data.SpawnDefinition;
 import com.jvn.kingdomsheritage.network.HeritageNetwork;
@@ -26,6 +27,7 @@ public final class SpawnIntro {
 
     static JsonObject prepare(SpawnDefinition spawn, SpawnResolver.Destination destination) {
         JsonObject message = new JsonObject();
+        if (HeritageCatalog.guiScale() > 0) message.addProperty("gui_scale", HeritageCatalog.guiScale());
         JsonObject arrival = new JsonObject();
         arrival.addProperty("dimension", destination.level().dimension().location().toString());
         arrival.addProperty("x", destination.position().getX());

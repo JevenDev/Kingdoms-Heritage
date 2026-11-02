@@ -13,7 +13,7 @@ public record IntroDefinition(Component text, Component subtitle, boolean title,
                               int fadeOutTicks, int fadeFromBlackTicks, boolean cinematicBars, BarStyle barStyle,
                               int barTransitionTicks, Position titlePosition, Position subtitlePosition, int blackHoldTicks,
                               boolean outline, boolean hideHudDuringBars,
-                              Coordinates titleCoordinates, Coordinates subtitleCoordinates, boolean largeSubtitle) {
+                              Coordinates titleCoordinates, Coordinates subtitleCoordinates, boolean largeSubtitle, int barHeight) {
     public enum Animation { FADE_IN, WORD_BY_WORD, LETTER_BY_LETTER, IMMEDIATE }
     public enum Control { AFTER_TITLE, DURING_TITLE }
     public enum BarStyle { RANDOM, STRAIGHT }
@@ -82,7 +82,20 @@ public record IntroDefinition(Component text, Component subtitle, boolean title,
                 Position.parse(GsonHelper.getAsString(json, "subtitle_position", "mid_center")), ticks(json, "black_hold_ticks", 60, 0),
                 GsonHelper.getAsBoolean(json, "outline", true), GsonHelper.getAsBoolean(json, "hide_hud_during_bars", false),
                 coordinates(json, "title_coordinates"), coordinates(json, "subtitle_coordinates"),
-                GsonHelper.getAsBoolean(json, "large_subtitle", false));
+                GsonHelper.getAsBoolean(json, "large_subtitle", false), barHeight(json));
+    }
+
+    private static int barHeight(JsonObject json) {
+        if (!json.has("bar_height")) return 26;
+        var value = json.get("bar_height");
+        if (!value.isJsonPrimitive() || !value.getAsJsonPrimitive().isNumber()) {
+            throw new IllegalArgumentException("bar_height must be a whole number of GUI pixels");
+        }
+        double height = value.getAsDouble();
+        if (!Double.isFinite(height) || height != Math.rint(height) || height < 1 || height > 1200) {
+            throw new IllegalArgumentException("bar_height must be between 1 and 1200 GUI pixels");
+        }
+        return (int) height;
     }
 
     private static Coordinates coordinates(JsonObject json, String key) {
@@ -159,6 +172,7 @@ public record IntroDefinition(Component text, Component subtitle, boolean title,
         json.addProperty("hide_hud_during_bars", hideHudDuringBars);
         json.addProperty("bar_style", barStyle.name().toLowerCase(Locale.ROOT));
         json.addProperty("bar_transition_ticks", barTransitionTicks);
+        json.addProperty("bar_height", barHeight);
         json.addProperty("title_position", titlePosition.name().toLowerCase(Locale.ROOT));
         json.addProperty("subtitle_position", subtitlePosition.name().toLowerCase(Locale.ROOT));
         if (titleCoordinates != null) json.add("title_coordinates", titleCoordinates.json());

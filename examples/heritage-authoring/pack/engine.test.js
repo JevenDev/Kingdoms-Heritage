@@ -28,7 +28,7 @@ function archiveFiles(bytes) {
   assert.equal(view.getUint16(bytes.length-12,true),entries.size);
   return entries;
 }
-test('existing projects export the same datapack without a resource pack',()=>{
+test('existing projects retain player scaling without a resource pack',()=>{
   const input=state(),result=Pack.build(input,catalog);
   assert.deepEqual(result.errors,[]);
   assert.deepEqual(result.resourceFiles,[]);
@@ -132,4 +132,98 @@ test('ZIP validation rejects unsafe paths, duplicate names and unsupported conte
   assert.throws(()=>Zip.zip([{path:'../image.png',content:png}]),/Unsafe ZIP path/);
   assert.throws(()=>Zip.zip([{path:'image.png',content:png},{path:'image.png',content:png}]),/Duplicate ZIP path/);
   assert.throws(()=>Zip.zip([{path:'image.png',content:{}}]),/text or bytes/);
+});
+
+test('GUI scaling stays optional and exports one global settings file when configured',()=>{
+  const original=state();
+  assert.deepEqual(JSON.parse(Pack.build(original,catalog).files.find(file=>file.path===Pack.selectionPath).content),{gui_scale:0});
+  for(const guiScale of [0,1,4,16]){
+    const input={...original,guiScale,namespace:'renamed_pack'},output=Pack.build(input,catalog);
+    assert.deepEqual(output.errors,[]);
+    assert.deepEqual(JSON.parse(output.files.find(file=>file.path===Pack.selectionPath).content),{gui_scale:guiScale});
+    const files=archiveFiles(Zip.zip(output.files));
+    assert.equal(JSON.parse(new TextDecoder().decode(files.get(Pack.selectionPath))).gui_scale,guiScale);
+    assert.equal(output.files.filter(file=>file.path.endsWith('/heritage/selection.json')).length,1);
+  }
+});
+
+test('invalid GUI scales block export and retain a marked settings preview',()=>{
+  for(const guiScale of [-1,17,1.5,'4',null,true,NaN,Infinity]){
+    const output=Pack.build({...state(),guiScale},catalog);
+    assert.ok(output.errors.some(error=>error.startsWith('GUI scale:')));
+    assert.deepEqual(output.files,[]);
+    assert.ok(output.issues.some(issue=>issue.field==='guiScale'&&issue.filePath===Pack.selectionPath&&issue.path[0]==='gui_scale'));
+    assert.ok(output.previewFiles.some(file=>file.path===Pack.selectionPath));
+  }
+});
+
+test('GUI scaling survives saved projects, backups and library merges without changing old projects',()=>{
+  const initial=state(),input={...initial,guiScale:3};
+  const backup=JSON.parse(JSON.stringify(Project.backup(input,null,null)));
+  assert.equal(Project.merge(backup,{kits:null,intros:null}).pack.guiScale,3);
+  const values=new Map(),storage={getItem:key=>values.get(key)??null,setItem:(key,value)=>values.set(key,value),removeItem:key=>values.delete(key)};
+  const projects=new Project.Projects(storage,input,()=>'project');projects.save();
+  assert.equal(new Project.Projects(storage,initial).state().guiScale,3);
+  assert.deepEqual(Project.validatePack(initial),initial);
+  for(const guiScale of [-1,17,1.5,'4',null])assert.throws(()=>Project.validatePack({...input,guiScale}),/GUI scale/);
+});
+
+test('custom bar thickness is included in exported intros and invalid values block export',()=>{
+  const input=state(),intro={id:'arrival',name:'Arrival',document:{text:'Arrival',cinematic_bars:true,bar_height:48}},entries={kits:[],intros:[intro]};input.locations[0].intro=intro.id;
+  const result=Pack.build(input,entries);assert.deepEqual(result.errors,[]);assert.equal(spawn(result).intro.bar_height,48);
+  intro.document.bar_height=1.5;const invalid=Pack.build(input,entries);assert.ok(invalid.issues.some(issue=>issue.field==='intro'&&issue.message.includes('Bar thickness')));assert.deepEqual(invalid.files,[]);
+});
+
+test('editable crop sources survive project backups while resource exports contain only the final PNG',()=>{
+  const input=state(),entry=input.locations[0];entry.picture={...picture(),source:{data:'data:image/webp;base64,AAAA',width:768,height:384},crop:{x:80,y:25,zoom:2}};
+  const saved=JSON.parse(JSON.stringify(Project.backup(input,null,null))),restored=Project.merge(saved,{kits:null,intros:null});assert.deepEqual(restored.pack.locations[0].picture,entry.picture);
+  const result=Pack.build(restored.pack,catalog);assert.deepEqual(result.errors,[]);assert.equal(result.resourceFiles.length,2);assert.deepEqual(Buffer.from(result.resourceFiles[1].content),png);assert.equal(Object.hasOwn(spawn(result),'picture'),false);assert.ok(!JSON.stringify(result.previewFiles).includes(entry.picture.source.data));
+});
+
+test('card text style exports as a boolean and retains the legacy outlined default',()=>{
+  const input=state();assert.equal(Object.hasOwn(spawn(Pack.build(input,catalog)),'outline'),false);
+  for(const value of [false,true]){input.locations[0].fields.outline=value;const result=Pack.build(input,catalog);assert.deepEqual(result.errors,[]);assert.equal(spawn(result).outline,value);const restored=Project.merge(JSON.parse(JSON.stringify(Project.backup(input,null,null))),{kits:null,intros:null});assert.equal(restored.pack.locations[0].fields.outline,value);}
+});
+test('card styling survives older imported documents and rejects invalid values',()=>{
+  const input=state();input.locations[0].document.outline=false;assert.equal(spawn(Pack.build(input,catalog)).outline,false);input.locations[0].fields.outline=true;assert.equal(spawn(Pack.build(input,catalog)).outline,true);
+  for(const value of ['false',0,null,{}]){input.locations[0].fields.outline=value;const result=Pack.build(input,catalog);assert.ok(result.issues.some(issue=>issue.field==='outline'));assert.deepEqual(result.files,[]);}
+});
+test('card and intro text styles remain independent in the same exported location',()=>{
+  const input=state();input.locations[0].fields.outline=false;input.locations[0].intro='arrival';const entries={...catalog,intros:[{id:'arrival',name:'Arrival',document:{text:'Welcome',outline:true},error:''}]};const result=Pack.build(input,entries);assert.deepEqual(result.errors,[]);assert.equal(spawn(result).outline,false);assert.equal(spawn(result).intro.outline,true);
+});
+
+test('missing saved kits retain distinct names and repair targets in validation feedback',()=>{
+  const input=state();input.kits=[{id:'missing-a',path:'explorer',included:true},{id:'missing-b',path:'builder',included:true}];const result=Pack.build(input,catalog),issues=result.issues.filter(issue=>issue.kitId);
+  assert.deepEqual(issues.map(issue=>issue.label),['Kit explorer','Kit builder']);assert.deepEqual(issues.map(issue=>issue.kitId),['missing-a','missing-b']);assert.ok(issues.every(issue=>issue.message.includes('saved draft is missing')));assert.deepEqual(result.files,[]);
+});
+
+
+test('pack kit ordering exports native positions without rewriting shared drafts',()=>{
+  const input=state();input.kits=[{id:'a',path:'a',included:true},{id:'b',path:'b',included:true}];input.kitOrder=['b','bundled-empty','a'];const entries={kits:[{id:'a',name:'A',document:{title:'A',order:-10,items:[]},warnings:[]},{id:'b',name:'B',document:{title:'B',order:50,items:[]},warnings:[]}],intros:[]},original=JSON.stringify(entries),result=Pack.build(input,entries);
+  assert.deepEqual(result.errors,[]);const Flow=require('./flow.js'),defaults=require('./assets/defaults.json');assert.deepEqual(Flow.catalog(result,defaults).kits.map(kit=>kit.id),['my_pack:b','kingdomsheritage:default','my_pack:a']);assert.equal(JSON.stringify(entries),original);assert.equal(JSON.parse(result.files.find(file=>file.path==='data/kingdomsheritage/heritage/kits/default.json').content).title_key,'heritage.kingdomsheritage.kits.default.title');
+});
+test('unreordered kits retain their own menu positions and use the native tie break',()=>{
+  const input=state();input.keepKits=false;input.kits=[{id:'b',path:'b',included:true},{id:'a',path:'a',included:true}];const entries={kits:[{id:'a',document:{title:'A',order:12,items:[]},warnings:[]},{id:'b',document:{title:'B',order:-3,items:[]},warnings:[]}],intros:[]};assert.deepEqual(Pack.orderedKitIds(input,entries),['b','a']);const result=Pack.build(input,entries);assert.deepEqual(result.errors,[]);assert.equal(JSON.parse(result.files.find(file=>file.path.endsWith('/kits/a.json')).content).order,12);assert.equal(input.kitOrder,undefined);
+});
+test('kit order remains visible in draft previews when another field needs repair',()=>{
+  const input=state();input.kits=[{id:'a',path:'a',included:true}];input.kitOrder=['a','bundled-empty'];input.locations[0].fields.title='';const entries={kits:[{id:'a',document:{title:'A',items:[]},source:'{"title":"A","items":[]}',warnings:[]}],intros:[]},result=Pack.build(input,entries);assert.ok(result.errors.length);assert.equal(JSON.parse(result.previewFiles.find(file=>file.path.endsWith('/kits/a.json')).content).order,0);
+});
+test('invalid kit order is rejected in both project backups and exports',()=>{
+  for(const order of ['bad',[1],['a','a']]){const input=state();input.kitOrder=order;assert.throws(()=>Project.validatePack(input),/Kit order/);const result=Pack.build(input,catalog);assert.ok(result.errors.some(error=>error.startsWith('Kit order:')));assert.deepEqual(result.files,[]);}
+});
+
+function nativePicture(width,height){
+  const chunk=(name,data)=>{const type=Buffer.from(name),length=Buffer.alloc(4),crc=Buffer.alloc(4);length.writeUInt32BE(data.length);crc.writeUInt32BE(Zip.crc32(Buffer.concat([type,data])));return Buffer.concat([length,type,data,crc]);},header=Buffer.alloc(13);header.writeUInt32BE(width);header.writeUInt32BE(height,4);header[8]=8;header[9]=6;
+  const bytes=Buffer.concat([png.subarray(0,8),chunk('IHDR',header),chunk('IDAT',require('node:zlib').deflateSync(Buffer.alloc((width*4+1)*height,0))),chunk('IEND',Buffer.alloc(0))]);return {name:'Native.png',data:'data:image/png;base64,'+bytes.toString('base64'),keepResolution:true};
+}
+test('native-resolution card PNGs export byte for byte and survive project backups',()=>{
+  const input=state(),entry=input.locations[0];entry.picture=nativePicture(512,768);entry.keepImageResolution=true;const result=Pack.build(input,catalog);assert.deepEqual(result.errors,[]);assert.deepEqual(result.resourceFiles[1].content,Pack.pictureBytes(entry.picture));assert.equal(spawn(result).image,'my_pack:textures/gui/locations/location_1.png');const restored=Project.merge(Project.backup(input,null,null),{kits:null,intros:null});assert.deepEqual(restored.pack,input);
+  const archive=archiveFiles(Zip.zip(result.resourceFiles));assert.deepEqual(archive.get(result.resourceFiles[1].path),Pack.pictureBytes(entry.picture));
+});
+test('high-resolution image opt-in retains ratio, size and format validation',()=>{
+  for(const [width,height] of [[533,800],[64,96],[1,1]])assert.doesNotThrow(()=>Pack.pictureBytes(nativePicture(width,height)));
+  for(const value of ['true',1,null]){const input=state();input.locations[0].keepImageResolution=value;assert.throws(()=>Project.validatePack(input),/Keep source resolution/);}
+  const high=nativePicture(512,768);for(const value of [undefined,false,'true',1])assert.throws(()=>Pack.pictureBytes({...high,keepResolution:value}));
+  for(const [width,height] of [[0,192],[256,192],[9000,13500],[4096,6144]]){const invalid={...high},bytes=Buffer.from(invalid.data.slice(22),'base64');bytes.writeUInt32BE(width,16);bytes.writeUInt32BE(height,20);invalid.data='data:image/png;base64,'+bytes.toString('base64');assert.throws(()=>Pack.pictureBytes(invalid));}
+  assert.throws(()=>Pack.pictureBytes({...high,data:'data:image/png;base64,'+'A'.repeat(24*1024*1024)}));
 });

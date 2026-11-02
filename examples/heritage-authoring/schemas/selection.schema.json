@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Heritage global selection settings",
+  "description": "Save as data/kingdomsheritage/heritage/selection.json in a datapack. The highest-priority pack providing this file wins.",
+  "type": "object",
+  "properties": {
+    "gui_scale": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 16,
+      "description": "0 or omitted uses the player GUI scale. A positive value overrides the GUI scale for selection screens and the entire arrival intro, including bars. Minecraft window and font limits apply. The saved player option stays unchanged."
+    }
+  }
+}

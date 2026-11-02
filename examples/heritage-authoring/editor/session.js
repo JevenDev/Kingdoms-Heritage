@@ -1,21 +1,49 @@
 (() => {
 'use strict';
+function viewportBounds() {
+  const viewport=window.visualViewport;
+  let left=viewport?.offsetLeft??0,top=viewport?.offsetTop??0,right=left+(viewport?.width??innerWidth),bottom=top+(viewport?.height??innerHeight);
+  const frame=window.frameElement;
+  if(frame){
+    const parent=frame.ownerDocument.defaultView,parentViewport=parent.visualViewport,rect=frame.getBoundingClientRect(),scaleX=rect.width/frame.offsetWidth,scaleY=rect.height/frame.offsetHeight;
+    let clipLeft=parentViewport?.offsetLeft??0,clipTop=parentViewport?.offsetTop??0,clipRight=clipLeft+(parentViewport?.width??parent.innerWidth),clipBottom=clipTop+(parentViewport?.height??parent.innerHeight);
+    for(let node=frame.parentElement;node;node=node.parentElement){
+      const style=parent.getComputedStyle(node),bounds=node.getBoundingClientRect();
+      if(/^(auto|scroll|hidden|clip)$/.test(style.overflowX)){clipLeft=Math.max(clipLeft,bounds.left);clipRight=Math.min(clipRight,bounds.right);}
+      if(/^(auto|scroll|hidden|clip)$/.test(style.overflowY)){clipTop=Math.max(clipTop,bounds.top);clipBottom=Math.min(clipBottom,bounds.bottom);}
+    }
+    if(scaleX>0&&scaleY>0){
+      const originX=rect.left+frame.clientLeft*scaleX,originY=rect.top+frame.clientTop*scaleY;
+      left=Math.max(left,(clipLeft-originX)/scaleX);right=Math.min(right,(clipRight-originX)/scaleX);
+      top=Math.max(top,(clipTop-originY)/scaleY);bottom=Math.min(bottom,(clipBottom-originY)/scaleY);
+    }
+  }
+  return {left,top,right:Math.max(left,right),bottom:Math.max(top,bottom)};
+}
 function toolbarActions() {
-  const menu=document.querySelector('.document-actions-menu');
-  if(!menu)return;
-  const compact=matchMedia('(max-width:620px), (max-height:600px)');
-  const update=()=>{menu.open=!compact.matches;if(!compact.matches)menu.querySelector('.document-file-actions').style.maxHeight='';};
-  const fit=()=>{
-    if(!compact.matches||!menu.open)return;
-    const actions=menu.querySelector('.document-file-actions');
-    actions.style.maxHeight=Math.max(34,document.querySelector('main').getBoundingClientRect().bottom-actions.getBoundingClientRect().top-8)+'px';
-  };
-  update();compact.addEventListener('change',update);
-  menu.addEventListener('toggle',fit);window.addEventListener('resize',fit);
-  document.addEventListener('pointerdown',event=>{if(compact.matches&&!menu.contains(event.target))menu.open=false;});
-  menu.addEventListener('click',event=>{if(compact.matches&&event.target.closest('button,a,.file-button'))menu.open=false;});
-  menu.addEventListener('change',event=>{if(compact.matches&&event.target.tagName==='SELECT')menu.open=false;});
-  menu.addEventListener('keydown',event=>{if(compact.matches&&event.key==='Escape'){event.preventDefault();menu.open=false;menu.querySelector('summary').focus();}});
+  for(const menu of document.querySelectorAll('.document-actions-menu,.entry-actions-menu,.kit-help')){
+    const help=menu.classList.contains('kit-help'),actions=menu.querySelector('.document-file-actions')??menu.querySelector(':scope > div');
+    const compact=matchMedia('(max-width:620px), (max-height:600px)'),dropdown=()=>help||compact.matches||menu.hasAttribute('data-default-closed');
+    const update=()=>{menu.open=!help&&!compact.matches&&!menu.hasAttribute('data-default-closed');if(!compact.matches)actions.style.maxHeight='';};
+    const fit=()=>{
+      if(!dropdown()||!menu.open)return;
+      const available=Math.min(document.querySelector('main').getBoundingClientRect().bottom,viewportBounds().bottom)-actions.getBoundingClientRect().top-8;
+      actions.style.maxHeight=Math.max(34,Math.min(help?560:Infinity,available))+'px';
+    };
+    update();compact.addEventListener('change',update);
+    menu.addEventListener('toggle',fit);window.addEventListener('resize',fit);window.addEventListener('heritage:viewport-change',fit);
+    document.addEventListener('pointerdown',event=>{if(dropdown()&&!menu.contains(event.target))menu.open=false;});
+    menu.addEventListener('click',event=>{if(dropdown()&&event.target.closest('button,a,.file-button'))menu.open=false;});
+    menu.addEventListener('change',event=>{if(dropdown()&&event.target.tagName==='SELECT')menu.open=false;});
+    menu.addEventListener('keydown',event=>{
+      if(!dropdown())return;
+      if(event.key==='Escape'){event.preventDefault();event.stopPropagation();menu.open=false;menu.querySelector('summary').focus();return;}
+      if(event.target.tagName==='SELECT'||!['ArrowDown','ArrowUp','Home','End'].includes(event.key))return;
+      if(!menu.open&&!['ArrowDown','ArrowUp'].includes(event.key))return;event.preventDefault();menu.open=true;
+      const items=[...actions.querySelectorAll('button:not(:disabled),a[href]:not([aria-disabled=true]),select:not(:disabled),input:not(:disabled)')].filter(item=>item.getClientRects().length),index=items.indexOf(document.activeElement);
+      const next=event.key==='Home'?0:event.key==='End'?items.length-1:event.key==='ArrowUp'?(index<=0?items.length-1:index-1):(index+1)%items.length;items[next]?.focus();
+    });
+  }
 }
 async function acquire(key) {
   const main=document.querySelector('main');
@@ -74,7 +102,15 @@ function library({workspace,snapshot,activate,blank,kind,status,persist}) {
     document.getElementById(kind==='kit'?'kit-drafts':'intro-drafts').dispatchEvent(new Event('change'));
   });
 }
-const api={acquire,download,library};
+const api={acquire,download,library,viewportBounds};
 if(typeof module!=='undefined')module.exports=api;
-else globalThis.HeritageSession=api;
+else {
+  globalThis.HeritageSession=api;
+  const frame=window.frameElement;
+  if(frame){
+    const parent=frame.ownerDocument.defaultView,changed=()=>window.dispatchEvent(new Event('heritage:viewport-change'));
+    parent.document.addEventListener('scroll',changed,true);parent.addEventListener('resize',changed);
+    window.addEventListener('pagehide',()=>{parent.document.removeEventListener('scroll',changed,true);parent.removeEventListener('resize',changed);},{once:true});
+  }
+}
 })();

@@ -2,15 +2,16 @@
 'use strict';
 const P=HeritagePreview, $=id=>document.getElementById(id),storageKey='heritage.introEditor.v1';
 if(!await HeritageSession.acquire(storageKey))return;
+const editorRoute=new URLSearchParams(location.search),requested=editorRoute.get('draft');
 const previewFields=['resolution','viewport','background','biome','structure','dimension','loop','show-text-boxes'];
-const canvas=$('preview'), ctx=canvas.getContext('2d'), font=new Map(), tinted=new Map(), widthBuckets=new Map();
+const canvas=$('preview'), ctx=canvas.getContext('2d'), renderer=new HeritageCanvas(ctx),font=renderer.font,sprite=renderer.sprite;
 let jsonState=P.readJson(JSON.stringify({intro:P.defaults}));
 let config=jsonState.config, main=[], sub=[], all=[], blocks=[], cues=[], revealEnds=[];
-let time=0, playing=false, previewing=true, muted=false, lastFrame=0, frameRequest=0, slant=-7, activeField=$('text'), valid=true;
+let time=0, playing=false, previewing=true, muted=false, lastFrame=0, frameRequest=0, slant=P.sampleSlant(crypto.randomUUID()), activeField=$('text'), valid=true;
 let audioContext, audioBuffer, gain;
 let history=[], historyIndex=-1, restoringHistory=false, historyGroup=null, historyTime=0, currentValidation={error:null,fromJson:false};
-let workspace,saveTimer,saveUnavailable=false,saveBlocked=false;
-let selectedBlock=null,drag=null;
+let workspace,saveTimer,saveUnavailable=false,saveBlocked=false,restoredLibrary=false,author,packContext;
+let selectedBlock=null,drag=null,timelineEditor,richEditors=new Map(),visualText=true;
 let preview=P.guiViewport(1920,1080,4);
 function draftOptions() {
   if(!workspace)return;
@@ -25,14 +26,14 @@ function draftOptions() {
     option.textContent=name+(count>1?' ('+count+')':'');
   }
   field.value=workspace.active;
-  $('use-in-pack').href='pack-assembler.html?intro='+encodeURIComponent(workspace.active);
+  packContext=HeritageWorkflow.editor('intro',workspace.active);author?.refresh();
 }
 function saveDraft() {
   clearTimeout(saveTimer);
   if(!workspace||saveBlocked)return;
   try{
     workspace.update(historySnapshot());localStorage.setItem(storageKey,JSON.stringify(workspace.serialize()));
-    $('intro-draft-status').textContent='Draft saved';saveUnavailable=false;
+    $('intro-draft-status').textContent='Draft saved';saveUnavailable=false;author?.saved();
   }catch(error){
     saveUnavailable=true;$('intro-draft-status').textContent='Draft could not be saved. Copy your JSON to keep it.';
   }
@@ -67,7 +68,7 @@ function loadDrafts() {
   try{
     const raw=localStorage.getItem(storageKey),saved=raw===null?null:JSON.parse(raw);
     if(raw!==null&&(!saved||saved.version!==2||!Array.isArray(saved.intros)))throw new Error('Saved intros are invalid.');
-    workspace=new HeritageDrafts(saved,initial,undefined,'intros');
+    restoredLibrary=!!saved?.intros?.length;workspace=new HeritageDrafts(saved,initial,undefined,'intros');
     const entry=workspace.get();P.readJson(JSON.stringify(entry.state.document));
     history=entry.history;historyIndex=entry.historyIndex;restoreHistory(0);
     $('intro-draft-status').textContent=raw===null?'Draft ready':'Draft restored';
@@ -135,7 +136,8 @@ function restoreHistory(direction) {
 const sources=new Set();
 const hex=n=>'#'+n.toString(16).padStart(6,'0');
 const fields=[...document.querySelectorAll('[data-field]')];
-for(const [id,name] of Object.entries({'json-tab':'braces','text-tab':'type',copy:'copy','format-json':'text-align-start',undo:'undo-2',redo:'undo-2',restart:'rotate-ccw','restore-json':'undo-2','appearance-tab':'sliders-horizontal','timing-tab':'timer','bars-tab':'panel-top','locations-tab':'map-pin','new-angle':'shuffle','apply-effect':'wand-sparkles','apply-color':'palette','apply-gradient':'blend'})) $(id).prepend(HeritageIcons.create(name));
+for(const field of fields)if(!field.id)field.id='intro-field-'+field.dataset.field.replaceAll('.','-');
+for(const [id,name] of Object.entries({'json-tab':'braces','text-tab':'type',copy:'copy','format-json':'text-align-start',undo:'undo-2',redo:'undo-2',restart:'rotate-ccw','restore-json':'undo-2','new-angle':'shuffle','apply-effect':'wand-sparkles','apply-color':'palette','apply-gradient':'blend'})) $(id).prepend(HeritageIcons.create(name));
 document.querySelector('[data-wrap="italic"]').prepend(HeritageIcons.create('italic'));
 document.querySelector('[data-wrap="underline"]').prepend(HeritageIcons.create('underline'));
 HeritageIcons.action('play','play','Play');
@@ -144,29 +146,6 @@ const names=()=>Object.fromEntries(['biome','structure','dimension'].map(id=>[id
 const code=new HeritageJsonEditor($('json'),$('line-count'));
 const syncCode=()=>code.sync();
 const syncCodeScroll=()=>code.syncScroll();
-function setupTabs(attribute,panelSuffix) {
-  const buttons=[...document.querySelectorAll('['+attribute+']')];
-  function select(button) {
-    for(const item of buttons) {
-      const selected=item===button;
-      item.setAttribute('aria-selected',String(selected));
-      item.tabIndex=selected?0:-1;
-      $(item.getAttribute(attribute)+panelSuffix).hidden=!selected;
-    }
-    syncCodeScroll();
-  }
-  buttons.forEach(button=>{
-    button.addEventListener('click',()=>select(button));
-    button.addEventListener('keydown',event=>{
-      if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) return;
-      event.preventDefault();
-      const available=buttons.filter(item=>!item.disabled), index=available.indexOf(button);
-      const next=event.key==='Home'?0:event.key==='End'?available.length-1:(index+(event.key==='ArrowRight'?1:-1)+available.length)%available.length;
-      select(available[next]);
-      available[next].focus();
-    });
-  });
-}
 function random(seed) {
   let state=seed>>>0;
   return ()=>{ state=(Math.imul(state,1664525)+1013904223)>>>0; return state/4294967296; };
@@ -230,9 +209,9 @@ function buildCues() {
   }
   return list;
 }
-function glyph(ch) { return font.get(ch)||font.get('?'); }
-function advance(g) { return glyph(g.ch).advance+(g.effect.bold?1:0); }
+const advance=renderer.advance;
 function updateGuiScale(requested=Number($('viewport').value)) {
+  if(packContext?.guiScale)requested=packContext.guiScale;
   const [width,height]=$('resolution').value.split('x').map(Number);
   if([320,480,640].includes(requested))requested=Math.round(width/requested);
   preview=P.guiViewport(width,height,requested);
@@ -242,7 +221,8 @@ function updateGuiScale(requested=Number($('viewport').value)) {
     option.value=scale;option.textContent=(scale===0?'Auto':scale)+' ('+size.guiWidth+' × '+size.guiHeight+')';
     return option;
   }));
-  field.value=requested===0?'0':String(preview.scale);
+  field.value=requested===0?'0':String(preview.scale);field.disabled=!!packContext?.guiScale;
+  $('pack-preview-scale').hidden=!packContext?.guiScale;$('pack-preview-scale').textContent='Using this pack’s GUI scale '+packContext?.guiScale+'.';
 }
 function rebuild() {
   main=P.parse(config.text,names());
@@ -252,13 +232,21 @@ function rebuild() {
   updateGuiScale();
   const w=preview.guiWidth,h=preview.guiHeight;
   canvas.width=preview.width;canvas.height=preview.height;
-  canvas.style.aspectRatio=preview.width+' / '+preview.height;
-  blocks=P.layout(config,main,sub,w,h,config.bar_style==='random'?slant:0,advance);
+  canvas.style.aspectRatio=preview.width+' / '+preview.height;canvas.style.setProperty('--preview-aspect',preview.width/preview.height);
+  blocks=P.layout(config,main,sub,w,h,advance);
   cues=buildCues();
   const missing=[...new Set(all.filter(g=>!font.has(g.ch)&&g.ch!=='\n').map(g=>g.ch))];
   $('font-warning').hidden=!missing.length;
   $('font-warning').textContent=missing.length?'The preview font is missing these characters: '+missing.join(' ')+'. Check them in Minecraft.':'';
   $('timeline').max=P.duration(config);
+  $('bar-height-range').max=Math.max(config.bar_height,Math.trunc(h/4));$('bar-height-range').value=config.bar_height;
+  const barHeight=P.barHeight(h,config.bar_height);$('bar-height-effective').textContent=!config.cinematic_bars?'Bars off':barHeight<config.bar_height?'Limited to '+barHeight+' px':(barHeight/h*100).toFixed(1)+'% per bar';
+  syncConditionalControls();timelineEditor?.update(time,valid);for(const editor of richEditors.values())editor.refresh();
+}
+function syncConditionalControls(){
+  for(const field of document.querySelectorAll('[data-field=hide_hud_during_bars],[data-field=bar_height],[data-field=bar_style],[data-field=bar_transition_ticks],#bar-height-range'))field.disabled=!config.cinematic_bars&&field.getAttribute('aria-invalid')!=='true';
+  $('new-angle').disabled=!config.cinematic_bars||config.bar_style!=='random';
+  const reveal=document.querySelector('[data-field=reveal_ticks]');reveal.disabled=config.animation==='immediate'&&reveal.getAttribute('aria-invalid')!=='true';reveal.closest('label').dataset.tooltip=JSON.stringify(['Text reveal',config.animation==='immediate'?'Immediate text does not use a reveal duration.':'Time for all text to appear. 20 ticks = 1 second.']);
 }
 function validation(error=null,fromJson=false) {
   currentValidation={error,fromJson};
@@ -273,8 +261,8 @@ function validation(error=null,fromJson=false) {
     message.textContent=invalid?error.message:'';message.hidden=!invalid;
     field.setAttribute('aria-describedby',id);
     if(invalid&&!fromJson) {
-      const panel=field.closest('[role=tabpanel]');
-      if(panel)document.querySelector('[aria-controls="'+panel.id+'"]')?.click();
+      const panel=field.closest('[data-author-panel]');
+      if(panel?.dataset.authorPanel)author?.show(panel.dataset.authorPanel,{focus:false});
     }
   }
   $('component-notice').hidden=!['text','subtitle'].some(key=>typeof config[key]!=='string');
@@ -286,13 +274,14 @@ function validation(error=null,fromJson=false) {
   $('error').hidden=valid;
   const location=code.setError(error&&fromJson?error:null);
   $('error').textContent=error?(location?'Line '+location.line+', column '+location.column+': ':'')+error.message+' Showing the last valid preview.':'';
-  $('json').setAttribute('aria-invalid',String(!!error&&fromJson));
+  $('json').setAttribute('aria-invalid',String(!!error&&fromJson));author?.refresh();
   $('restore-json').hidden=valid;
   $('copy-status').textContent='';
-  $('download-intro').disabled=!valid;
+  $('download-intro').disabled=!valid;$('use-in-pack').setAttribute('aria-disabled',String(!valid||saveBlocked||saveUnavailable));
   $('copy').disabled=false;$('format-json').disabled=!!error&&fromJson&&error.message.startsWith('Invalid JSON:');
   for(const id of ['play','restart'])$(id).disabled=!font.size;
   for(const control of [...fields,$('title-custom'),$('subtitle-custom'),...document.querySelectorAll('.text-editor button, .text-editor select')]) control.disabled=false;
+  syncConditionalControls();
 }
 function refreshPreview() {
   rebuild();
@@ -313,7 +302,7 @@ function applyJson(event) {
   } catch(error) { validation(error,true); }
   recordHistory(event);
 }
-function editing(event) {
+function editing(event,{record=true}={}) {
   pause();
   const invalidSource=!!currentValidation.error&&currentValidation.fromJson;
   let sourceUpdated=false;
@@ -326,6 +315,7 @@ function editing(event) {
       if(part&&!$(key.replace('_coordinates','')+'-custom').checked)continue;
       let value=field.value;
       if(field.type==='checkbox') value=field.checked;
+      else if(field.dataset.field==='outline')value=field.value==='true';
       else if(field.type==='number') {
         if(!field.value.trim()) throw Object.assign(new Error(field.closest('label').firstChild.textContent.trim()+' is required.'),{field:field.dataset.field});
         value=Number(field.value);
@@ -346,7 +336,7 @@ function editing(event) {
     validation();
     refreshPreview();
   } catch(error) { validation(error,invalidSource||sourceUpdated); }
-  recordHistory(event);
+  if(record)recordHistory(event);
 }
 function coordinatesFor(kind) {
   if(config[kind+'_coordinates'])return {...config[kind+'_coordinates']};
@@ -354,7 +344,8 @@ function coordinatesFor(kind) {
   const height=block.lines.length*block.lineHeight*block.scale;
   const width=Math.max(0,...block.lines.map(line=>line.width))*block.scale;
   const position=P.positions[config[kind+'_position']];
-  return {x:P.clamp(block.x/w*100,0,100),y:P.clamp((block.y+height*position[1]/2)/h*100,0,100),width:P.clamp(Math.ceil(width/w*1000)/10,1,100)};
+  const percent=(value,size)=>Math.round(P.clamp(value/size*100,0,100)*100)/100;
+  return {x:percent(block.x,w),y:percent(block.y+height*position[1]/2,h),width:P.clamp(Math.ceil(width/w*1000)/10,1,100)};
 }
 function setCoordinates(kind,coordinates) {
   pause();
@@ -388,7 +379,7 @@ function blockAt(point) {
   return null;
 }
 function drawBounds() {
-  if(!$('show-text-boxes').checked||playing)return;
+  if(!$('show-text-boxes').checked||playing||document.body.dataset.authorStage!=='layout')return;
   ctx.save();ctx.lineWidth=.5;
   blocks.forEach((block,index)=>{
     if(!block.lines.length)return;
@@ -421,7 +412,7 @@ function setupPositionControls() {
     $('move-'+kind).addEventListener('click',()=>selectBlock(kind));
   }
   canvas.addEventListener('pointerdown',event=>{
-    if(event.button!==0||!valid||playing||!$('show-text-boxes').checked)return;
+    if(event.button!==0||!valid||playing||!$('show-text-boxes').checked||author?.current!=='layout')return;
     const position=point(event),kind=blockAt(position);if(!kind)return;
     event.preventDefault();selectBlock(kind);
     drag={kind,start:position,coordinates:coordinatesFor(kind),pointerId:event.pointerId,state:jsonState,source:$('json').value,moved:false};
@@ -429,7 +420,7 @@ function setupPositionControls() {
   });
   canvas.addEventListener('pointermove',event=>{
     if(!drag) {
-      canvas.style.cursor=valid&&!playing&&$('show-text-boxes').checked&&blockAt(point(event))?'grab':'default';return;
+      canvas.style.cursor=author?.current==='layout'&&valid&&!playing&&$('show-text-boxes').checked&&blockAt(point(event))?'grab':'default';return;
     }
     if(event.pointerId!==drag.pointerId)return;
     const position=point(event),dx=position.x-drag.start.x,dy=position.y-drag.start.y;
@@ -443,7 +434,7 @@ function setupPositionControls() {
   canvas.addEventListener('lostpointercapture',()=>finishDrag());
   canvas.addEventListener('keydown',event=>{
     if(event.key==='Escape'){finishDrag(true);selectedBlock=null;for(const kind of ['title','subtitle'])$('move-'+kind).setAttribute('aria-pressed','false');draw();return;}
-    if(!selectedBlock||!valid||playing||event.ctrlKey||event.metaKey||event.altKey||!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key))return;
+    if(author?.current!=='layout'||!selectedBlock||!valid||playing||event.ctrlKey||event.metaKey||event.altKey||!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key))return;
     event.preventDefault();
     const coordinates=coordinatesFor(selectedBlock),step=event.shiftKey?1:.1;
     const key=event.key==='ArrowLeft'||event.key==='ArrowRight'?'x':'y';
@@ -454,77 +445,8 @@ function setupPositionControls() {
   $('show-text-boxes').addEventListener('change',()=>{draw();scheduleSave();});
 }
 
-function sprite(g,color) {
-  const key=g.id+':'+color;
-  if(tinted.has(key)) return tinted.get(key);
-  if(tinted.size>3072) tinted.clear();
-  const c=document.createElement('canvas'); c.width=g.sw;c.height=g.sh;
-  const cctx=c.getContext('2d');
-  cctx.drawImage(g.image,g.sx,g.sy,g.sw,g.sh,0,0,g.sw,g.sh);
-  cctx.globalCompositeOperation='source-in';
-  cctx.fillStyle=hex(color);cctx.fillRect(0,0,g.sw,g.sh);
-  tinted.set(key,c);
-  return c;
-}
-function drawGlyph(draw,dx,dy,color,decoration) {
-  const {g,entry,x,y,alpha}=draw, e=g.effect;
-  ctx.globalAlpha=alpha/255;
-  ctx.fillStyle=hex(color);
-  if(decoration) {
-    const a=advance(g);
-    if(e.underline) ctx.fillRect(x+dx-1,y+dy+8,a+1,1);
-    if(e.strike) ctx.fillRect(x+dx-1,y+dy+3.5,a+1,1);
-    return;
-  }
-  if(g.ch===' '||g.ch==='\u200c') return;
-  ctx.save();
-  ctx.translate(x+dx,y+dy);
-  if(e.italic) ctx.transform(1,0,-.25,1,1,0);
-  const image=sprite(entry,color), up=7-entry.ascent;
-  ctx.drawImage(image,0,up,entry.sw*entry.scale,entry.sh*entry.scale);
-  if(e.bold) ctx.drawImage(image,1,up,entry.sw*entry.scale,entry.sh*entry.scale);
-  ctx.restore();
-}
-function drawBlock(block,visible,alpha,tick) {
-  ctx.save();ctx.translate(block.x,block.y);ctx.scale(block.scale,block.scale);
-  block.lines.forEach((line,row)=>{
-    let x=Math.round(-line.width*block.column/2);
-    const draws=[];
-    for(const g of line.glyphs) {
-      if(g.index<visible) {
-        const frame=P.glyphFrame(g,tick,alpha);
-        let entry=glyph(g.ch);
-        if(g.effect.obfuscated&&g.ch!==' ') {
-          const choices=widthBuckets.get(entry.advance);
-          entry=choices[Math.abs(Math.imul(tick+1,37)+g.index*71)%choices.length];
-        }
-        if(frame.alpha>3) draws.push({g,entry,x:x+frame.x,y:row*block.lineHeight+frame.y,alpha:frame.alpha,color:frame.tint});
-      }
-      x+=advance(g);
-    }
-    if(config.outline) {
-      for(const decoration of [false,true]) for(const item of draws) for(const [dx,dy] of [[-1,0],[1,0],[0,-1],[0,1]]) drawGlyph(item,dx,dy,0,decoration);
-    }
-    for(const decoration of [false,true]) for(const item of draws) drawGlyph(item,0,0,item.color,decoration);
-  });
-  ctx.restore();
-}
-function bars(w,h,ticks) {
-  if(!config.cinematic_bars) return;
-  const duration=P.presentation(config),transition=Math.min(config.bar_transition_ticks,duration/2);
-  const entry=P.clamp(ticks/transition),exit=P.clamp((ticks-(duration-transition))/transition);
-  const progress=(1-(1-entry)**3)*(1-exit**3), bar=Math.min(26,h/4);
-  if(progress<=0) return;
-  const angle=config.bar_style==='random'?slant:0,travel=bar+Math.abs(angle)+4;
-  ctx.fillStyle='#000';ctx.globalAlpha=1;
-  for(let x=0;x<w;x++) {
-    const diagonal=angle*x/w;
-    const top=Math.floor(-travel*(1-progress)+bar+diagonal+.5);
-    const bottom=Math.floor(h-bar+travel*(1-progress)+diagonal+.5);
-    if(top>0)ctx.fillRect(x,0,1,top);
-    if(bottom<h)ctx.fillRect(x,bottom,1,h-bottom);
-  }
-}
+const drawBlock=(...args)=>renderer.block(...args,config.outline,!config.outline);
+const bars=(...args)=>renderer.bars(...args,config,slant);
 function draw() {
   const w=preview.guiWidth,h=preview.guiHeight;
   ctx.setTransform(preview.scale,0,0,preview.scale,0,0);ctx.imageSmoothingEnabled=false;ctx.globalAlpha=1;
@@ -547,7 +469,7 @@ function draw() {
   ctx.globalAlpha=1;
   drawBounds();
   $('move-subtitle').disabled=!sub.length;
-  $('timeline').value=time;
+  $('timeline').value=time;timelineEditor?.tick(time);
   const clock=(time/20).toFixed(1)+' / '+(total/20).toFixed(1)+' s';
   if($('clock').textContent!==clock){
     $('clock').textContent=clock;
@@ -587,34 +509,14 @@ async function play(restart=false) {
 }
 function wrapSelection(open,close) {
   if(activeField.readOnly){$('copy-status').textContent='Edit structured text in JSON. Your component has been kept.';return;}
+  if(visualText&&richEditors.has(activeField.id)){richEditors.get(activeField.id).format(open,close);return;}
   const field=activeField,start=field.selectionStart,end=field.selectionEnd;
   const a=start===end?0:start,b=start===end?field.value.length:end;
   field.setRangeText(open+field.value.slice(a,b)+close,a,b,'select');
   field.focus();field.setSelectionRange(a+open.length,b+open.length);
   $('preset').value='custom';editing({target:field});
 }
-for(const provider of HeritageAssets.providers) {
-  const image=new Image();
-  image.src=provider.image;
-  await image.decode();
-  const sheet=document.createElement('canvas');sheet.width=image.width;sheet.height=image.height;
-  const sctx=sheet.getContext('2d',{willReadFrequently:true});
-  sctx.drawImage(image,0,0);
-  const pixels=sctx.getImageData(0,0,image.width,image.height).data;
-  const rows=provider.chars.map(row=>Array.from(row)),sw=image.width/rows[0].length,sh=image.height/rows.length,scale=(provider.height||8)/sh;
-  rows.forEach((row,y)=>row.forEach((ch,x)=>{
-    if(ch==='\0'||font.has(ch)) return;
-    let actual=0;
-    for(let col=sw-1;col>=0&&!actual;col--) for(let r=0;r<sh;r++) if(pixels[((y*sh+r)*image.width+x*sw+col)*4+3]) {actual=col+1;break;}
-    font.set(ch,{id:font.size,image,sx:x*sw,sy:y*sh,sw,sh,scale,ascent:provider.ascent,advance:Math.floor(.5+actual*scale)+1});
-  }));
-}
-font.set(' ',{...font.get(' '),advance:4});
-font.set('\u200c',{...font.get(' '),advance:0});
-for(const [ch,g] of font) if(ch!==' '&&ch!=='\u200c') {
-  if(!widthBuckets.has(g.advance)) widthBuckets.set(g.advance,[]);
-  widthBuckets.get(g.advance).push(g);
-}
+await renderer.load();
 for(const [name,value] of Object.entries(P.colors)) {
   const option=document.createElement('option');option.value=hex(value);option.textContent=name.replaceAll('_',' ');$('named-color').append(option);
 }
@@ -633,7 +535,7 @@ document.addEventListener('keydown',event=>{
   const key=event.key.toLowerCase();
   if(key!=='z'&&key!=='y') return;
   const target=event.target;
-  if(target instanceof HTMLInputElement&&!target.hasAttribute('data-field')&&!target.hasAttribute('data-position-custom')&&target.id!=='intro-name') return;
+  if(target instanceof HTMLInputElement&&!target.hasAttribute('data-field')&&!target.hasAttribute('data-position-custom')&&target.id!=='intro-name'&&target.id!=='bar-height-range') return;
   event.preventDefault();
   restoreHistory(key==='y'||event.shiftKey?1:-1);
 });
@@ -645,6 +547,7 @@ for(const field of fields) {
   field.addEventListener('input',event=>{$('preset').value='custom';editing(event);});
   if(field.tagName==='TEXTAREA') field.addEventListener('focus',()=>{activeField=field;});
 }
+$('bar-height-range').addEventListener('input',event=>{$('bar-height').value=event.target.value;$('bar-height').dispatchEvent(new Event('input',{bubbles:true}));});
 setupPositionControls();
 $('settings').addEventListener('submit',event=>event.preventDefault());
 $('play').addEventListener('click',()=>play());
@@ -665,8 +568,6 @@ for(const id of ['resolution','viewport'])$(id).addEventListener('change',()=>{r
 $('loop').addEventListener('change',scheduleSave);
 for(const id of ['biome','structure','dimension']) $(id).addEventListener('input',()=>{pause();refreshPreview();scheduleSave();});
 $('json').addEventListener('input',applyJson);
-setupTabs('data-editor-tab','-panel');
-setupTabs('data-options-tab','-panel');
 $('undo').addEventListener('click',()=>restoreHistory(-1));
 $('redo').addEventListener('click',()=>restoreHistory(1));
 $('format-json').addEventListener('click',event=>{
@@ -680,13 +581,14 @@ $('restore-json').addEventListener('click',()=>{
   $('json').value=JSON.stringify(jsonState.document,null,2);
   applyJson();
 });
-$('new-angle').addEventListener('click',()=>{slant=Math.random()*24-12;rebuild();draw();});
+$('new-angle').addEventListener('click',()=>{slant=P.sampleSlant(crypto.randomUUID());rebuild();draw();});
 document.querySelectorAll('[data-wrap]').forEach(button=>button.addEventListener('click',()=>wrapSelection('<'+button.dataset.wrap+'>','</'+button.dataset.wrap+'>')));
 $('apply-effect').addEventListener('click',()=>wrapSelection('<'+$('effect').value+'>','</'+$('effect').value+'>'));
 $('apply-color').addEventListener('click',()=>wrapSelection('<color:'+$('color').value+'>','</color>'));
 $('apply-gradient').addEventListener('click',()=>wrapSelection('<gradient:'+$('color').value+':'+$('gradient-end').value+'>','</gradient>'));
 document.querySelectorAll('[data-token]').forEach(button=>button.addEventListener('click',()=>{
   if(activeField.readOnly){$('copy-status').textContent='Edit structured text in JSON. Your component has been kept.';return;}
+  if(visualText&&richEditors.has(activeField.id)){richEditors.get(activeField.id).insert('<'+button.dataset.token+'>');return;}
   activeField.setRangeText('<'+button.dataset.token+'>',activeField.selectionStart,activeField.selectionEnd,'end');
   activeField.focus();editing({target:activeField});
 }));
@@ -726,11 +628,41 @@ $('download-intro').addEventListener('click',()=>{
   if(!valid)return;
   HeritageSession.download(jsonState.document,($('intro-name').value.replace(/[^a-z0-9_-]+/gi,'_')||'intro')+'.json');
 });
-const requested=new URLSearchParams(location.search).get('draft');
 if(requested&&workspace.entries.has(requested))activateIntro(requested);
+if(editorRoute.get('create')==='1'){if(restoredLibrary&&!saveBlocked)openIntro();if(editorRoute.has('name')&&!saveBlocked){$('intro-name').value=editorRoute.get('name');$('intro-name').dispatchEvent(new Event('input',{bubbles:true}));}editorRoute.delete('name');editorRoute.delete('create');editorRoute.set('draft',workspace.active);window.history.replaceState(null,'',location.pathname+(editorRoute.size?'?'+editorRoute:'')+location.hash);}
 validation(currentValidation.error,currentValidation.fromJson);
 if(requested&&!workspace.entries.has(requested))$('copy-status').textContent='This intro is missing. Choose another saved intro.';
-if(valid)$('text-tab').click();
+function authorIssue(){
+  if(!valid){const field=currentValidation.error?.field,node=fields.find(input=>input.dataset.field===field);return {stage:node?.closest('[data-author-panel]')?.dataset.authorPanel??'json',field:node?.id||'json',message:currentValidation.error?.message||'Resolve the highlighted fields before using this intro.'};}
+  if(saveBlocked||saveUnavailable)return {stage:'json',field:'json',message:'Browser storage is unavailable. Copy your JSON before leaving.'};
+  return null;
+}
+HeritageIntroLayout.create({textFocus:()=>{if(visualText)richEditors.get(activeField.id)?.focus();else activeField.focus();}});
+for(const id of ['text','subtitle']){
+  const field=$(id);richEditors.set(id,HeritageRichText.create(field,{label:id==='text'?'Main text':'Subtitle',names,focus:field=>{activeField=field;},change:field=>{$('preset').value='custom';editing({type:'input',target:field});}}));field.hidden=true;
+}
+function textMode(visual){
+  visualText=visual;for(const [id,editor] of richEditors){$(id).hidden=visual;editor.element.hidden=!visual;editor.refresh();}
+  $('text-mode-visual').setAttribute('aria-pressed',String(visual));$('text-mode-markup').setAttribute('aria-pressed',String(!visual));
+}
+$('text-mode-visual').addEventListener('click',()=>textMode(true));$('text-mode-markup').addEventListener('click',()=>textMode(false));
+const timelineHost=document.createElement('div');timelineHost.className='intro-timeline-host';document.querySelector('.playback').after(timelineHost);
+timelineEditor=HeritageTimeline.create(timelineHost,{get:()=>config,seek:value=>{pause();previewing=false;time=value;draw();},
+  change:(key,value,record)=>{const field=fields.find(field=>field.dataset.field===key);field.value=value;editing({type:'change',target:field},{record});previewing=false;const segment=HeritageTimeline.layout(config).tracks.flatMap(track=>track.segments).find(segment=>segment.key===key);time=Math.min(P.duration(config),segment?.to??time);draw();},
+  commit:key=>recordHistory({type:'change',target:fields.find(field=>field.dataset.field===key)}),
+  cancel:original=>{for(const [key,value] of Object.entries(original))fields.find(field=>field.dataset.field===key).value=value;editing({target:fields.find(field=>field.dataset.field==='black_hold_ticks')},{record:false});scheduleSave();}
+});
+author=HeritageAuthoring.create({kind:'intro',active:()=>workspace.active,
+  stages:[{id:'text',label:'text',heading:'Write the arrival intro',help:'Name the intro, then write the text players see when they arrive.'},{id:'layout',label:'layout & style',heading:'Place and style the text',help:'Choose positions or drag the text boxes in the live preview.'},{id:'cinematic',label:'timing & bars',heading:'Set the cinematic pacing',help:'Adjust the timing and bars while checking the live preview.'},{id:'review',label:'review',heading:'Review this intro',help:'Play the full intro, then use it in your pack or create another.'}],
+  entries:()=>[...workspace.entries].map(([id,entry])=>{const value=id===workspace.active?historySnapshot():entry.state;return {id,name:value.name||'Untitled intro',detail:P.parse(value.document.intro?.text??value.document.text,names()).map(glyph=>glyph.ch).join('')||'Arrival intro'};}),
+  adopt:entry=>{const state=JSON.parse(JSON.stringify(entry.state));workspace.entries.set(entry.id,{state,history:[state],historyIndex:0});activateIntro(entry.id);},
+  select:activateIntro,newEntry:()=>openIntro(),issue:authorIssue,persist:()=>{saveDraft();return !saveBlocked&&!saveUnavailable;},
+  prepare:()=>{if(!valid||saveBlocked)return false;saveDraft();return !saveBlocked&&!saveUnavailable;},
+  summary:()=>({title:$('intro-name').value||'Untitled intro',description:P.parse(config.text,names()).map(glyph=>glyph.ch).join(''),lines:[(P.duration(config)/20).toFixed(1)+' seconds',config.animation.replaceAll('_',' '),config.cinematic_bars?'Cinematic bars: '+config.bar_style.replaceAll('_',' ')+' · '+config.bar_height+' GUI px':'Cinematic bars off',packContext?.guiScale?'Pack GUI scale: '+packContext.guiScale:'Preview GUI scale: '+$('viewport').value]}),
+  stageChanged:()=>{finishDrag();timelineEditor?.cancel();pause();draw();syncCodeScroll();}
+});
+if(packContext&&!packContext.missing){const human=value=>{const text=String(value).split(':').at(-1).replaceAll('_',' ');return text.charAt(0).toUpperCase()+text.slice(1);};for(const kind of ['biome','structure'])if(packContext.fields.type===kind&&packContext.fields.target&&!packContext.fields.target.startsWith('#'))$(kind).value=human(packContext.fields.target);if(packContext.fields.dimension)$('dimension').value=human(packContext.fields.dimension);}
+updateGuiScale();refreshPreview();author.refresh();
 HeritageTooltips.setup({font,sprite});
 window.addEventListener('pagehide',saveDraft);
 document.addEventListener('visibilitychange',()=>{if(document.hidden){pause();saveDraft();}});

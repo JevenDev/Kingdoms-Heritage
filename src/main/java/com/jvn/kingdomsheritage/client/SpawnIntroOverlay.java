@@ -170,12 +170,12 @@ public final class SpawnIntroOverlay {
         float ticks = elapsed - intro.blackHoldTicks();
         if (intro.cinematicBars()) {
             IntroCinematicBars.render(graphics, width, height,
-                    IntroCinematicBars.visibility(ticks, intro.presentationTicks(), intro.barTransitionTicks()), barSlant);
+                    IntroCinematicBars.visibility(ticks, intro.presentationTicks(), intro.barTransitionTicks()), barSlant, intro.barHeight());
         }
         if (layout == null || layoutWidth != width || layoutHeight != height) {
             layoutWidth = width;
             layoutHeight = height;
-            layout = IntroLayout.create(minecraft.font, width, height, intro, text, subtitle, barSlant);
+            layout = IntroLayout.create(minecraft.font, width, height, intro, text, subtitle);
         }
         float alpha = Mth.clamp((intro.presentationTicks() - ticks) / intro.fadeOutTicks(), 0, 1);
         if (intro.animation() == IntroDefinition.Animation.FADE_IN) alpha *= Mth.clamp(ticks / intro.revealTicks(), 0, 1);
@@ -192,13 +192,8 @@ public final class SpawnIntroOverlay {
         graphics.pose().scale(block.scale(), block.scale(), 1);
         for (int index = 0; index < block.lines().size(); index++) {
             var line = block.lines().get(index);
-            if (intro.outline()) {
-                com.jvn.toucanlib.client.ToucanTextRenderer.renderOutlinedLine(graphics, Minecraft.getInstance().font,
-                        line.visible(visible), Math.round(block.lineLeft(line)), index * block.lineHeight(), color, ticks);
-            } else {
-                com.jvn.toucanlib.client.ToucanTextRenderer.renderLine(graphics, Minecraft.getInstance().font,
-                        line.visible(visible), Math.round(block.lineLeft(line)), index * block.lineHeight(), color, color >>> 24, ticks);
-            }
+            SelectionText.draw(graphics, Minecraft.getInstance().font, line.visible(visible),
+                    Math.round(block.lineLeft(line)), index * block.lineHeight(), color, ticks, intro.outline());
         }
         graphics.pose().popPose();
     }

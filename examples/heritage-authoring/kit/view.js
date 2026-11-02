@@ -77,11 +77,12 @@ function drawTooltipText(ctx,line,x,y,tick){
     }
   }
 }
-function showTooltip(lines,x,y){
+function showTooltip(lines,x,y,host=document.body){
   if(!glyphs.size)return;
   if(!lines.length){hideTooltip();return;}
   if(!tooltip){tooltip=document.createElement('canvas');tooltip.className='mc-tooltip';document.body.append(tooltip);}
-  tooltipState={lines,x,y};
+  if(tooltip.parentElement!==host)host.append(tooltip);
+  tooltipState={lines,x,y,host};
   const styled=lines.map((line,index)=>Array.isArray(line)?line:T.parse(line,{color:index?'#aaaaaa':'#ffffff'}));
   const limit=Math.max(20,Math.min(280,Math.floor((innerWidth-20)/2)-8)),wrapped=T.wrap(styled,limit,glyphAdvance);
   const animated=wrapped.some(line=>line.some(glyph=>glyph.obfuscated))&&!reducedMotion.matches,tick=animated?Math.floor(performance.now()/50):0;
@@ -93,19 +94,20 @@ function showTooltip(lines,x,y){
     wrapped.forEach((line,index)=>drawTooltipText(ctx,line,4,4+index*10+(index?2:0),tick));
     tooltip.setAttribute('role','tooltip');tooltip.setAttribute('aria-label',wrapped.map(line=>line.map(glyph=>glyph.ch).join('')).join('\n'));
   }
-  tooltip.hidden=false;tooltip.style.left=Math.max(4,Math.min(x+12,innerWidth-width*2-4))+'px';tooltip.style.top=Math.max(4,Math.min(y-12,innerHeight-height*2-4))+'px';
-  if(animated&&!tooltipFrame)tooltipFrame=requestAnimationFrame(()=>{tooltipFrame=null;if(tooltipState)showTooltip(tooltipState.lines,tooltipState.x,tooltipState.y);});
+  const bounds=globalThis.HeritageSession?.viewportBounds?.()??{left:0,top:0,right:innerWidth,bottom:innerHeight};
+  tooltip.hidden=false;tooltip.style.left=Math.max(bounds.left+4,Math.min(x+12,bounds.right-width*2-4))+'px';tooltip.style.top=Math.max(bounds.top+4,Math.min(y-12,bounds.bottom-height*2-4))+'px';
+  if(animated&&!tooltipFrame)tooltipFrame=requestAnimationFrame(()=>{tooltipFrame=null;if(tooltipState)showTooltip(tooltipState.lines,tooltipState.x,tooltipState.y,tooltipState.host);});
 }
 function hideTooltip(){if(tooltip)tooltip.hidden=true;tooltipState=null;if(tooltipFrame){cancelAnimationFrame(tooltipFrame);tooltipFrame=null;}}
 function bindTooltip(node,lines) {
-  node.addEventListener('pointermove',event=>showTooltip(typeof lines==='function'?lines():lines,event.clientX,event.clientY));
+  node.addEventListener('pointermove',event=>showTooltip(typeof lines==='function'?lines():lines,event.clientX,event.clientY,node.closest('dialog[open]')??document.body));
   node.addEventListener('pointerleave',hideTooltip);
-  node.addEventListener('focus',()=>{const r=node.getBoundingClientRect();showTooltip(typeof lines==='function'?lines():lines,r.right,r.top);});
+  node.addEventListener('focus',()=>{const r=node.getBoundingClientRect();showTooltip(typeof lines==='function'?lines():lines,r.right,r.top,node.closest('dialog[open]')??document.body);});
   node.addEventListener('blur',hideTooltip);
 }
-function setupTooltips() {
+function setupTooltips(screen='kit') {
   const sprites=new WeakMap();
-  HeritageTooltips.setup({screen:'kit',font:glyphs,sprite:(glyph,color)=>{
+  HeritageTooltips.setup({screen,font:glyphs,sprite:(glyph,color)=>{
     let colors=sprites.get(glyph);if(!colors){colors=new Map();sprites.set(glyph,colors);}
     if(!colors.has(color)){
       const canvas=document.createElement('canvas');canvas.width=glyph.sw;canvas.height=glyph.sh;
@@ -292,15 +294,15 @@ function dragStart(event,payload,onDrop,options={}) {
   return cleanup;
 }
 class Inventory {
-  constructor(host,{editable=false,onSelect,onMove,onDrop,onClick,onCollect,onClone,getCursor,getWarnings,onControl,isSelecting,getSelection,onToggleSelection,onMovePreview,onMovePreviewEnd,scaleWidth=0}={}) {
-    this.host=host;this.callbacks={onSelect,onMove,onDrop,onClick,onCollect,onClone,getCursor,getWarnings,onControl,isSelecting,getSelection,onToggleSelection,onMovePreview,onMovePreviewEnd};this.kit={items:[]};this.options={mode:'player'};this.selected=0;this.hover=null;this.aim={x:-12,y:0};this.scaleWidth=scaleWidth;this.editable=editable;this.ready=false;this.visible=true;this.dirty=true;this.bounds=null;
+  constructor(host,{editable=false,onSelect,onMove,onDrop,onClick,onCollect,onClone,getCursor,getWarnings,onControl,isSelecting,getSelection,onToggleSelection,onMovePreview,onMovePreviewEnd,scaleWidth=0,scaleHeight=0}={}) {
+    this.host=host;this.callbacks={onSelect,onMove,onDrop,onClick,onCollect,onClone,getCursor,getWarnings,onControl,isSelecting,getSelection,onToggleSelection,onMovePreview,onMovePreviewEnd};this.kit={items:[]};this.options={mode:'player'};this.selected=0;this.hover=null;this.aim={x:-12,y:0};this.scaleWidth=scaleWidth;this.scaleHeight=scaleHeight;this.editable=editable;this.ready=false;this.visible=true;this.dirty=true;this.bounds=null;
     this.frame=document.createElement('div');this.frame.className='mc-inventory';this.frame.dataset.editable=String(editable);this.frame.setAttribute('aria-busy','true');
     this.canvas=document.createElement('canvas');this.canvas.setAttribute('aria-hidden','true');this.background=document.createElement('canvas');
     this.frame.append(this.canvas);host.replaceChildren(this.frame);this.buttons=new Map();this.controls=new Map();this.entries=new Map();this.stacks=new Map();this.set(this.kit);
     this.invalidate=()=>{this.bounds=null;hideTooltip();};
     this.refit=()=>{this.invalidate();this.fit();};
     this.pointer=event=>{
-      if(!this.ready||!this.visible||document.hidden||reducedMotion.matches||!this.frame.isConnected)return;
+      if(this.options.controlledAim||!this.ready||!this.visible||document.hidden||reducedMotion.matches||!this.frame.isConnected)return;
       const r=this.bounds??=this.frame.getBoundingClientRect();if(!r.width)return;
       const scale=r.width/this.layout.width,x=Math.round(Math.max(-160,Math.min(160,(event.clientX-r.left)/scale-this.layout.inventoryX-this.layout.playerX))*2)/2,y=Math.round(Math.max(-160,Math.min(160,(event.clientY-r.top)/scale-this.layout.inventoryY-32))*2)/2;
       if(this.aim.x===x&&this.aim.y===y)return;this.aim={x,y};
@@ -320,7 +322,8 @@ class Inventory {
   fit() {
     let ratio=devicePixelRatio||1;
     for(let node=this.host;node;node=node.parentElement)ratio*=Number.parseFloat(getComputedStyle(node).zoom)||1;
-    const scale=HeritagePlayer.guiScale(Math.max(this.layout.width,this.scaleWidth),this.host.clientWidth,ratio),width=this.layout.width*scale,height=this.layout.height*scale;
+    const maximum=Number.parseFloat(getComputedStyle(this.host).maxHeight),available=this.editable&&Number.isFinite(maximum)?Math.min(this.host.clientWidth,maximum*Math.max(this.layout.width,this.scaleWidth)/Math.max(this.layout.height,this.scaleHeight)):this.host.clientWidth;
+    const scale=HeritagePlayer.guiScale(Math.max(this.layout.width,this.scaleWidth),available,ratio),width=this.layout.width*scale,height=this.layout.height*scale;
     this.scale=scale;this.frame.style.width=width/ratio+'px';this.frame.style.height=height/ratio+'px';
     this.host.style.overflowX=this.host.clientWidth<width/ratio?'auto':'';
     if(this.canvas.width!==width||this.canvas.height!==height){
@@ -418,7 +421,7 @@ class Inventory {
       this.layout=layout;this.layoutKey=layoutKey;this.dirty=true;this.bounds=null;this.hover=null;hideTooltip();
       this.fit();this.buildSlots();
     }
-    const key=JSON.stringify([this.kit.items,this.kit.selected_slot]);if(key!==this.contentKey){this.dirty=true;this.contentKey=key;}
+    const key=JSON.stringify([this.kit.items,this.kit.selected_slot,this.options.hideCrafting===true]);if(key!==this.contentKey){this.dirty=true;this.contentKey=key;}
     this.labels();
     this.select(this.selected);
   }
@@ -444,7 +447,8 @@ class Inventory {
   renderBase() {
     const {width,height,inventoryX,inventoryY,mode}=this.layout,ctx=this.background.getContext('2d');ctx.setTransform(this.scale,0,0,this.scale,0,0);ctx.imageSmoothingEnabled=false;ctx.clearRect(0,0,width,height);
     for(const part of this.layout.blits)this.blit(ctx,part);
-    if(mode!=='accessories')text(ctx,'Crafting',inventoryX+97,inventoryY+6,'#404040');
+    if(this.options.hideCrafting&&mode!=='accessories'){ctx.fillStyle='#c6c6c6';ctx.fillRect(inventoryX+95,inventoryY+4,78,74);}
+    else if(mode!=='accessories')text(ctx,'Crafting',inventoryX+97,inventoryY+6,'#404040');
     for(const position of this.layout.slots) {
       const entry=this.entry(position.id);
       if(entry)item(ctx,entry.item,position.x,position.y);
@@ -472,5 +476,6 @@ class Inventory {
     }
   }
 }
-globalThis.HeritageInventory={Inventory,icon,assets,bindTooltip,hideTooltip,dragStart,setCursor,setupTooltips};
+window.addEventListener('heritage:viewport-change',hideTooltip);
+globalThis.HeritageInventory={Inventory,item,icon,assets,bindTooltip,hideTooltip,dragStart,setCursor,setupTooltips};
 })();

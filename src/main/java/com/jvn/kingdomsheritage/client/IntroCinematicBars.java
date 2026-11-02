@@ -33,7 +33,9 @@ public final class IntroCinematicBars {
                 : Mth.lerp(RandomSource.create(token.getLeastSignificantBits()).nextFloat(), -12, 12);
     }
 
-    static int height(int screenHeight) { return Math.min(26, screenHeight / 4); }
+    static int height(int screenHeight) { return height(screenHeight, 26); }
+
+    static int height(int screenHeight, int requestedHeight) { return Math.min(requestedHeight, screenHeight / 4); }
 
     static float visibility(float ticks, int duration, int transitionTicks) {
         float transition = Math.min(transitionTicks, duration / 2F);
@@ -43,7 +45,11 @@ public final class IntroCinematicBars {
     }
 
     static void render(GuiGraphics graphics, int width, int height, float visibility, float slant) {
-        int barHeight = height(height);
+        render(graphics, width, height, visibility, slant, 26);
+    }
+
+    static void render(GuiGraphics graphics, int width, int height, float visibility, float slant, int requestedHeight) {
+        int barHeight = height(height, requestedHeight);
         if (barHeight <= 0 || visibility <= 0) return;
         if (shader == null) {
             int visibleHeight = Math.round(barHeight * visibility);

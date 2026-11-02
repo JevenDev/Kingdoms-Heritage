@@ -611,6 +611,7 @@ public final class SpawnSelectScreen extends Screen {
             int hoverAlpha = Math.round(hover * (1 - selection) * layout.opacity * 255);
             if (selectionAlpha > 0) graphics.renderOutline(2, 2, 124, 188, selectionAlpha << 24 | 0xf2cd83);
             if (hoverAlpha > 0) graphics.renderOutline(2, 2, 124, 188, hoverAlpha << 24 | 0xeeeeee);
+            boolean outline = net.minecraft.util.GsonHelper.getAsBoolean(choice, "outline", true);
             float titleScale = Math.max(1.5F, Math.min(2, 114F / Math.max(1, font.width(getMessage()))));
             var lines = font.split(getMessage(), (int) (114 / titleScale));
             lines = lines.subList(0, Math.min(3, lines.size()));
@@ -618,10 +619,10 @@ public final class SpawnSelectScreen extends Screen {
             graphics.pose().pushPose();
             graphics.pose().translate(7, CARD_HEIGHT - 18 - titleHeight, 0);
             graphics.pose().scale(titleScale, titleScale, 1);
-            for (int index = 0; index < lines.size(); index++) SelectionText.draw(graphics, font, lines.get(index), 0, index * font.lineHeight, textAlpha | 0xffffff);
+            for (int index = 0; index < lines.size(); index++) SelectionText.draw(graphics, font, lines.get(index), 0, index * font.lineHeight, textAlpha | 0xffffff, outline);
             graphics.pose().popPose();
             String subtitle = DefinitionJson.component(choice, "subtitle").getString();
-            SelectionText.draw(graphics, font, font.plainSubstrByWidth(subtitle, 114), 7, CARD_HEIGHT - 15, textAlpha | 0xdddddd);
+            SelectionText.draw(graphics, font, font.plainSubstrByWidth(subtitle, 114), 7, CARD_HEIGHT - 15, textAlpha | 0xdddddd, outline);
             int descriptionAlpha = Math.round(layout.details * layout.opacity * 255);
             if (descriptionAlpha >= 4 && frameWidth > 140) {
                 var description = font.split(DefinitionJson.component(choice, "description"), 230);
@@ -630,7 +631,7 @@ public final class SpawnSelectScreen extends Screen {
                         Math.round(layout.x + Math.min(366, frameWidth - 8) * layout.scale), getY() + Math.round(183 * layout.scale));
                 for (int index = 0; index < description.size(); index++) {
                     SelectionText.draw(graphics, font, description.get(index), 134, 10 + index * font.lineHeight - (int) descriptionScroll,
-                            descriptionAlpha << 24 | 0xffffff);
+                            descriptionAlpha << 24 | 0xffffff, outline);
                 }
                 graphics.disableScissor();
             }

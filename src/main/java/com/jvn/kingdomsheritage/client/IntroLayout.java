@@ -17,16 +17,12 @@ record IntroLayout(IntroLayout.Block title, IntroLayout.Block subtitle) {
     }
 
     static IntroLayout create(Font font, int width, int height, IntroDefinition intro,
-                              List<ToucanGlyphLayout.Glyph> text, List<ToucanGlyphLayout.Glyph> subtitle, float slant) {
+                              List<ToucanGlyphLayout.Glyph> text, List<ToucanGlyphLayout.Glyph> subtitle) {
         int horizontalPadding = Math.max(ToucanGlyphLayout.effectPadding(text, false), ToucanGlyphLayout.effectPadding(subtitle, false));
         int verticalPadding = Math.max(ToucanGlyphLayout.effectPadding(text, true), ToucanGlyphLayout.effectPadding(subtitle, true));
         float margin = Math.min(20 + Math.max(horizontalPadding, verticalPadding) * 1.5F, Math.min(width, height) / 4F);
         float top = margin;
         float bottom = height - margin;
-        if (intro.cinematicBars()) {
-            top = Math.min(height / 2F - 1, top + IntroCinematicBars.height(height) + Math.max(0, slant));
-            bottom = Math.max(height / 2F + 1, bottom - IntroCinematicBars.height(height) + Math.min(0, slant));
-        }
         float availableWidth = Math.max(1, width - margin * 2);
         float availableHeight = Math.max(1, bottom - top);
         float titleScale = intro.title() ? 1.5F : 1;

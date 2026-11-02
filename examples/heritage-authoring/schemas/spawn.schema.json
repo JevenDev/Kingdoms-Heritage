@@ -55,6 +55,11 @@
         "type": "string",
         "maxLength": 256
       },
+      "outline": {
+        "type": "boolean",
+        "default": true,
+        "description": "Use an outline for card titles, subtitles and descriptions. False uses the default text shadow."
+      },
       "image": {
         "type": "string",
         "pattern": "^(?:[a-z0-9_.-]+:)?[a-z0-9/._-]+$",

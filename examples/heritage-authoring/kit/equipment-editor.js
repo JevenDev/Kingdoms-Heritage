@@ -106,11 +106,11 @@ class EquipmentEditor {
     }));
   }
   drawRows() {
-    const host=$('slot-layout-rows');host.replaceChildren();
+    const host=$('slot-layout-rows');host.replaceChildren();$('slot-layout-dialog').dataset.mode=this.editMode;document.querySelector('#slot-layout-columns .layout-group').hidden=this.editMode!=='accessories';
     this.editRows.forEach((slot,index)=>{
       const row=document.createElement('div');row.className='slot-layout-row '+this.editMode;
       for(const [field,label,type] of [['name','Slot name','text'],['count','Count','number'],['order','Order','number'],...(this.editMode==='accessories'?[['group','Group','text']]:[])]){
-        const wrapper=document.createElement('label');wrapper.textContent=label;if(field==='group')wrapper.className='layout-group';
+        const wrapper=document.createElement('label'),caption=document.createElement('span');caption.textContent=label;caption.className='slot-layout-label';wrapper.append(caption);if(field==='group')wrapper.className='layout-group';
         const input=document.createElement('input');input.type=type;input.dataset.field=field;input.value=slot[field]??'';input.spellcheck=false;
         if(type==='number')input.step=1;
         if(field==='count'){input.min=0;input.max=256;}

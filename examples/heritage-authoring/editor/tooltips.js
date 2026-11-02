@@ -1,95 +1,132 @@
 'use strict';
 globalThis.HeritageTooltips={setup({font,sprite,screen='intro'}) {
+  if(document.getElementById('minecraft-tooltip'))return;
   const shared={
-    undo:['Undo','Ctrl+Z.'],
-    redo:['Redo','Ctrl+Y or Ctrl+Shift+Z.'],
-    'format-json':['Format JSON','Tidy the spacing and indentation.'],
-    format:['Format JSON','Tidy the spacing and indentation.']
+    undo:['Undo','Ctrl+Z. Revert the last edit.'],
+    redo:['Redo','Ctrl+Y or Ctrl+Shift+Z. Restore an undone edit.'],
+    'format-json':['Format JSON','Indent JSON without changing its values.'],
+    format:['Format JSON','Indent JSON without changing its values.'],
+    'json-tab':['Edit JSON','Edit the source directly. Extra fields are preserved.'],
+    'author-use-another':['Use and create another','Connect this draft, then start a new one.'],
+    'author-preview-pack':['Use and preview pack','Connect this draft and open the pack preview.'],
+    'use-in-pack':['Use in pack','Connect this draft to the selected location.'],
+    'delete-kit':['Delete saved kit','Delete the library draft. Existing packs will need a replacement.'],
+    'delete-intro':['Delete saved intro','Delete the library draft. Existing packs will need a replacement.']
   };
   const descriptions={...shared,...(screen==='kit'?{
-    'json-tab':['JSON','Edit the kit directly.'],
-    copy:['Copy JSON','Copy the whole kit, including item data and extra fields.'],
-    'kit-drafts':['Open kit','Each kit keeps its own edits and undo history.'],
-    'new-kit':['New kit','Start a new kit. Your other kits stay open.'],
-    example:['Example kit','Open an example as a new kit.'],
-    import:['Import JSON','Open a JSON file as a new kit.'],
-    'select-slots':['Select slots','Ctrl/Cmd-click to select slots. In selection mode, Shift-click selects a range.'],
-    'select-all-slots':['Select all items','Select items in every inventory, including hidden and cosmetic slots.'],
-    'delete-selected':['Delete selected','Custom or modified items ask for confirmation.'],
-    'clear-inventory':['Clear kit inventory','Clear every slot, held item, and pending edit.'],
-    'fill-stack':['Max stack','Fill the stack to the item’s limit.'],
-    'set-start':['Starting hotbar slot','Start with this hotbar slot selected.'],
-    'copy-slot':['Copy slot','Copy the item, count, and components.'],
-    'paste-slot':['Paste slot','Paste the copied item into this slot.'],
-    'item-category':['Item filter','Choose In this kit to show its vanilla items.'],
-    'configure-slots':['Slot layout','Match slot names and counts to your modpack.']
+    copy:['Copy JSON','Copy the whole kit, including components and extra fields.'],
+    'select-slots':['Select slots','Ctrl-click selects slots. Shift-click selects a range.'],
+    'select-all-slots':['Select all items','Includes hidden, cosmetic and pending slot edits.'],
+    'clear-inventory':['Clear kit inventory','Clears every inventory, held stack and pending edit.'],
+    'fill-stack':['Max stack','Fill this stack to the item’s limit.'],
+    'set-start':['Start here','Select this hotbar slot when the player starts.'],
+    'copy-slot':['Copy slot','Copy the item, count and components.'],
+    'paste-slot':['Paste slot','Place the copied stack here, merging compatible items.'],
+    'configure-slots':['Slot layout','Match preview slots to your modpack. Preview only.'],
+    'reset-slot-layout':['Use mod defaults','Replace this preview layout with the bundled mod defaults.'],
+    'show-cosmetics':['Cosmetic slots','Edit appearance slots separately from equipped items.'],
+    'revert-slot':['Revert edits','Discard unapplied ID and component edits for this slot.'],
+    'discard-drafts':['Discard edits','Discard unapplied edits in every slot.'],
+    'return-carried':['Return held item','Return the held stack to the inventory. Escape also returns it.'],
+    'apply-components':['Apply components','Replace this item’s component data with the edited JSON.'],
+    'apply-properties':['Apply properties','Save these properties to the selected item.'],
+    'ignore-stack-limits':['Ignore stack limit','Allow this stack to exceed the item’s normal limit.'],
+    'add-equipment':['Extra equipment slot','Add a named mod slot missing from the preview.'],
+    'restore':['Restore valid JSON','Replace invalid JSON with the last valid version.']
+  }:screen==='pack'?{
+    'pack-undo':['Undo pack edit','Ctrl+Z. Includes locations, assignments and shared draft edits.'],
+    'pack-redo':['Redo pack edit','Ctrl+Y or Ctrl+Shift+Z.'],
+    'pack-checkpoints':['Checkpoints','Save or restore a named version of this pack.'],
+    'resume-preview':['Resume preview','Return to your previous test choices.'],
+    'close-embedded-editor':['Done editing','Save the draft and return to this location.'],
+    'select-locations':['Select locations','Choose locations for bulk changes.'],
+    'bulk-assign-kits':['Assign kits','Replace the kit choices for all selected locations.'],
+    'bulk-assign-intro':['Assign intro','Replace default intros. Place overrides stay unchanged.'],
+    'make-local-copy':['Make a local copy','Edit this location’s copy without changing other locations.'],
+    'use-spawn-settings':['Use saved location','Also replace this location’s destination settings.'],
+    'card-description-toggle':['Card description','Expand or collapse the card’s in-game description.'],
+    'pack-try-flow':['Test full flow','Play cards, kit selection and arrival in sequence.'],
+    'location-try-flow':['Test full flow','Play cards, kit selection and arrival in sequence.'],
+    'preview-flow':['Preview full selection flow','Play cards, kit selection and arrival in sequence.'],
+    'pack-preview-resolution':['Preview resolution','Match the game window. Preview only.'],
+    'location-preview-resolution':['Preview resolution','Match the game window. Preview only.'],
+    'crop-reset':['Reset framing','Reset position and zoom. Keep the resolution setting.'],
+    'crop-guides':['Thirds','Overlay a 3 × 3 framing grid. Preview only.'],
+    'flow-pool':['Pool destination','Force a destination for this test. Export is unchanged.'],
+    'flow-inventory-mode':['Inventory preview','Choose a mod inventory layout for this test.'],
+    'flow-scale':['Preview GUI scale','Used when the pack does not lock GUI scale.'],
+    'flow-edit-location':['Edit location','Leave the preview and keep your test choices.'],
+    'flow-edit-kit':['Edit kit','Leave the preview and keep your test choices.'],
+    'flow-edit-intro':['Edit intro','Leave the preview and keep your test choices.'],
+    copy:['Copy JSON','Copy only the file shown in the inspector.']
   }:{
-    'json-tab':['JSON','Paste intro JSON or a full spawn file.'],
-    'text-tab':['Text & styling','Edit the text, colors, and effects.'],
-    copy:['Copy JSON','Copy your JSON, keeping extra fields.'],
-    'restore-json':['Restore valid JSON','Replace the invalid JSON with the last valid version.'],
-    'intro-drafts':['Open intro','Each intro keeps its own edits and undo history.'],
-    'intro-name':['Intro name','Name this draft for the intro list. This is not exported.'],
-    'new-intro':['New intro','Start a new intro. Your other intros stay open.'],
-    preset:['Example intro','Open an example as a new intro.'],
+    copy:['Copy JSON','Copy the source, including extra fields.'],
+    'restore-json':['Restore valid JSON','Replace invalid JSON with the last valid version.'],
+    'intro-name':['Intro name','Library name only. Not shown in game.'],
     effect:['Text effect',''],
-    'apply-effect':['Apply effect','Style selected text, or the whole field if nothing is selected.'],
-    color:['Text color','Also used as the first gradient color.'],
-    'apply-color':['Apply color','Color selected text, or the whole field if nothing is selected.'],
-    'apply-gradient':['Apply gradient','Blend the two colors across selected text, or the whole field.'],
-    resolution:['Preview resolution','Match the game window resolution. This is not exported.'],
-    viewport:['GUI scale','Match Minecraft’s GUI scale at the selected resolution. Auto uses the largest supported scale. This is not exported.'],
-    background:['Preview background','Only changes the preview.'],
-    timeline:['Timeline','Drag to choose a point in the intro. This pauses playback.'],
+    'apply-effect':['Apply effect','Style the selection, or the whole field if none.'],
+    color:['Text color','Also sets the gradient’s starting color.'],
+    'apply-color':['Apply color','Color the selection, or the whole field if none.'],
+    'apply-gradient':['Apply gradient','Blend both colors across the selection, or the whole field.'],
+    resolution:['Preview resolution','Match the game window. Preview only.'],
+    viewport:['Preview GUI scale','Match Minecraft’s GUI scale. Preview only.'],
+    background:['Preview background','Change the preview backdrop. Export is unchanged.'],
+    timeline:['Scrub intro','Choose a point in the intro and pause playback.'],
     'new-angle':['New angle','Try another angle. In-game angles are random.'],
-    biome:['Sample biome','Preview <biome> with this name.'],
-    structure:['Sample structure','Preview <structure> with this name.'],
-    dimension:['Sample dimension','Preview <dimension> with this name.'],
-    'timing-tab':['Timing','20 ticks = 1 second.'],
-    'locations-tab':['Sample locations','Try sample names for location tags. These are not exported.']
+    'bar-height-range':['Bar thickness','GUI pixels per bar. Text placement stays independent.'],
+    'text-mode-markup':['Markup','Edit style and location tags directly.'],
+    'title-custom':['Custom title coordinates','Position the text anchor as a percentage of the screen.'],
+    'subtitle-custom':['Custom subtitle coordinates','Position the text anchor as a percentage of the screen.'],
+    'show-text-boxes':['Text boxes','Show draggable text bounds. Preview only.'],
+    'move-title':['Move title','Drag the title or use arrow keys. Shift moves farther.'],
+    'move-subtitle':['Move subtitle','Drag the subtitle or use arrow keys. Shift moves farther.'],
+    mute:['Preview sound','Mute this preview. Exported sound settings stay unchanged.']
   })};
   const fields={
-    text:['Main text','Supports style tags, location tags, and line breaks.'],
-    subtitle:['Subtitle','Optional second message. Style and position it separately.'],
-    title:['Larger title','1.5 times the normal size. Shrinks to fit if needed.'],
-    large_subtitle:['Larger subtitle','1.5 times the normal size. Shrinks to fit if needed.'],
-    subtitle_position:['Subtitle position','Choose the same position as the title to place the subtitle below it.'],
-    blip:['Dialogue blips','Play a blip as text appears. Muting the preview does not turn this off.'],
-    black_hold_ticks:['Black screen','Time on a black screen before the intro. 20 ticks = 1 second.'],
-    fade_from_black_ticks:['World fade','Time for the world and visible HUD to fade in, in ticks.'],
-    reveal_ticks:['Text reveal duration','Time for the text to appear, in ticks.'],
-    hold_ticks:['Text hold','Time the full message stays visible, in ticks.'],
-    fade_out_ticks:['Text fade out','Time for the text to fade out, in ticks.'],
-    bar_transition_ticks:['Bar movement','Time for the bars to move in or out, in ticks.']
+    title:['Larger title','Use 1.5× text size, reduced as needed to fit.'],
+    large_subtitle:['Larger subtitle','Use 1.5× text size, reduced as needed to fit.'],
+    subtitle_position:['Subtitle position','Matching the title’s position places the subtitle below it.'],
+    control:['Player control','Choose when the player can move during arrival.'],
+    blip:['Dialogue blips','Play sounds as text appears. Preview mute is separate.'],
+    bar_height:['Bar thickness','GUI pixels per bar, capped at ¼ screen height. Text stays independent.'],
+    black_hold_ticks:['Black screen','Delay before the world fades in. 20 ticks = 1 second.'],
+    fade_from_black_ticks:['World fade','World and visible HUD fade-in time. 20 ticks = 1 second.'],
+    reveal_ticks:['Text reveal','Time for all text to appear. 20 ticks = 1 second.'],
+    hold_ticks:['Text hold','Time with the full message visible. 20 ticks = 1 second.'],
+    fade_out_ticks:['Text fade out','Text fade-out time. 20 ticks = 1 second.'],
+    bar_transition_ticks:['Bar movement','Time to enter or exit. 20 ticks = 1 second.']
   };
-  const effects={wave:'Move letters in a wave.',shake:'Make the letters shake.',pulse:'Make text brighten and dim.',jump:'Make letters jump one after another.',rainbow:'Cycle text through rainbow colors.',strike:'Draw a line through the text.',obfuscated:'Show changing random characters.'};
+  const effects={wave:'Move letters in a wave.',shake:'Shake letters.',pulse:'Brighten and dim text.',jump:'Jump letters in sequence.',rainbow:'Cycle through rainbow colors.',strike:'Draw a line through text.',obfuscated:'Display changing random characters.'};
+  const dynamic=[
+    ['#component-details > summary',['Item components','Edit Minecraft component JSON for this item.']],
+    ['.author-shared-context > button',['Make a local copy','Edit this location’s copy without changing other locations.']],
+    ['[data-wrap]',['Text style','Style the selection, or the whole field if none.']],
+    ['[data-token]',['Insert location name','Use the player’s arrival location name in game.']],
+    ['[data-lore-format],[data-lore-apply-color]',['Style lore','Style the selection, or the entire lore line if none.']],
+    ['[data-item-property=damage]',['Damage used','Durability already consumed. Zero means fully repaired.']],
+    ['[data-item-property=glint]',['Enchantment glint','Override the visual shimmer without adding enchantments.']],
+    ['[data-preview-kit]',['Preview kit','Show this kit in the player view.']],
+    ['[data-checkpoint-action=restore]',['Restore checkpoint','Restore this pack’s saved locations, kits and intros.']],
+    ['[data-try-path]',['Try path','Test this location, kit and destination combination.']],
+    ['[data-include-allowed-kit]',['Include kit','Enable this kit in the pack and this location.']]
+  ];
   function attach(control,description) {
     if(!control||!description) return;
     const target=control.closest('label')||control;
-    target.dataset.tooltip=JSON.stringify(description);
-    control.removeAttribute('title');
+    if(!target.dataset.tooltip)target.dataset.tooltip=JSON.stringify(description);
+    target.setAttribute('title','');control.setAttribute('title','');
   }
   for(const [id,description] of Object.entries(descriptions)) attach(document.getElementById(id),description);
   for(const control of document.querySelectorAll('[data-field]')) attach(control,fields[control.dataset.field]);
-  for(const control of document.querySelectorAll('[data-wrap]')) attach(control,[control.textContent.trim(),'Style selected text, or the whole field if nothing is selected.']);
-  for(const control of document.querySelectorAll('[data-token]')) attach(control,['Insert '+control.dataset.token,'Use the '+control.dataset.token+' name at the player’s spawn.']);
-  const navigation={
-    'gallery.html':['Intro editor','Create and preview spawn intros.'],
-    'kit-editor.html':['Kit creator','Build starter kits and choose inventory slots.'],
-    'docs.html':['Documentation','Pack setup, fields, and examples.'],
-    'docs.html#/kits':['Documentation','Pack setup, fields, and examples.'],
-    'docs.html#/text-styles':['Style examples','Preview text styles, colors, and effects.']
-  };
-  for(const link of document.querySelectorAll('header nav a'))attach(link,navigation[link.getAttribute('href')]);
-  attach(document.querySelector('header .home-link'),['Home','Open the Heritage pack tools.']);
-  if(screen==='kit')attach(document.querySelector('#component-details summary'),['Item components','Click Apply components to update the kit.']);
+  for(const control of document.querySelectorAll('[data-wrap]'))attach(control,[control.getAttribute('aria-label')||control.textContent.trim(),'Style the selection, or the whole field if none.']);
+  for(const control of document.querySelectorAll('[data-token]'))attach(control,['Insert '+control.dataset.token,'Use the player’s arrival location name in game.']);
   const tooltip=document.createElement('div'),canvas=document.createElement('canvas'),description=document.createElement('span');
-  tooltip.id='minecraft-tooltip';tooltip.role='tooltip';tooltip.hidden=true;
+  tooltip.id='minecraft-tooltip';tooltip.role='tooltip';tooltip.setAttribute('popover','manual');tooltip.hidden=true;
   description.className='sr-only';canvas.setAttribute('aria-hidden','true');
   tooltip.append(canvas,description);document.body.append(tooltip);
   let target=null,focusTarget=null,timer=null,point=null;
   function hide() {
-    clearTimeout(timer);tooltip.hidden=true;
+    clearTimeout(timer);if(tooltip.matches(':popover-open'))tooltip.hidePopover();tooltip.hidden=true;
     if(focusTarget) {
       const ids=(focusTarget.getAttribute('aria-describedby')||'').split(' ').filter(id=>id&&id!==tooltip.id);
       if(ids.length) focusTarget.setAttribute('aria-describedby',ids.join(' '));
@@ -103,6 +140,16 @@ globalThis.HeritageTooltips={setup({font,sprite,screen='intro'}) {
     if(x+width>innerWidth-6) x=point?point.x-width-12:bounds.left-width-12;
     if(y+height>innerHeight-6) y=innerHeight-height-6;
     tooltip.style.left=Math.max(6,x)+'px';tooltip.style.top=Math.max(6,y)+'px';
+  }
+  function customTarget(node,owner){
+    for(let current=node;current;current=current.parentElement){current.setAttribute('title','');if(current===owner)break;}
+    return owner;
+  }
+  function resolve(node){
+    const control=node.closest('button,a,input,select,textarea,summary'),explicit=node.closest('[data-tooltip]');if(explicit&&(!control||control===explicit||explicit.tagName==='LABEL'&&explicit.contains(control)))return customTarget(node,explicit);
+    if(!control)return null;
+    const rule=dynamic.find(([selector])=>control.matches(selector));if(!rule)return null;
+    attach(control,rule[1]);return customTarget(node,control.closest('[data-tooltip]'));
   }
   function render() {
     let [title,body]=JSON.parse(target.dataset.tooltip);
@@ -149,19 +196,20 @@ globalThis.HeritageTooltips={setup({font,sprite,screen='intro'}) {
       focusTarget=event.target;
       focusTarget.setAttribute('aria-describedby',((focusTarget.getAttribute('aria-describedby')||'')+' '+tooltip.id).trim());
     }
-    timer=setTimeout(()=>{render();tooltip.hidden=false;position();},focus?0:300);
+    timer=setTimeout(()=>{if(!target?.isConnected||!target.checkVisibility()){hide();return;}render();tooltip.hidden=false;tooltip.showPopover();position();},focus?0:300);
   }
   document.addEventListener('pointerover',event=>{
     if(event.pointerType==='touch') return;
-    const element=event.target.closest('[data-tooltip]');
+    const element=resolve(event.target);
     if(!element)hide();else if(element!==target)show(element,event);
   });
   document.addEventListener('pointermove',event=>{if(target&&point){point={x:event.clientX,y:event.clientY};if(!tooltip.hidden)position();}});
   document.addEventListener('pointerout',event=>{if(target&&point&&!target.contains(event.relatedTarget))hide();});
-  document.addEventListener('focusin',event=>{const element=event.target.closest('[data-tooltip]');if(element)show(element,event,true);});
+  document.addEventListener('focusin',event=>{const element=resolve(event.target);if(element)show(element,event,true);});
   document.addEventListener('focusout',hide);
+  document.addEventListener('change',event=>{if(target?.contains(event.target)&&!tooltip.hidden){if(!target.checkVisibility()){hide();return;}render();position();}});
   document.addEventListener('pointerdown',hide);
   document.addEventListener('keydown',event=>{if(event.key==='Escape')hide();});
-  document.addEventListener('scroll',hide,true);
-  window.addEventListener('resize',hide);
+  document.addEventListener('scroll',()=>{if(target&&!point&&target.checkVisibility()){if(!tooltip.hidden)position();}else hide();},true);
+  window.addEventListener('resize',hide);window.addEventListener('blur',hide);document.addEventListener('visibilitychange',hide);
 }};

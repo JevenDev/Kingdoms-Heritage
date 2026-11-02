@@ -53,8 +53,8 @@ function publish(source) {
 }
 function position() {
   if(!dialog.open||!target)return;
-  const viewport=window.visualViewport,viewportWidth=viewport?.width??innerWidth,viewportHeight=viewport?.height??innerHeight;
-  const minLeft=(viewport?.offsetLeft??0)+12,minTop=(viewport?.offsetTop??0)+12;
+  const viewport=window.visualViewport,bounds=globalThis.HeritageSession?.viewportBounds?.()??{left:viewport?.offsetLeft??0,top:viewport?.offsetTop??0,right:(viewport?.offsetLeft??0)+(viewport?.width??innerWidth),bottom:(viewport?.offsetTop??0)+(viewport?.height??innerHeight)};
+  const viewportWidth=bounds.right-bounds.left,viewportHeight=bounds.bottom-bounds.top,minLeft=bounds.left+12,minTop=bounds.top+12;
   dialog.style.maxHeight=Math.max(0,viewportHeight-24)+'px';dialog.style.maxWidth=Math.max(0,viewportWidth-24)+'px';
   const anchor=target.getBoundingClientRect(),width=dialog.offsetWidth,height=dialog.offsetHeight;
   const maxLeft=Math.max(minLeft,minLeft+viewportWidth-width-24),maxTop=Math.max(minTop,minTop+viewportHeight-height-24);
@@ -127,5 +127,5 @@ if('EyeDropper' in window) {
   });
 }
 document.addEventListener('scroll',position,true);
-window.addEventListener('resize',position);window.visualViewport?.addEventListener('resize',position);
+window.addEventListener('resize',position);window.visualViewport?.addEventListener('resize',position);window.addEventListener('heritage:viewport-change',position);
 })();

@@ -15,8 +15,10 @@ import net.minecraft.util.profiling.ProfilerFiller;
 import net.neoforged.neoforge.event.AddReloadListenerEvent;
 
 public final class HeritageCatalog {
-    record Snapshot(Map<ResourceLocation, SpawnDefinition> spawns, Map<ResourceLocation, KitDefinition> kits) {}
-    private static Snapshot current = new Snapshot(Map.of(), Map.of());
+    record Snapshot(Map<ResourceLocation, SpawnDefinition> spawns,
+                    Map<ResourceLocation, KitDefinition> kits, SelectionSettings selection) {}
+    private static final ResourceLocation SELECTION = ResourceLocation.fromNamespaceAndPath("kingdomsheritage", "selection");
+    private static Snapshot current = new Snapshot(Map.of(), Map.of(), SelectionSettings.DEFAULT);
     private static long revision;
 
     private HeritageCatalog() {}
@@ -24,15 +26,20 @@ public final class HeritageCatalog {
     public static Map<ResourceLocation, SpawnDefinition> spawns() { return current.spawns; }
     public static Map<ResourceLocation, KitDefinition> kits() { return current.kits; }
     public static long revision() { return revision; }
+    public static int guiScale() { return current.selection.guiScale(); }
 
     public static void register(AddReloadListenerEvent event) {
         event.addListener(new Loader());
     }
 
     static Snapshot parse(Map<ResourceLocation, JsonElement> resources) {
+        SelectionSettings selection = resources.containsKey(SELECTION)
+                ? SelectionSettings.parse(GsonHelper.convertToJsonObject(resources.get(SELECTION), "kingdomsheritage:selection"))
+                : SelectionSettings.DEFAULT;
         Map<ResourceLocation, SpawnDefinition> spawns = new LinkedHashMap<>();
         Map<ResourceLocation, KitDefinition> kits = new LinkedHashMap<>();
         resources.entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(entry -> {
+            if (entry.getKey().equals(SELECTION)) return;
             try {
                 String path = entry.getKey().getPath();
                 JsonObject json = entry.getValue().getAsJsonObject();
@@ -68,7 +75,7 @@ public final class HeritageCatalog {
         Map<ResourceLocation, KitDefinition> sortedKits = new LinkedHashMap<>();
         kits.values().stream().sorted(Comparator.comparingInt(KitDefinition::order).thenComparing(KitDefinition::id))
                 .forEach(value -> sortedKits.put(value.id(), value));
-        return new Snapshot(java.util.Collections.unmodifiableMap(sortedSpawns), java.util.Collections.unmodifiableMap(sortedKits));
+        return new Snapshot(java.util.Collections.unmodifiableMap(sortedSpawns), java.util.Collections.unmodifiableMap(sortedKits), selection);
     }
 
     private static final class Loader extends SimplePreparableReloadListener<Snapshot> {
@@ -76,7 +83,8 @@ public final class HeritageCatalog {
         protected Snapshot prepare(ResourceManager manager, ProfilerFiller profiler) {
             Map<ResourceLocation, JsonElement> resources = new LinkedHashMap<>();
             manager.listResources("heritage", id -> id.getPath().endsWith(".json")
-                    && (id.getPath().startsWith("heritage/spawns/") || id.getPath().startsWith("heritage/kits/")))
+                    && (id.getPath().startsWith("heritage/spawns/") || id.getPath().startsWith("heritage/kits/")
+                    || id.equals(SELECTION.withPath("heritage/selection.json"))))
                     .forEach((id, resource) -> {
                         try (var reader = resource.openAsReader()) {
                             String path = id.getPath();

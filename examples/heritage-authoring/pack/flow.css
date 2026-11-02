@@ -1,0 +1,21 @@
+#flow-dialog { box-sizing: border-box; width: min(1200px,96vw); max-width: 96vw; max-height: 96vh; padding: 16px; overflow: auto; }
+#flow-dialog::backdrop { background: #000b; }
+.flow-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 12px; }
+.flow-toolbar h2 { margin-right: auto; }
+.flow-toolbar .check { margin: 0; align-items: center; }
+#flow-phase { color: var(--muted); font-size: 13px; }
+.flow-settings { margin-bottom: 12px; }
+.flow-settings-fields { display: grid; grid-template-columns: repeat(auto-fit,minmax(135px,1fr)); gap: 12px; margin-top: 12px; }
+.flow-stage { position: relative; width: 100%; aspect-ratio: 16/9; background: #101319; isolation: isolate; }
+#flow-screen { position: absolute; inset: 0; }
+.flow-stage:fullscreen { display: grid; place-items: center; width: 100vw; height: 100vh; background: #000; }
+.flow-stage:fullscreen #flow-screen { position: relative; inset: auto; width: min(100vw,calc(100vh * var(--flow-ratio))); height: min(100vh,calc(100vw / var(--flow-ratio))); }
+#flow-canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; border: 0; border-radius: 0; }
+#flow-controls { position: absolute; inset: 0; pointer-events: none; }
+#flow-controls .flow-hit { position: absolute; pointer-events: auto; min-height: 0; min-width: 0; padding: 0; border: 0; margin: 0; border-radius: 0; background: transparent; color: transparent; box-shadow: none; }
+#flow-controls .flow-hit:focus-visible { outline: none; }
+#flow-controls .flow-hit:disabled { cursor: default; }
+#flow-inventory { position: absolute; }
+#flow-inventory .mc-inventory { margin: 0; }
+.flow-help { max-width: none; }
+@media (max-width: 600px) { #flow-dialog { padding: 10px; } .flow-toolbar { gap: 8px; } .flow-toolbar h2 { flex-basis: 100%; } }

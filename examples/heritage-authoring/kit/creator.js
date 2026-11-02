@@ -2,11 +2,12 @@
 'use strict';
 const K=HeritageKit,E=HeritageEquipment,M=HeritageKitMouse,V=HeritageInventory,T=HeritageItemText,$=id=>document.getElementById(id),storageKey='heritage.kitCreator.v1';
 if(!await HeritageSession.acquire(storageKey))return;
+const editorRoute=new URLSearchParams(location.search),requested=editorRoute.get('draft');
 const searchIndex=HeritageItems.items.map(item=>({item,search:(item.name+' '+item.id).toLowerCase()})),itemButtons=new Map();
 let documentState={title:'My kit',items:[]},validDocument={title:'My kit',items:[]},selected=0,page=0,rawInvalid=false,errorState=null,drafts=new Map(),loreSources=new Map(),slotClipboard=null;
 let activeItemButton,carried=null,pendingDelete=null,selectedSlots=new Set(),selectionMode=false,selectionAnchor=null;
 let pageSize=90,pageCount=1,wheelPageTime=-Infinity;
-let history=[],historyIndex=-1,historyGroup=null,historyTime=0,saveTimer,saveUnavailable=false,saveBlocked=false,workspace;
+let history=[],historyIndex=-1,historyGroup=null,historyTime=0,saveTimer,saveUnavailable=false,saveBlocked=false,workspace,author,propertiesEditor;
 const view=new V.Inventory($('inventory'),{
   editable:true,
   onSelect:(slot,event)=>{if(event&&!event.altKey&&selectedSlots.size)deselectSlots();selectSlot(slot);},
@@ -31,7 +32,7 @@ const snapshot=()=>({source:source(),document:K.copy(documentState),validDocumen
 function saveDraft() {
   clearTimeout(saveTimer);
   if(saveBlocked)return;
-  try{workspace.update(snapshot());localStorage.setItem(storageKey,JSON.stringify(workspace.serialize()));$('draft-status').textContent='Draft saved';saveUnavailable=false;}
+  try{workspace.update(snapshot());localStorage.setItem(storageKey,JSON.stringify(workspace.serialize()));$('draft-status').textContent='Draft saved';saveUnavailable=false;author?.saved();}
   catch(failure){saveUnavailable=true;$('draft-status').textContent='Draft could not be saved. Download a copy.';}
 }
 function scheduleSave() {
@@ -74,7 +75,7 @@ function draftOptions() {
     option.textContent=name+(count>1?' ('+count+')':'');
   }
   field.value=workspace.active;
-  $('use-in-pack').href='pack-assembler.html?kit='+encodeURIComponent(workspace.active);
+  HeritageWorkflow.editor('kit',workspace.active);author?.refresh();
 }
 function activateKit(id) {
   if(id===workspace.active)return;
@@ -109,6 +110,8 @@ function canEdit(target='') {
 function heldLabel(stack) {return stack?'Holding '+(stack.count??1)+' × '+T.name(stack):'';}
 function feedback() {
   const pending=drafts.size,blocked=rawInvalid||!!errorState||pending>0||!!carried;
+  $('slot-item-details').hidden=!view.entry(selected);$('empty-slot-hint').hidden=!!view.entry(selected);
+  $('use-in-pack').setAttribute('aria-disabled',String(blocked||saveBlocked||saveUnavailable));
   $('download').disabled=blocked;$('copy').disabled=!!carried||pending>0;
   $('format').disabled=!!carried||rawInvalid&&errorState?.message.startsWith('Invalid JSON:');
   $('kit-json').readOnly=!!carried;
@@ -158,7 +161,7 @@ function feedback() {
   $('deselect-slots').disabled=!selectedSlots.size&&!selectionMode;
   $('delete-selected').hidden=$('deselect-slots').hidden=!selectedSlots.size&&!selectionMode;
   $('clear-inventory').disabled=locked||!(documentState.items?.length||drafts.size||carried);
-  draftOptions();
+  propertiesEditor?.setLocked(locked||!view.entry(selected)||!!carried);draftOptions();
 }
 function slotFields() {
   const stack=view.entry(selected)?.item,draft=drafts.get(selected);
@@ -173,7 +176,7 @@ function slotFields() {
   $('revert-slot').hidden=!draft;
   const starting=typeof selected==='number'&&selected===(documentState.selected_slot??0);
   $('set-start').setAttribute('aria-pressed',String(starting));$('set-start').textContent=starting?'Starting slot':'Start here';
-  loreFields(stack);markSelectedItem();feedback();
+  propertiesEditor?.refresh(stack,draft,rawInvalid||documentState.enabled===false||!stack||!!carried,selected);loreFields(stack);markSelectedItem();feedback();
 }
 function loreFields(stack) {
   const lines=stack?.components?.['minecraft:lore'],values=Array.isArray(lines)?lines:[],container=$('lore-lines'),previous=loreSources.get(selected)??[];
@@ -186,7 +189,7 @@ function loreFields(stack) {
       row=document.createElement('div');row.className='lore-line';
       const input=document.createElement('textarea'),remove=document.createElement('button');
       input.rows=2;input.dataset.loreLine=index;input.setAttribute('aria-label','Lore line '+(index+1));input.setAttribute('aria-describedby','lore-hint');input.spellcheck=false;
-      remove.type='button';remove.className='primary';remove.dataset.removeLore=index;remove.textContent='Remove';remove.setAttribute('aria-label','Remove lore line '+(index+1));
+      remove.type='button';remove.dataset.removeLore=index;remove.textContent='Remove';remove.setAttribute('aria-label','Remove lore line '+(index+1));
       const toolbar=document.createElement('div'),preset=document.createElement('select'),tint=document.createElement('input'),apply=document.createElement('button');
       toolbar.className='lore-format';toolbar.role='group';toolbar.setAttribute('aria-label','Lore line '+(index+1)+' formatting');
       preset.dataset.loreColor=index;preset.setAttribute('aria-label','Lore line '+(index+1)+' color preset');
@@ -195,10 +198,10 @@ function loreFields(stack) {
       }
       const custom=document.createElement('option');custom.value='custom';custom.textContent='Custom color';custom.disabled=true;preset.append(custom);preset.value='#ffaa00';
       tint.type='color';tint.value='#ffaa00';tint.dataset.loreTint=index;tint.setAttribute('aria-label','Lore line '+(index+1)+' custom color');
-      apply.type='button';apply.className='primary';apply.textContent='Apply color';apply.dataset.loreApplyColor=index;apply.setAttribute('aria-label','Lore line '+(index+1)+' apply color');
+      apply.type='button';apply.textContent='Apply color';apply.dataset.loreApplyColor=index;apply.setAttribute('aria-label','Lore line '+(index+1)+' apply color');
       toolbar.append(preset,tint,apply);
       for(const [key,label] of Object.entries({bold:'Bold',italic:'Italic',underline:'Underline',strike:'Strike',obfuscated:'Obfuscated'})){
-        const button=document.createElement('button');button.type='button';button.className='primary';button.dataset.loreFormat=key;button.dataset.loreIndex=index;button.textContent=label;
+        const button=document.createElement('button');button.type='button';button.dataset.loreFormat=key;button.dataset.loreIndex=index;button.textContent=label;
         button.setAttribute('aria-label','Lore line '+(index+1)+' '+label.toLowerCase());toolbar.append(button);
       }
       row.append(input,remove,toolbar);container.append(row);
@@ -234,8 +237,14 @@ function editLore(update,key=null) {
     return commit(E.setSlot(documentState,selected,next),key);
   });
 }
+function renderInventory() {
+  preview.reveal(selected);const options=preview.sync();
+  const layouts=['player','curios','accessories'].map(mode=>E.layout(documentState,{...options,mode,cosmetics:true,offset:0}));
+  view.scaleWidth=Math.max(...layouts.map(layout=>layout.width));view.scaleHeight=Math.max(...layouts.map(layout=>layout.height));
+  view.selected=selected;view.set(documentState,options);
+}
 function display() {
-  preview.reveal(selected);view.selected=selected;view.set(documentState,preview.sync());
+  renderInventory();
   $('title').value=documentState.title??'';$('description').value=documentState.description??'';
   $('order').value=documentState.order??0;$('selected-slot').value=documentState.selected_slot??0;
   $('tags').value=Array.isArray(documentState.tags)?documentState.tags.join(', '):'';
@@ -248,7 +257,7 @@ function display() {
 function selectSlot(slot) {
   if(errorState?.target==='count'&&errorState.slot!==slot){view.select(selected);notice('Fix the count or restore valid JSON before switching slots.');return;}
   if(errorState?.slot!==undefined&&errorState.slot!==slot)errorState=null;
-  selected=slot;preview.reveal(slot);view.selected=slot;view.set(documentState,preview.sync());slotFields();historyGroup=null;scheduleSave();
+  selected=slot;renderInventory();slotFields();historyGroup=null;scheduleSave();
 }
 function syncSelection() {view.select(selected);feedback();scheduleSave();}
 function deselectSlots() {selectedSlots.clear();selectionMode=false;selectionAnchor=null;syncSelection();}
@@ -397,12 +406,12 @@ function place(id,slot=selected,fill=false) {
     applyMouse(M.click(documentState,{entry:{index:0,item},origin:slot},slot),slot);
   });
 }
-function updateDraft() {
+function updateDraft(event,properties=null) {
   const stack=view.entry(selected)?.item;
-  const existing=drafts.get(selected),draft={id:$('item-id').value,components:$('components').value,base:existing?.base??fingerprint(stack)};
+  const existing=drafts.get(selected),draft={id:$('item-id').value,components:$('components').value,base:existing?.base??fingerprint(stack),...(properties?{properties}:event?.target?.id!=='components'&&existing?.properties&&event?{properties:existing.properties}:{})};
   let equalComponents=false;
   try{equalComponents=JSON.stringify(JSON.parse(draft.components))===JSON.stringify(stack?.components||{});}catch(failure){equalComponents=false;}
-  if(draft.id===(stack?.id??'')&&equalComponents)drafts.delete(selected);else drafts.set(selected,draft);
+  if(draft.id===(stack?.id??'')&&equalComponents&&!draft.properties)drafts.delete(selected);else drafts.set(selected,draft);
   $('component-state').textContent=drafts.has(selected)?'Not applied':'';$('revert-slot').hidden=!drafts.has(selected);
   record('draft:'+selected);
 }
@@ -410,6 +419,7 @@ function applySlotDraft(componentsOnly=false) {
   attempt(()=>{
     const target=componentsOnly?'components':'item-id';if(!canEdit(target))return;
     const stack=view.entry(selected)?.item,draft=drafts.get(selected);
+    if(draft?.properties)throw new Error('Fix the item property fields or revert their pending edits before applying.');
     if(draft&&draft.base!==fingerprint(stack))throw new Error('This slot changed in JSON. Revert these edits before trying again.');
     if(componentsOnly&&!stack)throw new Error('Choose an item in this slot first.');
     let next;
@@ -419,6 +429,7 @@ function applySlotDraft(componentsOnly=false) {
       next=same?K.copy(stack):{id:K.normalize(id)};
       next.count=Math.min(stack?.count??1,K.maxCount({...view.entry(selected),item:next}));next.components=JSON.parse($('components').value);
     }
+    HeritageItemProperties.validate(next.components,K.items.get(K.normalize(next.id))?.max??99);
     const pendingDraft=componentsOnly&&draft&&draft.id!==next.id?{id:draft.id,components:JSON.stringify(next.components||{},null,2),base:fingerprint(next)}:null;
     if(commit(E.setSlot(documentState,selected,next),target,{discard:[selected],pendingDraft}))notice('Slot updated.');
   },componentsOnly?'components':'item-id');
@@ -524,13 +535,7 @@ for(const [id,name] of Object.entries({'json-tab':'braces','details-tab':'slider
 $('redo').querySelector('svg').style.transform='scaleX(-1)';
 for(let slot=0;slot<9;slot++){const option=document.createElement('option');option.value=slot;option.textContent='Hotbar '+(slot+1);$('selected-slot').append(option);}
 for(const sample of HeritageKitExamples){const option=document.createElement('option');option.value=sample.id;option.textContent=sample.kit.title;$('example').append(option);}
-function tab(which) {
-  for(const name of ['json','details']){$(name+'-panel').hidden=name!==which;$(name+'-tab').setAttribute('aria-selected',String(name===which));$(name+'-tab').tabIndex=name===which?0:-1;}
-}
-for(const name of ['json','details']){
-  $(name+'-tab').addEventListener('click',()=>tab(name));
-  $(name+'-tab').addEventListener('keydown',event=>{if(event.key==='ArrowLeft'||event.key==='ArrowRight'){event.preventDefault();const next=name==='json'?'details':'json';tab(next);$(next+'-tab').focus();}});
-}
+function tab(which) {if(author)author.show(which==='json'?'json':'details');}
 $('kit-json').addEventListener('input',()=>parse());
 $('ignore-stack-limits').addEventListener('change',()=>{
   if(rawInvalid||carried)return;
@@ -542,10 +547,11 @@ $('undo').addEventListener('click',()=>restore(-1));$('redo').addEventListener('
 document.addEventListener('keydown',event=>{
   if(document.querySelector('dialog[open]'))return;
   const modifier=event.ctrlKey||event.metaKey,field=event.target.closest('input,textarea,select,[contenteditable=true]'),slot=event.target.closest('.mc-slot');
-  if(modifier&&event.key.toLowerCase()==='f'){event.preventDefault();$('search-items').focus();$('search-items').select();return;}
+  if(modifier&&event.key.toLowerCase()==='f'){event.preventDefault();author?.show('inventory');$('search-items').focus();$('search-items').select();return;}
   if(modifier&&!event.altKey&&['z','y'].includes(event.key.toLowerCase())&&(!field||field.closest('#lore-lines')||['kit-json','title','description','order','tags','count'].includes(field.id))){
     event.preventDefault();restore(event.key.toLowerCase()==='y'||event.shiftKey?1:-1);return;
   }
+  if(author?.current!=='inventory')return;
   if(slot&&modifier&&event.key.toLowerCase()==='c'){event.preventDefault();copySlot();}
   if(slot&&modifier&&event.key.toLowerCase()==='v'){event.preventDefault();pasteSlot();}
   if(!field&&modifier&&event.key.toLowerCase()==='a'&&(slot||$('inventory').contains(event.target))){event.preventDefault();selectAllSlots();return;}
@@ -647,6 +653,7 @@ $('apply-name').addEventListener('click',()=>attempt(()=>{
   else delete next.components['minecraft:custom_name'];
   commit(E.setSlot(documentState,selected,next));notice('Display name updated.');
 },'item-name'));
+$('item-name').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();$('apply-name').click();}});
 $('new-kit').addEventListener('click',()=>{openKit();tab('details');$('title').focus();$('title').select();});
 $('example').addEventListener('change',()=>{const sample=HeritageKitExamples.find(sample=>sample.id===$('example').value);if(sample)openKit(JSON.stringify(sample.kit,null,2));$('example').value='';});
 $('import').addEventListener('change',async()=>{
@@ -665,6 +672,9 @@ $('download').addEventListener('click',()=>{
   const blob=new Blob([JSON.stringify(documentState,null,2)+'\n'],{type:'application/json'}),url=URL.createObjectURL(blob),link=document.createElement('a');
   const title=typeof documentState.title==='string'?documentState.title:'kit';
   link.href=url;link.download=(title.toLowerCase().replace(/[^a-z0-9_-]+/g,'-').replace(/^-|-$/g,'')||'kit')+'.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);notice('Kit downloaded.');
+});
+propertiesEditor=HeritageItemProperties.create($('lore-details'),{components:()=>$('components').value,maximum:()=>K.items.get(K.normalize(view.entry(selected)?.item.id??'minecraft:air'))?.max??99,enchantments:()=>T.enchantmentChoices(),
+  draft:(components,properties)=>{$('components').value=components;updateDraft(null,properties);},apply:()=>applySlotDraft(true),refresh:slotFields
 });
 HeritageSession.library({workspace:()=>workspace,snapshot,activate:activateKit,blank:()=>openKit(),kind:'kit',status:notice,persist:()=>{draftOptions();saveDraft();}});
 window.addEventListener('pagehide',saveDraft);
@@ -691,15 +701,31 @@ if(saved&&typeof saved.source==='string') {
 $('kit-json').value=initialSource;const savedCursor=carried;carried=null;display();parse(false,false);carried=savedCursor;display();
 if(saved?.error&&!rawInvalid&&typeof saved.error.message==='string'){errorState=saved.error;display();if($(errorState.target))$(errorState.target).value=errorState.value;}
 history=[snapshot()];historyIndex=0;feedback();browser();
-const requested=new URLSearchParams(location.search).get('draft');
 if(requested&&workspace.entries.has(requested))activateKit(requested);
 else if(requested)notice('This kit is missing. Choose another saved kit.');
-if(!rawInvalid)tab('details');
+if(editorRoute.get('create')==='1'){if(hadSavedDraft&&!saveBlocked)openKit();if(editorRoute.has('name')&&!saveBlocked){$('title').value=editorRoute.get('name');$('title').dispatchEvent(new Event('input',{bubbles:true}));}editorRoute.delete('name');editorRoute.delete('create');editorRoute.set('draft',workspace.active);window.history.replaceState(null,'',location.pathname+(editorRoute.size?'?'+editorRoute:'')+location.hash);}
 const linked=new URLSearchParams(location.search).get('kit');
 if(linked!==null){
   openKit(linked);
   window.history.replaceState(null,'',location.pathname+location.hash);
 }
+function authorIssue(){
+  if(rawInvalid)return {stage:'json',field:'kit-json',message:errorState?.message||'Fix the kit JSON before continuing.'};
+  if(errorState){const property=errorState.path?.[0],details=['title','description','order','tags','selected_slot'];return {stage:details.includes(errorState.target)||details.includes(property)?'details':'inventory',field:errorState.target==='kit-json'?(details.includes(property)?property==='selected_slot'?'selected-slot':property:'item-id'):errorState.target,message:errorState.message};}
+  if(carried)return {stage:'inventory',field:'return-carried',message:'Place or return the held item before using this kit.'};
+  if(drafts.size)return {stage:'inventory',field:'go-to-draft',message:'Apply or revert the pending item edits before using this kit.'};
+  if(saveBlocked||saveUnavailable)return {stage:'json',field:'kit-json',message:'Browser storage is unavailable. Copy or download your JSON before leaving.'};
+  return null;
+}
+author=HeritageAuthoring.create({kind:'kit',active:()=>workspace.active,
+  stages:[{id:'details',label:'details',heading:'Name your kit',help:'Give players a clear name and description for this choice.'},{id:'inventory',label:'items & equipment',heading:'Build the starting inventory',help:'Choose items, place them in slots and adjust the selected item.'},{id:'review',label:'review',heading:'Review this kit',help:'Check the inventory, then use it in your pack or create another kit.'}],
+  entries:()=>[...workspace.entries].map(([id,entry])=>{const value=id===workspace.active?documentState:entry.state.document;return {id,name:typeof value.title==='string'?value.title:value.title_key||'Untitled kit',detail:(value.items?.length??0)+' item stacks'};}),
+  adopt:entry=>{workspace.entries.set(entry.id,{state:K.copy(entry.state),history:[K.copy(entry.state)],historyIndex:0});activateKit(entry.id);},
+  select:activateKit,newEntry:()=>openKit(),issue:authorIssue,persist:()=>{saveDraft();return !saveBlocked&&!saveUnavailable;},
+  prepare:()=>{if(rawInvalid||errorState||drafts.size||carried||saveBlocked)return false;saveDraft();return !saveBlocked&&!saveUnavailable;},
+  summary:()=>({title:typeof documentState.title==='string'?documentState.title:documentState.title_key||'Untitled kit',description:typeof documentState.description==='string'?documentState.description:'',lines:[(documentState.items?.length??0)+' item stacks',...(documentState.items??[]).map(entry=>(entry.item.count??1)+' × '+T.name(entry.item)), 'Starting slot: Hotbar '+((documentState.selected_slot??0)+1)]}),
+  stageChanged:()=>{code.syncScroll();requestAnimationFrame(fitBrowser);}
+});
 V.assets().then(()=>{
   display();
   V.setupTooltips();

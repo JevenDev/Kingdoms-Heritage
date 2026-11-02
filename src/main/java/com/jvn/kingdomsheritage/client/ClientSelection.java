@@ -43,6 +43,7 @@ public final class ClientSelection {
         NeoForge.EVENT_BUS.addListener(ClientSelection::movement);
         NeoForge.EVENT_BUS.addListener(ClientSelection::login);
         NeoForge.EVENT_BUS.addListener(ClientSelection::logout);
+        SelectionGuiScale.register();
         KitSelection.register();
         SpawnIntroOverlay.register();
         SelectionMusic.register();
@@ -112,6 +113,7 @@ public final class ClientSelection {
             minecraft.setScreen(null);
             if (next.has("intro")) SpawnIntroOverlay.start(next);
             SelectionTransition.arrive(next);
+            SelectionGuiScale.configure(next);
             return;
         }
         if (!SelectionTransition.joining()) SelectionTransition.reveal();
@@ -120,6 +122,7 @@ public final class ClientSelection {
         boolean newSession = catalog == null || next.has("session") && catalog.has("session")
                 && !next.get("session").getAsString().equals(catalog.get("session").getAsString());
         catalog = next;
+        SelectionGuiScale.configure(next);
         ClientSelectionEvents.catalog(next);
         var flowReset = ClientSteps.catalog(next);
         if (newSession) HeritageScreens.begin();
@@ -308,6 +311,7 @@ public final class ClientSelection {
     private static void tick(ClientTickEvent.Post event) {
         SelectionTransition.tick();
         SpawnIntroOverlay.tick();
+        SelectionGuiScale.refresh();
         SelectionMusic.tick(catalog != null && !progress.equals("applying"), finalReview != null);
         Minecraft minecraft = Minecraft.getInstance();
         if (catalog == null || minecraft.level == null || minecraft.player == null) return;
@@ -389,6 +393,7 @@ public final class ClientSelection {
         if (event.getConnection() != null || !SelectionTransition.joining()) SelectionTransition.clear();
         SpawnIntroOverlay.clear();
         clearSelection();
+        SelectionGuiScale.clear();
     }
 
     static void disconnect() {
@@ -398,6 +403,7 @@ public final class ClientSelection {
         SpawnIntroOverlay.clear();
         Minecraft minecraft = Minecraft.getInstance();
         clearSelection();
+        SelectionGuiScale.clear();
         if (minecraft.level != null) minecraft.level.disconnect();
         if (minecraft.isLocalServer()) minecraft.disconnect(new GenericMessageScreen(Component.translatable("menu.savingLevel")));
         else minecraft.disconnect();

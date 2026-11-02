@@ -173,6 +173,7 @@ function wrap(lines,limit,advance){
   return output;
 }
 const name=stack=>plain(title(stack));
-globalThis.HeritageItemText={configure,parse,decode,plain,loreMarkup,parseLoreMarkup,wrapLoreMarkup,title,name,tooltip,wrap,colors};
+const enchantmentChoices=()=>Object.entries(translations).filter(([key])=>/^enchantment\.minecraft\.[a-z_]+$/.test(key)).map(([key,name])=>({id:'minecraft:'+key.slice('enchantment.minecraft.'.length),name}));
+globalThis.HeritageItemText={enchantmentChoices,configure,parse,decode,plain,loreMarkup,parseLoreMarkup,wrapLoreMarkup,title,name,tooltip,wrap,colors};
 if(typeof module!=='undefined')module.exports=globalThis.HeritageItemText;
 })();

@@ -11,3 +11,10 @@
 .library-edit{font-size:12px;margin-left:10px}
 .handoff{display:inline-flex;align-items:center;padding:7px 11px;border:1px solid var(--line);border-radius:6px;color:var(--text)}
 .item-name-actions{display:flex;gap:8px;align-items:center;margin-bottom:12px}
+
+.pack-context { justify-content: space-between; gap: 12px; padding-bottom: 16px; border-bottom: 1px solid var(--line-soft); }
+.pack-context span { color: var(--muted); overflow-wrap: anywhere; }
+.handoff[aria-disabled=true] { opacity: .5; cursor: default; }
+
+#use-in-pack { max-width: 280px; }
+#use-in-pack span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -4,6 +4,9 @@ const copy=value=>JSON.parse(JSON.stringify(value));
 const keys={kits:'heritage.kitCreator.v1',intros:'heritage.introEditor.v1',packs:'heritage.packAssembler.projects.v1'};
 function validatePack(value) {
   if(value?.version!==1||typeof value.name!=='string'||typeof value.namespace!=='string'||typeof value.description!=='string'||!Array.isArray(value.kits)||!Array.isArray(value.locations)||value.kits.some(entry=>!entry||typeof entry.id!=='string'||typeof entry.path!=='string')||value.locations.some(entry=>!entry||typeof entry.id!=='string'||!entry.fields||!Array.isArray(entry.kits)||!Array.isArray(entry.destinations)))throw new Error('Unsupported pack project.');
+  if(value.guiScale!==undefined&&(!Number.isInteger(value.guiScale)||value.guiScale<0||value.guiScale>16))throw new Error('GUI scale must be a whole number from 0 to 16.');
+  if(value.kitOrder!==undefined&&(!Array.isArray(value.kitOrder)||value.kitOrder.some(id=>typeof id!=='string')||new Set(value.kitOrder).size!==value.kitOrder.length))throw new Error('Kit order must list each kit at most once.');
+  if(value.locations.some(entry=>entry.keepImageResolution!==undefined&&typeof entry.keepImageResolution!=='boolean'))throw new Error('Keep source resolution must be enabled or disabled.');
   const result=copy(value);
   if(new Set(result.locations.map(entry=>entry.id)).size!==result.locations.length||new Set(result.kits.map(entry=>entry.id)).size!==result.kits.length)throw new Error('Duplicate project entries.');
   if(!result.locations.some(entry=>entry.id===result.active))result.active=result.locations[0]?.id??'';
@@ -42,6 +45,7 @@ function merge(input,current,createId=()=>crypto.randomUUID()) {
     result[kind]=existing;maps[kind]=map;
   }
   for(const kit of result.pack.kits)kit.id=maps.kits.get(kit.id)??kit.id;
+  if(result.pack.kitOrder)result.pack.kitOrder=result.pack.kitOrder.map(id=>maps.kits.get(id)??id);
   for(const location of result.pack.locations) {
     location.intro=maps.intros.get(location.intro)??location.intro;
     for(const destination of location.destinations)if(typeof destination.intro==='string')destination.intro=maps.intros.get(destination.intro)??destination.intro;
