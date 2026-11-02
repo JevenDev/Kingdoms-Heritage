@@ -102,6 +102,8 @@ public final class SpawnIntro {
         player.stopRiding();
         if (player.position().distanceToSqr(hold.position) > 0.0001) {
             player.teleportTo(player.serverLevel(), hold.position.x, hold.position.y, hold.position.z, hold.yaw, hold.pitch);
+            // vanilla restores its saved connection position after player ticks
+            player.connection.resetPosition();
         }
         player.setDeltaMovement(Vec3.ZERO);
         player.fallDistance = 0;

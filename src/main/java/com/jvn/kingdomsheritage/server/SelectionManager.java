@@ -407,6 +407,7 @@ public final class SelectionManager {
         BlockPos position = destination.position();
         player.teleportTo(destination.level(), position.getX() + 0.5, position.getY(), position.getZ() + 0.5,
                 java.util.Set.of(), yaw, 0);
+        player.connection.resetPosition();
         // dimension travel can be cancelled even when teleportTo returns true
         if (player.level() != destination.level()
                 || player.distanceToSqr(position.getX() + 0.5, position.getY(), position.getZ() + 0.5) > 0.0001) {
