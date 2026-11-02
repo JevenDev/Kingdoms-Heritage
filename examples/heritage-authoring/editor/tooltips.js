@@ -74,7 +74,7 @@ globalThis.HeritageTooltips={setup({font,sprite,screen='intro'}) {
     timeline:['Scrub intro','Choose a point in the intro and pause playback.'],
     'new-angle':['New angle','Try another angle. In-game angles are random.'],
     'bar-height-range':['Bar thickness','GUI pixels per bar. Text placement stays independent.'],
-    'text-mode-markup':['Markup','Edit style and location tags directly.'],
+    'text-mode-markup':['Markup','Edit style, context and pacing tags directly.'],
     'title-custom':['Custom title coordinates','Position the text anchor as a percentage of the screen.'],
     'subtitle-custom':['Custom subtitle coordinates','Position the text anchor as a percentage of the screen.'],
     'show-text-boxes':['Text boxes','Show draggable text bounds. Preview only.'],
@@ -91,7 +91,7 @@ globalThis.HeritageTooltips={setup({font,sprite,screen='intro'}) {
     bar_height:['Bar thickness','GUI pixels per bar, capped at ¼ screen height. Text stays independent.'],
     black_hold_ticks:['Black screen','Delay before the world fades in. 20 ticks = 1 second.'],
     fade_from_black_ticks:['World fade','World and visible HUD fade-in time. 20 ticks = 1 second.'],
-    reveal_ticks:['Text reveal','Time for all text to appear. 20 ticks = 1 second.'],
+    reveal_ticks:['Text reveal','Base reveal time. Inline pauses and speed changes adjust the actual duration. 20 ticks = 1 second.'],
     hold_ticks:['Text hold','Time with the full message visible. 20 ticks = 1 second.'],
     fade_out_ticks:['Text fade out','Text fade-out time. 20 ticks = 1 second.'],
     bar_transition_ticks:['Bar movement','Time to enter or exit. 20 ticks = 1 second.']
@@ -101,7 +101,7 @@ globalThis.HeritageTooltips={setup({font,sprite,screen='intro'}) {
     ['#component-details > summary',['Item components','Edit Minecraft component JSON for this item.']],
     ['.author-shared-context > button',['Make a local copy','Edit this location’s copy without changing other locations.']],
     ['[data-wrap]',['Text style','Style the selection, or the whole field if none.']],
-    ['[data-token]',['Insert location name','Use the player’s arrival location name in game.']],
+    ['[data-token]',['Insert dialogue tag','Insert a context value or a pacing cue at the cursor.']],
     ['[data-lore-format],[data-lore-apply-color]',['Style lore','Style the selection, or the entire lore line if none.']],
     ['[data-item-property=damage]',['Damage used','Durability already consumed. Zero means fully repaired.']],
     ['[data-item-property=glint]',['Enchantment glint','Override the visual shimmer without adding enchantments.']],
@@ -119,7 +119,7 @@ globalThis.HeritageTooltips={setup({font,sprite,screen='intro'}) {
   for(const [id,description] of Object.entries(descriptions)) attach(document.getElementById(id),description);
   for(const control of document.querySelectorAll('[data-field]')) attach(control,fields[control.dataset.field]);
   for(const control of document.querySelectorAll('[data-wrap]'))attach(control,[control.getAttribute('aria-label')||control.textContent.trim(),'Style the selection, or the whole field if none.']);
-  for(const control of document.querySelectorAll('[data-token]'))attach(control,['Insert '+control.dataset.token,'Use the player’s arrival location name in game.']);
+  for(const control of document.querySelectorAll('[data-token]'))attach(control,['Insert '+control.dataset.token,control.dataset.token.startsWith('pause')?'Pause the reveal in milliseconds.':control.dataset.token.startsWith('speed')?'Change the reveal speed multiplier.':'Use the player’s dialogue context in game.']);
   const tooltip=document.createElement('div'),canvas=document.createElement('canvas'),description=document.createElement('span');
   tooltip.id='minecraft-tooltip';tooltip.role='tooltip';tooltip.setAttribute('popover','manual');tooltip.hidden=true;
   description.className='sr-only';canvas.setAttribute('aria-hidden','true');

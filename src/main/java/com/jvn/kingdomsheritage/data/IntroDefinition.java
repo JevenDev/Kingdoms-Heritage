@@ -120,7 +120,10 @@ public record IntroDefinition(Component text, Component subtitle, boolean title,
     public static IntroDefinition parse(JsonObject json) {
         Component text = component(json, "text", false);
         Component subtitle = component(json, "subtitle", true);
+        DialoguePacing.parse(text.getString());
+        DialoguePacing.parse(subtitle.getString());
         var dialogue = DialogueDefinition.parse(json);
+        dialogue.validatePacing(text, subtitle);
         var dialogueJson = new JsonObject();
         dialogue.write(dialogueJson);
         int size = dialogueJson.toString().length() + ComponentSerialization.CODEC.encodeStart(JsonOps.INSTANCE, text).getOrThrow().toString().length()
@@ -203,21 +206,32 @@ public record IntroDefinition(Component text, Component subtitle, boolean title,
         return (int) number;
     }
 
-    public int durationTicks() {
-        if (timeline == null) return blackHoldTicks + presentationTicks();
+    public int durationTicks() { return durationTicks(revealTicks); }
+
+    public int durationTicks(int reveal) {
+        if (timeline == null) return blackHoldTicks + presentationTicks(reveal);
         int barsEnd = cinematicBars ? timeline.barStartTicks() + timeline.barEnterTicks()
                 + timeline.barHoldTicks() + timeline.barExitTicks() : 0;
-        return Math.max(blackHoldTicks + fadeFromBlackTicks, Math.max(textStartTicks() + textDurationTicks(), barsEnd));
+        return Math.max(blackHoldTicks + fadeFromBlackTicks, Math.max(textStartTicks() + textDurationTicks(reveal), barsEnd));
     }
 
     public int textStartTicks() { return timeline == null ? blackHoldTicks : timeline.textStartTicks(); }
 
-    public int textDurationTicks() {
-        return timeline == null ? presentationTicks() : (animation == Animation.IMMEDIATE ? 0 : revealTicks) + holdTicks + fadeOutTicks;
+    public int textDurationTicks() { return textDurationTicks(revealTicks); }
+
+    public int textDurationTicks(int reveal) {
+        return timeline == null ? presentationTicks(reveal) : (animation == Animation.IMMEDIATE ? 0 : reveal) + holdTicks + fadeOutTicks;
     }
 
-    public int presentationTicks() {
-        return Math.max(fadeFromBlackTicks, (animation == Animation.IMMEDIATE ? 0 : revealTicks) + holdTicks + fadeOutTicks);
+    public int presentationTicks() { return presentationTicks(revealTicks); }
+
+    public int presentationTicks(int reveal) {
+        return Math.max(fadeFromBlackTicks, (animation == Animation.IMMEDIATE ? 0 : reveal) + holdTicks + fadeOutTicks);
+    }
+
+    public int maximumDurationTicks() {
+        return animation == Animation.LETTER_BY_LETTER || animation == Animation.WORD_BY_WORD
+                ? durationTicks(revealTicks * 10 + DialoguePacing.MAX_CUES * 1200) : durationTicks();
     }
 
     public JsonObject json(HolderLookup.Provider registries) {

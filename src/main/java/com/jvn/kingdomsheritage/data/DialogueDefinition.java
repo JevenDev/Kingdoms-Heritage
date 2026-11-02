@@ -47,9 +47,15 @@ public record DialogueDefinition(Map<String, Component> variables, Map<String, C
                     throw new IllegalArgumentException("Each dialogue variant requires when and text or subtitle");
                 }
                 variants.add(new Variant(DialogueCondition.parse(variant.getAsJsonObject("when")),
-                        variant.has("text") ? component(variant.get("text")) : null,
-                        variant.has("subtitle") ? component(variant.get("subtitle")) : null));
+                        variant.has("text") ? ComponentSerialization.CODEC.parse(JsonOps.INSTANCE, variant.get("text")).getOrThrow(IllegalArgumentException::new) : null,
+                        variant.has("subtitle") ? ComponentSerialization.CODEC.parse(JsonOps.INSTANCE, variant.get("subtitle")).getOrThrow(IllegalArgumentException::new) : null));
             }
+        }
+        variables.values().forEach(value -> DialoguePacing.parse(value.getString()));
+        fallbacks.values().forEach(value -> DialoguePacing.parse(value.getString()));
+        for (var variant : variants) {
+            if (variant.text() != null) DialoguePacing.parse(variant.text().getString());
+            if (variant.subtitle() != null) DialoguePacing.parse(variant.subtitle().getString());
         }
         return new DialogueDefinition(variables, fallbacks, variants);
     }
@@ -73,6 +79,15 @@ public record DialogueDefinition(Map<String, Component> variables, Map<String, C
             return Component.literal(value.getAsString());
         }
         return ComponentSerialization.CODEC.parse(JsonOps.INSTANCE, value).getOrThrow(IllegalArgumentException::new);
+    }
+
+    public void validatePacing(Component text, Component subtitle) {
+        var context = context(new DialogueContext(Map.of(), Map.of()));
+        DialoguePacing.parse(context.resolve(text, fallbacks, ignored -> null).getString() + "\n" + context.resolve(subtitle, fallbacks, ignored -> null).getString());
+        for (var variant : variants) {
+            DialoguePacing.parse(context.resolve(variant.text() == null ? text : variant.text(), fallbacks, ignored -> null).getString() + "\n"
+                    + context.resolve(variant.subtitle() == null ? subtitle : variant.subtitle(), fallbacks, ignored -> null).getString());
+        }
     }
 
     public DialogueContext context(DialogueContext base) {

@@ -19,7 +19,7 @@ import net.neoforged.neoforge.network.PacketDistributor;
 
 public final class SpawnIntro {
     private record Hold(UUID token, Vec3 position, ResourceLocation dimension, float yaw, float pitch,
-                        boolean noGravity, long deadline) {}
+                        boolean noGravity, long deadline, int maximumDuration, boolean ready) {}
     private static final String GRAVITY_KEY = "kingdomsheritage_intro_no_gravity";
     private static final Map<UUID, Hold> HOLDS = new HashMap<>();
 
@@ -72,12 +72,20 @@ public final class SpawnIntro {
         if (intro != null && intro.control() == IntroDefinition.Control.AFTER_TITLE) {
             HOLDS.put(player.getUUID(), new Hold(UUID.fromString(message.get("token").getAsString()),
                     player.position(), player.level().dimension().location(), player.getYRot(), player.getXRot(),
-                    player.isNoGravity(), player.server.overworld().getGameTime() + intro.durationTicks() + 600));
+                    player.isNoGravity(), player.server.overworld().getGameTime() + intro.durationTicks() + 600,
+                    intro.maximumDurationTicks(), false));
             player.getPersistentData().putBoolean(GRAVITY_KEY, player.isNoGravity());
             player.setNoGravity(true);
             player.setDeltaMovement(Vec3.ZERO);
         }
         PacketDistributor.sendToPlayer(player, new HeritageNetwork.Catalog(message.toString()));
+    }
+
+    public static void ready(ServerPlayer player, UUID token, int durationTicks) {
+        var hold = HOLDS.get(player.getUUID());
+        if (hold == null || hold.ready || !hold.token.equals(token) || durationTicks < 0 || durationTicks > hold.maximumDuration) return;
+        HOLDS.put(player.getUUID(), new Hold(hold.token, hold.position, hold.dimension, hold.yaw, hold.pitch, hold.noGravity,
+                player.server.overworld().getGameTime() + durationTicks + 600, hold.maximumDuration, true));
     }
 
     public static boolean locked(Player player) { return HOLDS.containsKey(player.getUUID()); }

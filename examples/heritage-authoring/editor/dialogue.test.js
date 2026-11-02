@@ -21,6 +21,7 @@ test('variants use stable facts, first-match order and inherited subtitle',()=>{
 test('translated fallbacks and keybinding overrides use the same resolver',()=>{
   const config={text:'<structure> <companions|alone> <key:inventory> <key:my_mod.action|unbound>',fallbacks:{structure:{text:'Home',bold:true}}};
   assert.equal(resolved(config,{structure:'',keys:{'key.inventory':'I'}}),'Home alone I unbound');
+  assert.equal(resolved({text:'<key:curios.key.open_curios>'},{keys:{'curios.key.open_curios':'G'}}),'G');
 });
 test('dialogue validation rejects invalid conditions, IDs and oversized branch collections',()=>{
   const config=value=>JSON.stringify({text:'Hello',...value});
@@ -30,6 +31,42 @@ test('dialogue validation rejects invalid conditions, IDs and oversized branch c
 });
 test('unknown tags are diagnosed without treating valid styles or missing known tags as typos',()=>{
   assert.equal(P.diagnostics({...P.packDefaults,text:'<gold><player></gold> <companions> <oops>'}).length,1);
+});
+test('pacing cues keep code-point offsets and extend the reveal through trailing pauses',()=>{
+  const all=P.parse('A<pause=500><speed=0.5>😀B<pause=200>'),timing=P.schedule(all,all.cues,100);
+  assert.equal(all.map(glyph=>glyph.ch).join(''),'A😀B');
+  assert.equal(timing.durationMillis,1200);
+  assert.equal(timing.durationTicks,24);
+  const thirds=P.schedule(P.parse('A'.repeat(61)),[],2000/61);assert.equal(thirds.durationTicks,40);assert.equal(thirds.visible(2000),61);
+  assert.deepEqual([99,100,799,800,1000,1200].map(time=>timing.visible(time)),[0,1,1,2,3,3]);
+  const atoms=R.atoms('A<pause=500>B');assert.equal(atoms[1].cue,true);assert.equal(atoms[2].style.tint,0xffffff);
+});
+test('pacing validation shares VR bounds and ignores cues for immediate and fade-in modes',()=>{
+  for(const text of ['<pause=-1>','<pause=1.5>','<pause=60001>','<speed=0>','<speed=11>','</speed>','<pause>'])assert.throws(()=>P.readJson(JSON.stringify({text})));
+  for(const animation of ['immediate','fade_in']){
+    const config={...P.defaults,text:'A<pause=60000>B',animation};
+    assert.equal(P.revealDuration(config),animation==='immediate'?0:config.reveal_ticks);
+  }
+  const config={...P.defaults,text:'A<pause=500>B',subtitle:'',animation:'letter_by_letter'};
+  assert.equal(P.revealDuration(config),50);
+  assert.equal(P.duration(config),config.black_hold_ticks+50+config.hold_ticks+config.fade_out_ticks);
+});
+test('authoring pacing matches the native overlay across modes, Unicode, variables and trailing pauses',()=>{
+  for(const sample of require('./native-pacing.json')){
+    const config=P.readJson(JSON.stringify(sample.intro)).config,playback=P.playback(config);
+    assert.equal(playback.all.map(glyph=>glyph.ch).join(''),sample.text);
+    assert.equal(P.revealDuration(config),sample.revealTicks);
+    assert.equal(P.duration(config),sample.durationTicks);
+    assert.deepEqual(sample.visible.map((_,tick)=>P.visible(config,playback.all,tick,playback.ends,playback.timing)),sample.visible);
+  }
+});
+test('pacing validates the combined track and rejects invalid extension samples',()=>{
+  assert.throws(()=>P.readJson(JSON.stringify({text:'A'+ '<pause=0>'.repeat(33),subtitle:'B'+ '<pause=0>'.repeat(32)})),/64 pacing cues/);
+  assert.throws(()=>P.validateSamples({variables:{'story:faction':null}}));
+  assert.throws(()=>P.validateSamples({keys:{'key.inventory':{text:'I'}}}));
+  const config={...P.packDefaults,text:'<party_size> <party_leader>',variants:[]};
+  assert.equal(resolved(config,{player:'Sam',party_leader:'Jo'}),'1 Sam');
+  assert.equal(resolved(config,{facts:{party_size:3},party_leader:'Jo'}),'3 Jo');
 });
 test('core dialogue tags share sample values and preserve empty companions',()=>{
   const source=Object.keys(P.contextDefaults).map(key=>'<'+key+'>').join('/');

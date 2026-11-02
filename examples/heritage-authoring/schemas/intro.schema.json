@@ -65,6 +65,7 @@
       }
     },
     "text": {
+      "description": "Minecraft text with context tags, <var:namespace:name>, <key:inventory> and <tag|fallback>. Sequential reveals support <pause=500> in milliseconds and <speed=0.5>, with at most 64 pacing cues across the resolved title and subtitle.",
       "allOf": [
         {
           "$ref": "#/$defs/component"
@@ -134,6 +135,7 @@
       "default": 60
     },
     "reveal_ticks": {
+      "description": "Base reveal duration. Sequential reveal pacing cues adjust the actual duration while keeping the configured hold and fade times.",
       "type": "integer",
       "minimum": 1,
       "maximum": 1200,

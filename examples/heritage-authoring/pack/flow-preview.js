@@ -426,7 +426,7 @@ function render(now){
   }else if(session.phase==='review')reviewScreen(w,h,elapsed);
   else if(session.phase==='intro'){
     drawWorld(w,h,elapsed);renderer.intro(introConfig,sampleNames(),elapsed/50,w,h,barSlant);
-    if(elapsed/50>=P.duration(introConfig))next();
+    if(elapsed/50>=P.duration(introConfig,sampleNames()))next();
   }else if(session.phase==='complete'){
     text('Your story begins',w/2,h/2-25,{center:true,scale:1.5});
     text(label(session.spawn,'title')+' · '+label(session.kit,'title'),w/2,h/2,{center:true,color:0xf2cd83,limit:w-32});

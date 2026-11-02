@@ -2,6 +2,8 @@ package com.jvn.kingdomsheritage.client;
 
 import com.google.gson.JsonObject;
 import com.jvn.kingdomsheritage.data.IntroDefinition;
+import com.jvn.kingdomsheritage.data.DialoguePacing;
+import com.jvn.toucanlib.client.ToucanTextRenderer;
 import com.jvn.kingdomsheritage.network.HeritageNetwork;
 import com.jvn.toucanlib.client.ToucanGlyphLayout;
 import java.util.ArrayList;
@@ -32,6 +34,8 @@ public final class SpawnIntroOverlay {
     private static List<ToucanGlyphLayout.Glyph> subtitle = List.of();
     private static List<ToucanGlyphLayout.Glyph> all = List.of();
     private static List<Integer> wordEnds = List.of();
+    private static DialoguePacing.Schedule pacing;
+    private static int revealTicks;
     private static IntroLayout layout;
     private static int layoutWidth;
     private static int layoutHeight;
@@ -59,8 +63,10 @@ public final class SpawnIntroOverlay {
         dimension = ResourceLocation.parse(locations.get("dimension").getAsString());
         var context = DialogueText.context(message);
         var resolved = intro.dialogue().resolve(intro.text(), intro.subtitle(), context, DialogueText::key);
-        var styledText = IntroMarkup.style(resolved.text());
-        var styledSubtitle = IntroMarkup.style(resolved.subtitle());
+        var playback = DialoguePlayback.create(net.minecraft.network.chat.Component.empty().append(resolved.text()).append("\n").append(resolved.subtitle()));
+        int split = DialoguePacing.parse(IntroMarkup.style(resolved.text()).getString()).text().length();
+        var styledText = ToucanTextRenderer.sliceUtf16(playback.text(), 0, split);
+        var styledSubtitle = ToucanTextRenderer.sliceUtf16(playback.text(), split + 1, playback.text().getString().length());
         text = ToucanGlyphLayout.glyphs(styledText, 0);
         subtitle = ToucanGlyphLayout.glyphs(styledSubtitle, text.size() + 1);
         var combined = new ArrayList<>(text);
@@ -68,6 +74,13 @@ public final class SpawnIntroOverlay {
         combined.addAll(subtitle);
         all = List.copyOf(combined);
         wordEnds = ToucanGlyphLayout.wordEnds(all);
+        revealTicks = intro.revealTicks();
+        if (!playback.pacing().cues().isEmpty() && (intro.animation() == IntroDefinition.Animation.LETTER_BY_LETTER
+                || intro.animation() == IntroDefinition.Animation.WORD_BY_WORD)) {
+            boolean words = intro.animation() == IntroDefinition.Animation.WORD_BY_WORD;
+            pacing = DialoguePacing.schedule(playback.pacing(), intro.revealTicks() * 50.0 / Math.max(1, words ? wordEnds.size() : all.size()), words);
+            revealTicks = pacing.durationTicks();
+        }
         Minecraft.getInstance().getNarrator().sayNow(
                 styledText.copy().append("\n").append(styledSubtitle));
     }
@@ -94,9 +107,10 @@ public final class SpawnIntroOverlay {
         }
         if (minecraft.isPaused() || minecraft.screen instanceof ReceivingLevelScreen
                 || !ready && !SelectionTransition.terrainReady()) return;
+        if (!ready) PacketDistributor.sendToServer(new HeritageNetwork.IntroReady(token, intro.durationTicks(revealTicks)));
         ready = true;
         SelectionTransition.introReady();
-        if (++age >= intro.durationTicks()) {
+        if (++age >= intro.durationTicks(revealTicks)) {
             finish();
             return;
         }
@@ -118,6 +132,8 @@ public final class SpawnIntroOverlay {
         layoutHeight = 0;
         barSlant = 0;
         wordEnds = List.of();
+        pacing = null;
+        revealTicks = 0;
         age = layoutWidth = lastAudible = 0;
         nextBlip = 3;
         ready = false;
@@ -125,6 +141,7 @@ public final class SpawnIntroOverlay {
 
     static int visible(float ticks) {
         if (intro.animation() == IntroDefinition.Animation.IMMEDIATE || intro.animation() == IntroDefinition.Animation.FADE_IN) return all.size();
+        if (pacing != null) return pacing.visibleCharacters(ticks * 50.0);
         float progress = Mth.clamp(ticks / intro.revealTicks(), 0, 1);
         if (intro.animation() == IntroDefinition.Animation.LETTER_BY_LETTER) return (int) (all.size() * progress);
         int words = (int) (wordEnds.size() * progress);
@@ -169,7 +186,7 @@ public final class SpawnIntroOverlay {
         if (intro.cinematicBars()) {
             var timing = intro.timeline();
             float visibility = timing == null
-                    ? IntroCinematicBars.visibility(elapsed - intro.blackHoldTicks(), intro.presentationTicks(), intro.barTransitionTicks())
+                    ? IntroCinematicBars.visibility(elapsed - intro.blackHoldTicks(), intro.presentationTicks(revealTicks), intro.barTransitionTicks())
                     : IntroCinematicBars.visibility(elapsed - timing.barStartTicks(), timing.barEnterTicks(), timing.barHoldTicks(), timing.barExitTicks());
             IntroCinematicBars.render(graphics, width, height, visibility, barSlant, intro.barHeight());
         }
@@ -180,7 +197,7 @@ public final class SpawnIntroOverlay {
             layoutHeight = height;
             layout = IntroLayout.create(minecraft.font, width, height, intro, text, subtitle);
         }
-        float alpha = Mth.clamp((intro.textDurationTicks() - ticks) / intro.fadeOutTicks(), 0, 1);
+        float alpha = Mth.clamp((intro.textDurationTicks(revealTicks) - ticks) / intro.fadeOutTicks(), 0, 1);
         if (intro.animation() == IntroDefinition.Animation.FADE_IN) alpha *= Mth.clamp(ticks / intro.revealTicks(), 0, 1);
         int opacity = Math.round(alpha * 255);
         if (opacity < 4) return;

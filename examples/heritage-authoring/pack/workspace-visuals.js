@@ -37,7 +37,7 @@ function create({editLocation,editIntro,testFlow,selectContext,reorder,editText,
     const scope=current.step==='pack'?'pack':'location',phase=scope==='pack'?packView:current.part==='details'?'cards':current.part==='intro'?'intro':'kits';
     try{
       const model=currentModel,story=currentStory,config=story.config;
-      if(playing){time+=Math.max(0,now-lastFrame)/50;if(time>=P.duration(config??P.packDefaults)){time=P.duration(config??P.packDefaults);playing=false;}}
+      if(playing){time+=Math.max(0,now-lastFrame)/50;if(time>=P.duration(config??P.packDefaults,story.names)){time=P.duration(config??P.packDefaults,story.names);playing=false;}}
       lastFrame=now;
       if(phase==='intro'&&playing&&config?.blip){if(!speechRunning){speechRunning=true;speech.start(P.blipCues(config,story.names),()=>time).catch(error=>status(scope,'Preview audio could not load: '+error.message,true));}}
       else if(speechRunning)stopSpeech();
@@ -46,7 +46,7 @@ function create({editLocation,editIntro,testFlow,selectContext,reorder,editText,
       const view=monitors[scope].draw({spawns:tools.preview(model.ordered),page:tools.page(),selectedId:model.id,guiScale,width:resolution[0],height:resolution[1],phase,expanded:scope==='location'&&expanded,intro:config,time,names:story.names,pictureData:current.pictureData,kit:model.kit});
       $(scope==='pack'?'pack-visual-scale':'location-visual-scale').textContent=(current.state.guiScale?'Pack GUI scale '+current.state.guiScale:'Player GUI scale '+guiScale+' for this preview')+' · effective '+view.scale;
       if(scope==='location'){
-        $('arrival-play').textContent=playing?'Pause':'Play';$('arrival-scrub').value=String(time);$('arrival-time').textContent=seconds(time)+' / '+seconds(config?P.duration(config):0);
+        $('arrival-play').textContent=playing?'Pause':'Play';$('arrival-scrub').value=String(time);$('arrival-time').textContent=seconds(time)+' / '+seconds(config?P.duration(config,currentStory.names):0);
       }
       frame=requestAnimationFrame(draw);
     }catch(error){nodes[scope].hidden=true;status(scope,'Player view could not render. '+error.message,true);}
@@ -62,15 +62,15 @@ function create({editLocation,editIntro,testFlow,selectContext,reorder,editText,
       const pictures=Object.values(value.pictureData).map(data=>({data}));await Promise.all(Object.values(monitors).map(monitor=>monitor.pictures(pictures)));if(token!==request)return;
       const model=documents(),field=$('intro-preview-destination');field.replaceChildren(new Option('Pool default',''),...(model.spawn?.pool??[]).map((destination,index)=>new Option('Place '+(index+1)+' · '+(F.place(destination.target)||destination.type),String(index))));
       if(poolIndex!==''&&!model.spawn?.pool?.[Number(poolIndex)])poolIndex='';field.value=poolIndex;$('arrival-destination-field').hidden=value.part!=='intro'||model.spawn?.type!=='pool';
-      currentModel=model;tools.update({...value,model,packCards:packView==='cards',translations:monitors.pack.defaults.translations});if(value.embedded)return;currentStory=arrival(model);const story=currentStory,config=story.config,key=JSON.stringify([model.id,poolIndex,config]);if(key!==introKey){introKey=key;playing=false;time=config?Math.min(P.duration(config)-1,P.textStart(config)+config.reveal_ticks+20):0;}
+      currentModel=model;tools.update({...value,model,packCards:packView==='cards',translations:monitors.pack.defaults.translations});if(value.embedded)return;currentStory=arrival(model);const story=currentStory,config=story.config,key=JSON.stringify([model.id,poolIndex,config]);if(key!==introKey){introKey=key;playing=false;time=config?Math.min(P.duration(config,currentStory.names)-1,P.textStart(config)+P.revealDuration(config,currentStory.names)+20):0;}
       $('pack-preview-mute').hidden=packView!=='intro';
-      $('arrival-transport').hidden=value.part!=='intro'||!config;$('arrival-scrub').max=String(config?P.duration(config):0);
+      $('arrival-transport').hidden=value.part!=='intro'||!config;$('arrival-scrub').max=String(config?P.duration(config,currentStory.names):0);
       $('card-description-toggle').hidden=value.part!=='details';$('card-description-toggle').setAttribute('aria-pressed',String(expanded));$('card-description-toggle').textContent=expanded?'Hide description':'Show description';
       $('location-visual-heading').textContent=value.part==='intro'?'Arrival preview':value.part==='kits'?'Kit selection preview':'Selection screen';
       const place=story.spawn?.type==='pool'?'Pool default':story.spawn?.type==='fixed'?['x','y','z'].map(key=>story.spawn[key]).join(', '):F.place(story.spawn?.target)||(story.spawn?.type==='random'?'Random place':'World spawn');
       $('location-preview-caption').textContent=value.part==='intro'?(config?place+' · Sample terrain.':'This arrival enters the world without an intro.'):value.part==='kits'?'Read-only equipment preview. Edit a kit to change its items.':'Click card text to edit it. Drag cards to reorder. Double-click an image to crop it.';
       const facts=$('intro-assignment-facts');facts.replaceChildren();
-      if(config)for(const [label,text] of [['Duration',seconds(P.duration(config))],['Text reveal',config.animation.replaceAll('_',' ')],['Cinematic bars',config.cinematic_bars?(config.bar_style==='random'?'Slanted':'Straight')+' · '+config.bar_height+' GUI px':'Off'],['Player control',config.control==='after_title'?'After the intro':'During the intro']]){const term=document.createElement('dt'),detail=document.createElement('dd');term.textContent=label;detail.textContent=text;facts.append(term,detail);}
+      if(config)for(const [label,text] of [['Duration',seconds(P.duration(config,currentStory.names))],['Text reveal',config.animation.replaceAll('_',' ')],['Cinematic bars',config.cinematic_bars?(config.bar_style==='random'?'Slanted':'Straight')+' · '+config.bar_height+' GUI px':'Off'],['Player control',config.control==='after_title'?'After the intro':'During the intro']]){const term=document.createElement('dt'),detail=document.createElement('dd');term.textContent=label;detail.textContent=text;facts.append(term,detail);}
       $('intro-edit-shortcuts').hidden=!model.entry?.intro||!value.catalog.intros.some(draft=>draft.id===model.entry.intro);
       for(const button of document.querySelectorAll('[data-preview-kit]'))button.setAttribute('aria-pressed',String(button.dataset.previewKit===previewKit));
       nodes[scope].hidden=false;nodes[scope].setAttribute('aria-label',(scope==='pack'?'Pack':model.entry?.fields.title||'Location')+' player preview');

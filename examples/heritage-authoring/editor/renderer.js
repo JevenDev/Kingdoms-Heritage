@@ -88,9 +88,9 @@ function drawBlock(block,visible,alpha,tick,outline=true,shadow=false) {
   });
   ctx.restore();
 }
-function bars(w,h,ticks,config,slant) {
+function bars(w,h,ticks,config,slant,names={}) {
   if(!config.cinematic_bars)return;
-  const f=Math.fround,progress=P.barProgress(config,ticks+config.black_hold_ticks),bar=P.barHeight(h,config.bar_height);
+  const f=Math.fround,progress=P.barProgress(config,ticks+config.black_hold_ticks,names),bar=P.barHeight(h,config.bar_height);
   if(progress<=0||bar<=0)return;
   const angle=config.bar_style==='random'?slant:0,travel=f(bar+Math.abs(angle)+4),sx=ctx.canvas.width/w,sy=ctx.canvas.height/h;
   ctx.save();ctx.setTransform(1,0,0,1,0,0);ctx.fillStyle='#000';ctx.globalAlpha=1;
@@ -106,16 +106,16 @@ function bars(w,h,ticks,config,slant) {
 }
 
 function intro(config,names,time,w,h,slant=0) {
-  const resolved=P.dialogue(config,names),main=P.parse(resolved.text,resolved.names),sub=P.parse(resolved.subtitle,resolved.names,main.length+1);
-  const all=[...main,{ch:'\n',index:main.length,effect:{}},...sub],elapsed=time-config.black_hold_ticks;
-  if(time>=P.duration(config))return all.length;
+  const {main,sub,all,timing}=P.playback(config,names);
+  const elapsed=time-config.black_hold_ticks;
+  if(time>=P.duration(config,names))return all.length;
   const progress=P.clamp(elapsed/config.fade_from_black_ticks),reveal=progress*progress*(3-2*progress);
   ctx.globalAlpha=Math.round(255*(1-reveal))/255;ctx.fillStyle='#000';ctx.fillRect(0,0,w,h);ctx.globalAlpha=1;
-  bars(w,h,elapsed,config,slant);
+  bars(w,h,elapsed,config,slant,names);
   const textElapsed=time-P.textStart(config);if(textElapsed<0)return 0;
-  let alpha=P.clamp((P.textDuration(config)-textElapsed)/config.fade_out_ticks);
+  let alpha=P.clamp((P.textDuration(config,names)-textElapsed)/config.fade_out_ticks);
   if(config.animation==='fade_in')alpha*=P.clamp(textElapsed/config.reveal_ticks);
-  const visible=P.visible(config,all,textElapsed,P.wordEnds(all));
+  const visible=P.visible(config,all,textElapsed,P.wordEnds(all),timing);
   for(const block of P.layout(config,main,sub,w,h,advance))drawBlock(block,visible,Math.round(alpha*255),Math.floor(textElapsed),config.outline,!config.outline);
   ctx.globalAlpha=1;return visible;
 }

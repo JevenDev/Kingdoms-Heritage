@@ -9,6 +9,8 @@ function atoms(source,names={}){
   for(let index=0;index<source.length;){
     if(hidden.has(index)){index=hidden.get(index);continue;}
     if(source[index]==='§'&&index+1<source.length){index+=2;continue;}
+    const control=/^<([^<>]+)>/.exec(source.slice(index)),cue=control?P.pacingCue(control[1]):null;
+    if(cue){result.push({start:index,end:index+control[0].length,text:'['+cue.kind+' '+cue.value+(cue.kind==='pause'?' ms':'×')+']',token:control[1],cue:true,style:{effect:{},tint:0xaaaaaa}});index+=control[0].length;continue;}
     const match=/^<([a-z_][a-z0-9_:./-]*(?:\|[^<>]*)?)>/.exec(source.slice(index)),resolved=match?P.token(match[1],names):null,token=resolved?match:null,text=resolved?resolved.text:source[index]==='\r'?'\n':String.fromCodePoint(source.codePointAt(index)),length=token?token[0].length:source[index]==='\r'&&source[index+1]==='\n'?2:String.fromCodePoint(source.codePointAt(index)).length;
     result.push({start:index,end:index+length,text,token:token?.[1]??null,style:glyphs[glyph]??{effect:{},tint:0xffffff}});glyph+=Array.from(text).length;index+=length;
   }
@@ -30,7 +32,7 @@ function replace(source,start,end,text,names){
 }
 function create(field,config){
   const editor=document.createElement('div');editor.id=field.id+'-visual';editor.className='rich-text-field';editor.contentEditable='true';editor.role='textbox';editor.setAttribute('aria-multiline','true');editor.setAttribute('aria-label',config.label+' visual editor');editor.spellcheck=false;field.after(editor);
-  let selection={start:0,end:0},rendering=false,composition=null,lastSource=null;
+  let selection={start:0,end:0},rendering=false,composition=null,lastSource=null,lastNames=null;
   function position(node,offset){
     if(node===editor){const next=editor.childNodes[offset],previous=editor.childNodes[offset-1];return Number(next?.dataset.start??previous?.dataset.end??0);}
     const span=(node.nodeType===Node.TEXT_NODE?node.parentElement:node).closest('[data-start]');if(!span||!editor.contains(span))return null;
@@ -43,7 +45,7 @@ function create(field,config){
   }
   function refresh(){
     if(rendering||composition)return;const source=field.value;editor.contentEditable=String(!field.readOnly&&!field.disabled);editor.setAttribute('aria-readonly',String(field.readOnly));
-    if(source===lastSource&&editor.childNodes.length)return;lastSource=source;editor.replaceChildren();
+    const names=JSON.stringify(config.names());if(source===lastSource&&names===lastNames&&editor.childNodes.length)return;lastSource=source;lastNames=names;editor.replaceChildren();
     const list=field.readOnly?Array.from(source).map((text,index)=>({text,start:index,end:index+text.length,style:{effect:{},tint:0xffffff}})):atoms(source,config.names());
     for(const atom of list){
       const span=document.createElement('span');span.textContent=atom.text;span.dataset.start=atom.start;span.dataset.end=atom.end;const effect=atom.style.effect;span.style.color='#'+atom.style.tint.toString(16).padStart(6,'0');if(effect.bold)span.style.fontWeight='700';if(effect.italic)span.style.fontStyle='italic';span.style.textDecoration=[effect.underline?'underline':'',effect.strike?'line-through':''].filter(Boolean).join(' ');

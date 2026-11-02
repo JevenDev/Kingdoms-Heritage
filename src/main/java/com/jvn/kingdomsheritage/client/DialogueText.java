@@ -23,7 +23,7 @@ public final class DialogueText {
     public static Component key(String id) {
         String name = id.startsWith("key.") ? id : "key." + id;
         for (var mapping : net.minecraft.client.Minecraft.getInstance().options.keyMappings) {
-            if (mapping.getName().equals(name)) return mapping.getTranslatedKeyMessage();
+            if (mapping.getName().equals(id) || mapping.getName().equals(name)) return mapping.getTranslatedKeyMessage();
         }
         return null;
     }

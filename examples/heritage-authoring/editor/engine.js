@@ -4,7 +4,7 @@ const colors = {black:0x000000,dark_blue:0x0000aa,dark_green:0x00aa00,dark_aqua:
 const aliases = {i:'italic',italics:'italic',b:'bold',u:'underline',underlined:'underline',s:'strike',strikethrough:'strike',obfuscate:'obfuscated',magic:'obfuscated',wavy:'wave',shaky:'shake',pulsing:'pulse',jumping:'jump',bounce:'jump',bouncy:'jump'};
 const contextDefaults={player:'Alex',kit:'Traveler',spawn:'Homeland',biome:'Plains',structure:'Wilderness',dimension:'Overworld',place:'the plains',companions:'',party_size:'1',party_leader:'Alex',equipment:'Traveler'};
 function token(raw,names={}) {
-  const [key,...fallback]=raw.split('|'),binding=key.startsWith('key:')?(key.slice(4).startsWith('key.')?key.slice(4):'key.'+key.slice(4)):null;
+  const [key,...fallback]=raw.split('|'),requested=key.startsWith('key:')?key.slice(4):null,keys=names.__keys??keyDefaults,binding=requested?(Object.hasOwn(keys,requested)||requested.startsWith('key.')?requested:'key.'+requested):null;
   const known=Object.hasOwn(contextDefaults,key)||key.startsWith('var:')&&Object.hasOwn(names,key)||binding&&Object.hasOwn(names.__keys??keyDefaults,binding);
   if(!known&&!fallback.length&&!Object.hasOwn(names.__fallbacks??{},key))return null;
   let value=binding?(names.__keys??keyDefaults)[binding]:Object.hasOwn(names,key)?names[key]:contextDefaults[key];
@@ -139,11 +139,14 @@ function expandComponent(value,names){
 function dialogue(config,names={}) {
   const context={...contextDefaults,...names,__fallbacks:config.fallbacks??{},__keys:{...keyDefaults,...names.keys}},facts={...context,...factDefaults,...names.facts};
   if(!names.facts||!Object.hasOwn(names.facts,'structure'))facts.structure=context.structure==='Wilderness'?'':names.facts?.structure??context.structure;
+  const variableBase={...context,__fallbacks:{}};
   for(const [id,value] of Object.entries({...config.variables,...names.variables})){
-    const tag='var:'+id,resolved=Object.hasOwn(names.variables??{},id)?value:expandComponent(value,{...context,__fallbacks:{}});
+    const tag='var:'+id,resolved=Object.hasOwn(names.variables??{},id)?value:expandComponent(value,variableBase);
     context[tag]=typeof resolved==='number'||typeof resolved==='boolean'?String(resolved):resolved;
     facts[tag]=componentText(context[tag]);
   }
+  context.party_size=String(facts.party_size);
+  if(Number(facts.party_size)===1){context.party_leader=context.player;context.companions='';facts.party_leader=facts.player;facts.companions='';}
   context.__facts=facts;
   const variant=(config.variants??[]).find(entry=>condition(entry.when,facts));
   return {text:variant?.text??config.text,subtitle:variant?.subtitle??config.subtitle,names:context};
@@ -168,12 +171,26 @@ function validateDialogue(config) {
     }catch(error){error.field??='variants';error.path??=['variants',index];throw error;}
   });
 }
+function validateSamples(values){
+  for(const kind of ['variables','facts','keys']){
+    const value=values[kind]??{};
+    if(!value||typeof value!=='object'||Array.isArray(value))throw new Error('Sample '+kind+' must be a JSON object.');
+    for(const [key,entry] of Object.entries(value)){
+      if(kind==='variables'){
+        if(!/^[a-z0-9_.-]+:[a-z0-9/._-]+$/.test(key))throw new Error('Sample variable IDs require a namespace.');
+        if(typeof entry==='number'||typeof entry==='boolean'){if(typeof entry==='number'&&!Number.isFinite(entry))throw new Error('Sample variables must be finite.');}
+        else validateComponent(entry);
+      }else if(kind==='keys'&&typeof entry!=='string'||kind==='facts'&&!['string','number','boolean'].includes(typeof entry))throw new Error('Use text keybindings and scalar condition values.');
+    }
+  }
+  return values;
+}
 function diagnostics(config,names={}) {
   const resolved=dialogue(config,names),warnings=new Set();
   for(const source of [config.text,config.subtitle,...Object.values(config.variables??{}),...(config.variants??[]).flatMap(entry=>[entry.text,entry.subtitle])]){
     for(const match of componentText(source).matchAll(/<(\/?)([^<>]+)>/g)){
       const raw=match[2].trim();
-      if(effects(raw.toLowerCase())||match[1]&&effects(raw.toLowerCase()))continue;
+      if(effects(raw.toLowerCase())||match[1]&&effects(raw.toLowerCase())||pacingCue(raw))continue;
       if(token(raw,resolved.names))continue;
       warnings.add('Unknown dialogue tag <'+raw+'>. Add a sample value for extension variables or modded keybindings.');
     }
@@ -197,24 +214,53 @@ function validateComponent(value,depth=0,path=[]) {
   }
   if(value.score!==undefined&&(!value.score||typeof value.score.name!=='string'||typeof value.score.objective!=='string'))throw invalid('A score component needs a name and objective.',['score']);
 }
+function pacingCue(raw){
+  const match=/^(\/?)(pause|speed)(?:[=:](.*))?$/i.exec(raw);
+  if(!match)return null;
+  const kind=match[2].toLowerCase(),value=Number(match[3]);
+  if(match[1]||!match[3]||!/^[0-9]+(?:\.[0-9]+)?$/.test(match[3])||!Number.isFinite(value)||(kind==='pause'?value<0||value>60000||!Number.isInteger(value):value<.1||value>10))throw new Error('Invalid dialogue pacing tag <'+raw+'>.');
+  return {kind,value};
+}
+function glyphList(result,cues=[]){Object.defineProperty(result,'cues',{value:cues});return result;}
+function schedule(all,cues,unitMillis,words=false){
+  if(cues.length>64)throw new Error('Dialogue may contain at most 64 pacing cues.');
+  const times=[],positions=[];let time=0,speed=1,cue=0;
+  for(let index=0;index<=all.length;index++){
+    while(cue<cues.length&&cues[cue].offset===index){const event=cues[cue++];if(event.kind==='pause')time+=event.value;else speed=event.value;}
+    if(index===all.length)break;
+    if(!words||!/\s/u.test(all[index].ch)&&(index+1===all.length||/\s/u.test(all[index+1].ch))){time+=unitMillis/speed;times.push(time);positions.push(index+1);}
+  }
+  return {durationMillis:time,durationTicks:Math.max(0,Math.ceil((time-1e-7)/50)),visible(elapsed){let low=0,high=times.length;while(low<high){const middle=(low+high)>>>1;if(times[middle]<=elapsed+1e-7)low=middle+1;else high=middle;}return low===0?0:positions[low-1];}};
+}
+const playbackCache=new WeakMap();
+function playback(cfg,names={}){
+  const key=JSON.stringify([cfg.text,cfg.subtitle,cfg.animation,cfg.reveal_ticks,cfg.variables,cfg.fallbacks,cfg.variants,names]),cached=playbackCache.get(cfg);
+  if(cached?.key===key)return cached.value;
+  const resolved=dialogue(cfg,names),main=parse(resolved.text,resolved.names),sub=parse(resolved.subtitle,resolved.names,main.length+1),all=[...main,{ch:'\n',index:main.length,effect:{}},...sub],ends=wordEnds(all),cues=[...main.cues,...sub.cues],words=cfg.animation==='word_by_word',paced=cues.length>0&&['letter_by_letter','word_by_word'].includes(cfg.animation);
+  if(cues.length>64)throw new Error('Dialogue may contain at most 64 pacing cues.');
+  const timing=paced?schedule(all,cues,cfg.reveal_ticks*50/Math.max(1,words?ends.length:all.length),words):null;
+  const value={main,sub,all,ends,timing,revealTicks:timing?timing.durationTicks:cfg.animation==='immediate'?0:cfg.reveal_ticks};
+  playbackCache.set(cfg,{key,value});return value;
+}
+function revealDuration(cfg,names={}){return playback(cfg,names).revealTicks;}
 function parse(text, names={}, offset=0, inherited={}) {
   if(typeof text!=='string') {
     if(Array.isArray(text)) {
-      let result=[],base=inherited;
+      let result=[],cues=[],base=inherited;
       text.forEach((entry,index)=>{
         if(index===0&&entry&&typeof entry==='object'&&!Array.isArray(entry))base={...inherited,...entry};
-        result.push(...parse(entry,names,offset+result.length,base));
+        const child=parse(entry,names,offset+result.length,base);result.push(...child);cues.push(...child.cues);
       });
-      return result;
+      return glyphList(result,cues);
     }
     const style={...inherited,...text},effect={};
     for(const [key,target] of [['bold','bold'],['italic','italic'],['underlined','underline'],['strikethrough','strike'],['obfuscated','obfuscated']])if(typeof style[key]==='boolean')effect[target]=style[key];
     const tint=typeof style.color==='string'?color(style.color):null;
     if(tint!==null)effect.color=tint;
     const own={...text};delete own.extra;
-    const result=parse(componentText(own),names,offset).map(glyph=>({...glyph,effect:{...effect,...glyph.effect},tint:glyph.effect.color??tint??glyph.tint}));
-    for(const child of text.extra??[])result.push(...parse(child,names,offset+result.length,style));
-    return result;
+    const ownGlyphs=parse(componentText(own),names,offset),cues=[...ownGlyphs.cues],result=ownGlyphs.map(glyph=>({...glyph,effect:{...effect,...glyph.effect},tint:glyph.effect.color??tint??glyph.tint}));
+    for(const child of text.extra??[]){const glyphs=parse(child,names,offset+result.length,style);result.push(...glyphs);cues.push(...glyphs.cues);}
+    return glyphList(result,cues);
   }
 
   text=text.replace(/\r\n?/g,'\n');
@@ -239,7 +285,7 @@ function parse(text, names={}, offset=0, inherited={}) {
   const plain=chars.join(''), tags=[];
   for(const m of plain.matchAll(/<(\/?)([^<>]+)>/g)) {
     const raw=m[2].trim().toLowerCase();
-    tags.push({start:m.index,end:m.index+m[0].length,name:canonical(raw.split(':')[0]),closing:!!m[1],effect:effects(raw),replacement:!m[1]&&!names.__substitution?token(m[2],names):null});
+    tags.push({start:m.index,end:m.index+m[0].length,name:canonical(raw.split(':')[0]),closing:!!m[1],effect:effects(raw),cue:pacingCue(m[2].trim()),replacement:!m[1]&&!names.__substitution?token(m[2],names):null});
   }
   function closed(index,name) {
     let depth=1;
@@ -249,7 +295,7 @@ function parse(text, names={}, offset=0, inherited={}) {
     }
     return false;
   }
-  const stack=[{tag:'',effect:{}}], result=[];
+  const stack=[{tag:'',effect:{}}], result=[],cues=[];
   function append(start,end,effect) {
     while(start<end) {
       let next=start+1;
@@ -264,10 +310,12 @@ function parse(text, names={}, offset=0, inherited={}) {
   }
   let cursor=0;
   tags.forEach((tag,index)=>{
+    if(tag.cue){append(cursor,tag.start,stack.at(-1).effect);cues.push({...tag.cue,offset:offset+result.length});cursor=tag.end;return;}
     if(tag.replacement){
       append(cursor,tag.start,stack.at(-1).effect);
       const inherited={...base[tag.start],...stack.at(-1).effect};
-      for(const glyph of parse(tag.replacement.value,{...names,__substitution:true},offset+result.length)){
+      const inserted=parse(tag.replacement.value,{...names,__substitution:true},offset+result.length);cues.push(...inserted.cues);
+      for(const glyph of inserted){
         const effect={...inherited,...glyph.effect},phase=glyph.phase,tint=effect.rainbow?rainbow(phase/Math.max(1,tag.replacement.text.length)):effect.gradient?lerpColor(...effect.gradient,phase/Math.max(1,tag.replacement.text.length-1)):effect.color??glyph.tint;
         result.push({...glyph,effect,tint});
       }
@@ -281,7 +329,8 @@ function parse(text, names={}, offset=0, inherited={}) {
     cursor=tag.end;
   });
   append(cursor,plain.length,stack.at(-1).effect);
-  return result;
+  if(cues.length>64)throw new Error('Dialogue may contain at most 64 pacing cues.');
+  return glyphList(result,cues);
 }
 function wrap(glyphs,width,advance) {
   const lines=[];
@@ -407,27 +456,28 @@ function sampleSlant(token,style='random') {
   const seed=(((bits^0x5deece66dn)&mask)*0x5deece66dn+11n)&mask;
   return Math.fround(-12+Math.fround(Number(seed>>24n)/16777216*24));
 }
-function presentation(cfg) { return Math.max(cfg.fade_from_black_ticks,(cfg.animation==='immediate'?0:cfg.reveal_ticks)+cfg.hold_ticks+cfg.fade_out_ticks); }
-function trackTiming(cfg) {
+function presentation(cfg,names={}) { return Math.max(cfg.fade_from_black_ticks,revealDuration(cfg,names)+cfg.hold_ticks+cfg.fade_out_ticks); }
+function trackTiming(cfg,names={}) {
   if(cfg.timeline)return {...cfg.timeline};
-  const total=presentation(cfg),bar=Math.min(cfg.bar_transition_ticks,total/2);
+  const total=presentation(cfg,names),bar=Math.min(cfg.bar_transition_ticks,total/2);
   return {text_start_ticks:cfg.black_hold_ticks,bar_start_ticks:cfg.black_hold_ticks,bar_enter_ticks:bar,bar_hold_ticks:total-bar*2,bar_exit_ticks:bar};
 }
 function textStart(cfg){return cfg.timeline?.text_start_ticks??cfg.black_hold_ticks;}
-function textDuration(cfg){return cfg.timeline?(cfg.animation==='immediate'?0:cfg.reveal_ticks)+cfg.hold_ticks+cfg.fade_out_ticks:presentation(cfg);}
-function barProgress(cfg,time){
-  if(!cfg.timeline)return barVisibility(time-cfg.black_hold_ticks,presentation(cfg),cfg.bar_transition_ticks);
+function textDuration(cfg,names={}){return cfg.timeline?revealDuration(cfg,names)+cfg.hold_ticks+cfg.fade_out_ticks:presentation(cfg,names);}
+function barProgress(cfg,time,names={}){
+  if(!cfg.timeline)return barVisibility(time-cfg.black_hold_ticks,presentation(cfg,names),cfg.bar_transition_ticks);
   const timing=cfg.timeline,ticks=time-timing.bar_start_ticks,entry=clamp(Math.fround(ticks/timing.bar_enter_ticks)),exit=clamp(Math.fround((ticks-timing.bar_enter_ticks-timing.bar_hold_ticks)/timing.bar_exit_ticks)),f=Math.fround;
   return f(f(1-f((1-entry)**3))*f(1-f(f(exit*exit)*exit)));
 }
-function duration(cfg) {
-  if(!cfg.timeline)return cfg.black_hold_ticks+presentation(cfg);
+function duration(cfg,names={}) {
+  if(!cfg.timeline)return cfg.black_hold_ticks+presentation(cfg,names);
   const timing=cfg.timeline,bars=cfg.cinematic_bars?timing.bar_start_ticks+timing.bar_enter_ticks+timing.bar_hold_ticks+timing.bar_exit_ticks:0;
-  return Math.max(cfg.black_hold_ticks+cfg.fade_from_black_ticks,textStart(cfg)+textDuration(cfg),bars);
+  return Math.max(cfg.black_hold_ticks+cfg.fade_from_black_ticks,textStart(cfg)+textDuration(cfg,names),bars);
 }
 function wordEnds(all) {return all.filter((g,i)=>!/\s/u.test(g.ch)&&(i+1===all.length||/\s/u.test(all[i+1].ch))).map(g=>g.index+1);}
-function visible(cfg,all,ticks,ends) {
+function visible(cfg,all,ticks,ends,timing=null) {
   if(cfg.animation==='immediate'||cfg.animation==='fade_in') return all.length;
+  if(timing)return timing.visible(ticks*50);
   const progress=clamp(ticks/cfg.reveal_ticks);
   if(cfg.animation==='letter_by_letter') return Math.floor(all.length*progress);
   ends??=wordEnds(all);
@@ -445,8 +495,8 @@ function revealCues(glyphs,visibleAt,total,{start=0,first=3,step=3,pitch=.9,spre
 }
 function blipCues(cfg,names={},random=Math.random){
   if(!cfg.blip)return [];
-  const resolved=dialogue(cfg,names),main=parse(resolved.text,resolved.names),sub=parse(resolved.subtitle,resolved.names,main.length+1),glyphs=[...main,{ch:'\n',index:main.length},...sub],ends=wordEnds(glyphs),start=textStart(cfg);
-  return revealCues(glyphs,tick=>visible(cfg,glyphs,tick-start,ends),duration(cfg),{start},random);
+  const {all:glyphs,ends,timing}=playback(cfg,names),start=textStart(cfg);
+  return revealCues(glyphs,tick=>visible(cfg,glyphs,tick-start,ends,timing),duration(cfg,names),{start},random);
 }
 function glyphFrame(g,tick,alpha) {
   const e=g.effect, i=g.phase;
@@ -461,6 +511,7 @@ function glyphFrame(g,tick,alpha) {
 }
 function validate(cfg) {
   validateDialogue(cfg);
+  for(const value of [cfg.text,cfg.subtitle,...Object.values(cfg.variables??{}),...Object.values(cfg.fallbacks??{}),...(cfg.variants??[]).flatMap(entry=>[entry.text,entry.subtitle])])if(value!==undefined)parse(typeof value==='boolean'||typeof value==='number'?String(value):value);
   for(const field of ['text','subtitle'])validateComponent(cfg[field],0,[field]);
   for(const key of ['title','large_subtitle','outline','blip','cinematic_bars','hide_hud_during_bars']) if(typeof cfg[key]!=='boolean') throw Object.assign(new Error(key+' must be true or false.'),{field:key});
   if(!componentText(cfg.text).trim()) throw Object.assign(new Error('Enter some main text.'),{field:'text'});
@@ -489,9 +540,11 @@ function validate(cfg) {
   if(!['fade_in','word_by_word','letter_by_letter','immediate'].includes(cfg.animation)) throw Object.assign(new Error('Unknown reveal mode.'),{field:'animation'});
   if(!['after_title','during_title'].includes(cfg.control)) throw Object.assign(new Error('Unknown control setting.'),{field:'control'});
   if(!['random','straight'].includes(cfg.bar_style)) throw Object.assign(new Error('Unknown bar style.'),{field:'bar_style'});
+  playback(cfg);
+  for(const variant of cfg.variants??[])playback({...cfg,...variant,variants:[]});
   return cfg;
 }
-const api={factDefaults,keyDefaults,condition,validateCondition,dialogue,diagnostics,contextDefaults,token,effects,canonical,barHeight,barVisibility,sampleSlant,componentText,validateComponent,colors,positions,defaults,packDefaults,readJson,updateJson,parse,wrap,padding,bounds,guiViewport,layout,presentation,trackTiming,textStart,textDuration,barProgress,duration,wordEnds,visible,revealCues,blipCues,glyphFrame,validate,clamp,active};
+const api={validateSamples,pacingCue,schedule,playback,revealDuration,factDefaults,keyDefaults,condition,validateCondition,dialogue,diagnostics,contextDefaults,token,effects,canonical,barHeight,barVisibility,sampleSlant,componentText,validateComponent,colors,positions,defaults,packDefaults,readJson,updateJson,parse,wrap,padding,bounds,guiViewport,layout,presentation,trackTiming,textStart,textDuration,barProgress,duration,wordEnds,visible,revealCues,blipCues,glyphFrame,validate,clamp,active};
 if(typeof module!=='undefined') module.exports=api;
 else globalThis.HeritagePreview=api;
 })();

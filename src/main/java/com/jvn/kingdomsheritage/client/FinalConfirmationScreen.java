@@ -5,7 +5,7 @@ import com.jvn.kingdomsheritage.network.HeritageNetwork;
 import com.jvn.toucanlib.client.ToucanGlyphLayout;
 import com.jvn.toucanlib.client.ToucanGuiText;
 import com.jvn.toucanlib.client.ToucanTextRenderer;
-import com.jvn.toucanlib.client.ToucanTextTimeline;
+import com.jvn.kingdomsheritage.data.DialoguePacing;
 import java.util.List;
 import java.util.UUID;
 import net.minecraft.Util;
@@ -19,7 +19,7 @@ import org.lwjgl.glfw.GLFW;
 
 final class FinalConfirmationScreen extends Screen {
     private final UUID token;
-    private final ToucanTextTimeline timeline;
+    private final DialoguePacing.Schedule timeline;
     private final List<ToucanGlyphLayout.Glyph> glyphs;
     private List<ToucanGlyphLayout.Line> lines = List.of();
     private long started = -1;
