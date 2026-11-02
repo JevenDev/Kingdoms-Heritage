@@ -15,16 +15,15 @@ function create({editLocation,editIntro,testFlow,selectContext,reorder,editText,
   }
   function documents(){
     const {state,output}=current,defaults=monitors.pack.defaults;
-    const spawns=new Map((state.keepLocations?defaults.spawns:[]).map(spawn=>[spawn.id,spawn]));
-    for(const file of output.previewFiles){const match=/^data\/([^/]+)\/heritage\/spawns\/(.+)\.json$/.exec(file.path);if(!match)continue;const spawn=JSON.parse(file.content),id=match[1]+':'+match[2];if(spawn.enabled===false)spawns.delete(id);else spawns.set(id,{...spawn,id});}
-    const ordered=[...spawns.values()].sort(F.compare);
+    const invalidKits=new Set(state.kits.filter(kit=>current.catalog.kits.some(draft=>draft.id===kit.id&&draft.error)).map(kit=>'data/'+state.namespace+'/heritage/kits/'+kit.path+'.json'));
+    const choices=F.catalog({errors:[],files:output.previewFiles.filter(file=>!invalidKits.has(file.path))},{...defaults,spawns:state.keepLocations?defaults.spawns:[],kits:state.keepKits?defaults.kits:[]}),ordered=choices.spawns;
     const entry=state.locations.find(entry=>entry.id===state.active),id=entry?state.namespace+':'+entry.path:'',spawn=ordered.find(spawn=>spawn.id===id)??ordered[0];
-    const ids=entry?.kitMode==='selected'?entry.kits:[...state.kits.filter(kit=>kit.included).map(kit=>kit.id),...(state.keepKits?['bundled-empty']:[])];
-    const orderedIds=HeritagePack.orderedKitIds(state,current.catalog).filter(id=>ids.includes(id));
-    const kits=orderedIds.map(id=>id==='bundled-empty'?{...defaults.kits[0],id:'bundled-empty'}:current.catalog.kits.find(kit=>kit.id===id)).filter(Boolean);
-    const available=[...current.catalog.kits,...(state.keepKits?[{...defaults.kits[0],id:'bundled-empty'}]:[])];
-    if(previewLocation!==entry?.id||!available.some(kit=>kit.id===previewKit)){previewLocation=entry?.id;previewKit=kits[0]?.id??available[0]?.id??'';}
-    const kitDraft=available.find(kit=>kit.id===previewKit),kit=kitDraft?.document??kitDraft;
+    const kits=choices.kits.filter(kit=>spawn?.kits.includes(kit.id)).map(document=>{
+      const selection=state.kits.find(kit=>kit.included&&state.namespace+':'+kit.path===document.id),draft=current.catalog.kits.find(kit=>kit.id===selection?.id);
+      return {id:selection?.id??(document.id==='kingdomsheritage:default'?'bundled-empty':document.id),document,error:draft?.error};
+    });
+    if(previewLocation!==entry?.id||!kits.some(kit=>kit.id===previewKit)){previewLocation=entry?.id;previewKit=kits[0]?.id??'';}
+    const kitDraft=kits.find(kit=>kit.id===previewKit),kit=kitDraft?.document;
     return {ordered,entry,spawn,id,kits,kitError:kitDraft?.error,kit:kitDraft?.error?null:kit};
   }
   function arrival(model){
@@ -41,10 +40,10 @@ function create({editLocation,editIntro,testFlow,selectContext,reorder,editText,
       lastFrame=now;
       if(phase==='intro'&&playing&&config?.blip){if(!speechRunning){speechRunning=true;speech.start(P.blipCues(config,story.names),()=>time).catch(error=>status(scope,'Preview audio could not load: '+error.message,true));}}
       else if(speechRunning)stopSpeech();
-      const resolution=$(scope==='pack'?'pack-preview-resolution':'location-preview-resolution').value.split('x').map(Number),guiScale=current.state.guiScale||Number($('flow-scale').value)||3;
+      const resolution=$(scope==='pack'?'pack-preview-resolution':'location-preview-resolution').value.split('x').map(Number),guiScale=current.state.guiScale||Number($('flow-scale').value);
       nodes[scope].parentElement.style.setProperty('--monitor-ratio',resolution[0]/resolution[1]);
-      const view=monitors[scope].draw({spawns:tools.preview(model.ordered),page:tools.page(),selectedId:model.id,guiScale,width:resolution[0],height:resolution[1],phase,expanded:scope==='location'&&expanded,intro:config,time,names:story.names,pictureData:current.pictureData,kit:model.kit});
-      $(scope==='pack'?'pack-visual-scale':'location-visual-scale').textContent=(current.state.guiScale?'Pack GUI scale '+current.state.guiScale:'Player GUI scale '+guiScale+' for this preview')+' · effective '+view.scale;
+      const view=monitors[scope].draw({spawns:tools.preview(model.ordered),page:tools.page(),selectedId:model.id,guiScale,width:resolution[0],height:resolution[1],phase,expanded:scope==='location'&&expanded,intro:config,time,names:story.names,pictureData:current.pictureData,kit:model.kit,kitIndex:model.kits.findIndex(kit=>kit.id===previewKit),kitCount:model.kits.length});
+      $(scope==='pack'?'pack-visual-scale':'location-visual-scale').textContent=(current.state.guiScale?'Pack GUI scale '+current.state.guiScale:'Player GUI scale '+(guiScale||'Auto')+' for this preview')+' · effective '+view.scale;
       if(scope==='location'){
         $('arrival-play').textContent=playing?'Pause':'Play';$('arrival-scrub').value=String(time);$('arrival-time').textContent=seconds(time)+' / '+seconds(config?P.duration(config,currentStory.names):0);
       }

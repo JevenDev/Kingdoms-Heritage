@@ -55,10 +55,10 @@ function hit(id,name,x,y,w,h,action,disabled=false){
 }
 function button(id,name,x,y,w,action,disabled=false,alpha=1){
   const accessible=id.startsWith('description-')?(expanded?'Collapse description':'Read description'):({'previous-kit':'Previous kit','next-kit':'Next kit','previous-page':'Previous page','next-page':'Next page'})[id]??name;
-  const node=hit(id,accessible,x,y,w,20,action,disabled),hover=!disabled&&node.matches(':hover,:focus-visible'),image=images.get(hover?'button_highlighted':'button');
+  const node=hit(id,accessible,x,y,w,20,action,disabled),hover=!disabled&&node.matches(':hover,:focus-visible'),image=images.get(disabled?'button_disabled':hover?'button_highlighted':'button');
   ctx.save();ctx.globalAlpha=alpha;
   if(image){
-    const edge=3;
+    const edge=disabled?1:3;
     for(const [sx,sw,dx,dw] of [[0,edge,x,edge],[edge,image.width-edge*2,x+edge,w-edge*2],[image.width-edge,edge,x+w-edge,edge]])for(let offset=0;offset<dw;offset+=sw){
       const tile=Math.min(sw,dw-offset);ctx.drawImage(image,sx,0,tile,image.height,dx+offset,y,tile,20);
     }
@@ -105,7 +105,7 @@ async function loadArt(){
   if(artLoading)return artLoading;
   artLoading=(async()=>{
     const response=await fetch(new URL('defaults.json',base));if(!response.ok)throw new Error('Default locations could not load.');bundled=await response.json();
-    await Promise.all(['card','card_expanded','card_fallback','default','random','plains','village','disconnect','disconnect_highlighted','select','select_highlighted','unselect','unselect_highlighted','button','button_highlighted'].map(async name=>{
+    await Promise.all(['card','card_expanded','card_fallback','default','random','plains','village','disconnect','disconnect_highlighted','select','select_highlighted','unselect','unselect_highlighted','button','button_highlighted','button_disabled'].map(async name=>{
       const image=new Image();image.src=name.startsWith('button')?new URL('../../kit/assets/widget/'+name+'.png',base):new URL(name+'.png',base);await image.decode();images.set(name,image);
     }));
   })().catch(error=>{artLoading=null;throw error;});return artLoading;
@@ -211,7 +211,7 @@ async function monitorPreview(target){
       return {id:card.id,after,x:(after?right:pose.x)/view.guiWidth*box.width,y:pose.y/view.guiHeight*box.height,height:192*pose.scale/view.guiHeight*box.height};
     },
     needsResourcePack(spawn,data){return !!spawn?.image&&!uploaded.has(data)&&cover(spawn)===images.get('card_fallback');},
-    draw({spawns,selectedId,guiScale=3,width=1920,height=1080,phase='cards',expanded=false,page=null,intro,time=0,names={},pictureData,kit,inventoryMode='player'}){
+    draw({spawns,selectedId,guiScale=3,width=1920,height=1080,phase='cards',expanded=false,page=null,intro,time=0,names={},pictureData,kit,kitIndex=0,kitCount=1,inventoryMode='player'}){
       if(target.width!==width||target.height!==height){target.width=width;target.height=height;}target.dataset.guiScale=String(guiScale);
       const view=P.guiViewport(width,height,guiScale),w=view.guiWidth,h=view.guiHeight,old={ctx,renderer,viewport,scroll};
       try{
@@ -225,7 +225,9 @@ async function monitorPreview(target){
           if(!inventory){inventorySource=document.createElement('div');inventorySource.hidden=true;inventorySource.inert=true;target.after(inventorySource);inventory=new HeritageInventory.Inventory(inventorySource);}
           const key=JSON.stringify([kit,inventoryMode]);if(key!==kitSignature){kitSignature=key;inventory.set(kit,{mode:inventoryMode,hideCrafting:true,controlledAim:true});}
           inventory.visible=true;inventory.draw();const bw=inventory.layout.width,bh=inventory.layout.height,x=Math.trunc((w-bw)/2),y=Math.trunc((h-bh)/2);
-          ctx.drawImage(inventory.canvas,x,y,bw,bh);text('Choose your starting kit',w/2,Math.max(12,y-25),{center:true});text(label(kit,'title'),w/2,Math.max(24,y-13),{center:true});
+          ctx.drawImage(inventory.canvas,x,y,bw,bh);const titleY=Math.max(2,y-13),center=x+Math.trunc(bw/2);let title=label(kit,'title')+' ('+(kitIndex+1)+'/'+kitCount+')';
+          while(width(literal(title))>Math.min(w-24,bw+60))title=Array.from(title).slice(0,-1).join('');
+          if(titleY>=16)text('Choose your starting kit',center,titleY-12,{center:true});text(title,center,titleY,{center:true});
         }else{
           const index=Math.max(0,spawns.findIndex(entry=>entry.id===selectedId)),pageIndex=page===null?Math.floor(index/10):Math.max(0,Math.min(page,Math.floor(Math.max(0,spawns.length-1)/10))),shown=spawns.slice(pageIndex*10,pageIndex*10+10),key=JSON.stringify([shown.map(entry=>entry.id),w,h]);
           if(key!==signature){signature=key;layout=new HeritagePresentation.Cards(shown.map(entry=>entry.id),w,h,clock());}
@@ -284,9 +286,9 @@ function enter(focus=true){
   if(session.phase==='review'){
     segments=F.narration($('flow-player').value.trim()||'Player',sampleNames(),session.kit,bundled.translations);
     const story=segments.map(segment=>segment.text).join('');reviewGlyphs=literal(story,0xeeeae0);$('flow-narration').textContent=story;
-    for(const phrase of [$('flow-player').value.trim()||'Player',sampleNames().structure!=='Wilderness'?sampleNames().structure.toLowerCase():sampleNames().biome.toLowerCase(),label(session.kit,'title'),'nothing but your own two hands']){
-      const at=story.indexOf(phrase);if(at<0)continue;const offset=Array.from(story.slice(0,at)).length;
-      for(const glyph of reviewGlyphs.slice(offset,offset+Array.from(phrase).length))glyph.tint=0x55ffff;
+    let offset=0;for(const segment of segments){
+      if(segment.highlight){const [start,length]=segment.highlight;for(const glyph of reviewGlyphs.slice(offset+start,offset+start+length))glyph.tint=0x55ffff;}
+      offset+=Array.from(segment.text).length;
     }
 
   }
@@ -361,7 +363,7 @@ function kitScreen(w,h,now){
   if(reviewing){ctx.save();ctx.translate(pose.x+bw*pose.scale/2,pose.y+bh*pose.scale/2);ctx.rotate(pose.tilt*Math.PI/180);ctx.scale(pose.scale,pose.scale);ctx.drawImage(inventory.canvas,-bw/2,-bh/2,bw,bh);ctx.restore();}
   else{Object.assign(host.style,{left:normalX/w*100+'%',top:normalY/h*100+'%',width:bw/w*100+'%',height:bh/h*100+'%'});const frame=inventory.frame,cssScale=host.clientWidth/bw;frame.style.width=bw+'px';frame.style.height=bh+'px';frame.style.transformOrigin='top left';frame.style.transform='scale('+cssScale+')';}
   const titleY=Math.max(2,normalY-13),title=label(session.kit,'title')+' ('+(session.kitIndex+1)+'/'+session.allowed().length+')';
-  if(progress<1){const alpha=Math.max(4,Math.round((1-progress)*255));if(titleY>=16)text('Choose your starting kit',center,titleY-12,{center:true,alpha});let shown=title;while(width(literal(shown))>Math.min(w-24,bw+60))shown=shown.slice(0,-1);text(shown,center,titleY,{center:true,alpha});}
+  if(progress<1){const alpha=Math.max(4,Math.round((1-progress)*255));if(titleY>=16)text('Choose your starting kit',center,titleY-12,{center:true,alpha});let shown=title;while(width(literal(shown))>Math.min(w-24,bw+60))shown=Array.from(shown).slice(0,-1).join('');text(shown,center,titleY,{center:true,alpha});}
   if(reviewing){
     const scale=Math.max(.1,Math.min(1,(w-32)/(bw+216),(h-96)/bh)),left=Math.round((w-(bw+216)*scale)/2+(bw+24)*scale)+Math.round((1-progress)*12),limit=Math.max(1,Math.round(192*scale)),promptHeight=P.wrap(literal('Is this your choice?'),limit,renderer.advance).length*9,textHeight=promptHeight+Math.min(2,P.wrap(literal(label(session.kit,'title')),limit,renderer.advance).length)*9,top=Math.trunc((h-textHeight-64)/2),alpha=P.clamp((progress-.3)/.7);
     if(alpha>0){text('Is this your choice?',left,top,{limit,alpha:Math.max(4,Math.round(alpha*255))});text(label(session.kit,'title'),left,top+promptHeight+6,{color:0xf2cd83,limit,maxLines:2,alpha:Math.max(4,Math.round(alpha*255))});}

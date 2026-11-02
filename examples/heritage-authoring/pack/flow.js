@@ -44,8 +44,10 @@ function context(spawn,kit,player,names,translations={}) {
 function narration(player,names,kit,translations={}) {
   let location=names.structure!=='Wilderness'?names.structure:names.biome;
   location=location.replace(/^Village .+$/,'Village').replace(/^Ruined Portal.*$/,'Ruined Portal').replace(/^Ocean Ruin .+$/,'Ocean Ruins').toLowerCase();
-  const equipment=kit.items.length?' with equipment from the "'+label(kit,'title',translations)+'" kit...':' with nothing but your own two hands...';
-  return [{text:player+'...',pause:500},{text:' you woke up in '+(/^(the |a |an )/.test(location)?'':'the ')+location+'...',pause:1000},{text:equipment,pause:1000},{text:' is that correct?',pause:0}];
+  const segment=(prefix,value,suffix,pause)=>({text:prefix+value+suffix,pause,highlight:[Array.from(prefix).length,Array.from(value).length]});
+  const placeName=(/^(the |a |an )/.test(location)?'':'the ')+location;
+  const equipment=kit.items.length?segment(' with equipment from the "',label(kit,'title',translations),'" kit...',1000):segment(' with ','nothing but your own two hands','...',1000);
+  return [segment('',player,'...',500),segment(' you woke up in ',placeName,'...',1000),equipment,{text:' is that correct?',pause:0}];
 }
 function revealed(segments,elapsed) {
   let count=0;

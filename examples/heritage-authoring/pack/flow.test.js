@@ -100,3 +100,14 @@ test('the bundled scale is inherited unless an exported pack explicitly override
   assert.equal(Flow.catalog({errors:[],files:[]},bundled).guiScale,3);
   assert.equal(Flow.catalog(build(),bundled).guiScale,0);
 });
+
+test('review highlights match the player, normalized place and equipment components',()=>{
+  for(const [player,names,kit,expected] of [
+    ['the',{biome:'Plains',structure:'Village Plains'},{title:'the',items:[{index:0,item:{id:'minecraft:bread'}}]},['the','the village','the']],
+    ['Alex',{biome:'The End',structure:'Wilderness'},{title:'Unused',items:[]},['Alex','the end','nothing but your own two hands']],
+    ['Alex\u{1f600}',{biome:'Forest',structure:'Ruined Portal Desert'},{title:'Alex\u{1f600}',items:[{index:0,item:{id:'minecraft:bread'}}]},['Alex\u{1f600}','the ruined portal','Alex\u{1f600}']]
+  ]){
+    const segments=Flow.narration(player,names,kit);
+    assert.deepEqual(segments.filter(segment=>segment.highlight).map(segment=>{const [start,length]=segment.highlight;return Array.from(segment.text).slice(start,start+length).join('');}),expected);
+  }
+});

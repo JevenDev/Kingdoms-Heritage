@@ -20,3 +20,14 @@ test('each example has an independent namespace and merges without changing exis
   assert.notEqual(first.pack.namespace,second.pack.namespace);
   const merged=Project.merge(second,{kits:first.kits,intros:first.intros},createId);assert.equal(JSON.stringify(first),before);assert.equal(merged.kits.kits.length,2);assert.equal(merged.intros.intros.length,2);build(merged);
 });
+
+test('enabling bundled defaults after importing the example removes stale disable overrides',async()=>{
+  const project=await Example.create(ids());project.pack.keepKits=true;project.pack.keepLocations=true;
+  for(const location of project.pack.locations)location.kitMode='all';
+  const output=build(project),bundled=require('./assets/defaults.json'),choices=Flow.catalog(output,bundled);
+  assert.equal(choices.kits.length,2);assert.equal(choices.spawns.length,6);
+  for(const spawn of choices.spawns)assert.ok(spawn.kits.every(id=>choices.kits.some(kit=>kit.id===id)));
+  assert.ok(!output.files.some(file=>/^data\/kingdomsheritage\/heritage\/(kits|spawns)\//.test(file.path)&&JSON.parse(file.content).enabled===false));
+  project.pack.keepKits=false;project.pack.keepLocations=false;
+  const disabled=Flow.catalog(build(project),bundled);assert.equal(disabled.kits.length,1);assert.equal(disabled.spawns.length,2);
+});

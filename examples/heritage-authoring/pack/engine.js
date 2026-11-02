@@ -309,7 +309,11 @@ function build(state,catalog) {
   const descriptionChanged=state.description!==(typeof originalDescription==='string'?originalDescription:JSON.stringify(originalDescription));
   const metadata=(saved,format)=>{const result=copy(saved??{});result.pack={...result.pack,pack_format:format};if(!saved||descriptionChanged)result.pack.description=state.description;return result;};
   add('pack.mcmeta',metadata(state.packMetadata,48));
-  report('Imported datapack files',()=>{for(const file of importedFiles(state.importedFiles?.data))if(!paths.has(file.path)){paths.add(file.path);files.push(file);}});
+  report('Imported datapack files',()=>{for(const file of importedFiles(state.importedFiles?.data))if(!paths.has(file.path)){
+    const bundled=/^data\/kingdomsheritage\/heritage\/(?:kits\/default|spawns\/(?:default|random|plains|village))\.json$/.test(file.path);
+    if(bundled&&(file.path.includes('/kits/')?state.keepKits:state.keepLocations)&&JSON.parse(file.content).enabled===false)continue;
+    paths.add(file.path);files.push(file);
+  }});
   if(!state.keepLocations)for(const id of bundledSpawns) {
     const path='data/kingdomsheritage/heritage/spawns/'+id+'.json';
     if(!paths.has(path))add(path,{enabled:false});
