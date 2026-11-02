@@ -4,8 +4,8 @@
   "type": "default",
   "order": 10,
   "intro": {
-    "text": "<gold>Welcome home, <player>.</gold>",
-    "subtitle": "<spawn> awaits. You bring <equipment>.",
+    "text": "<gold>Welcome home, {player}.</gold>",
+    "subtitle": "{spawn} awaits. You bring {equipment}.",
     "title_position": "left_center",
     "subtitle_position": "left_center",
     "cinematic_bars": true,
@@ -27,7 +27,7 @@
           "tag": "party_size",
           "min": 2
         },
-        "subtitle": "You arrived with <companions>, led by <party_leader>.\n<party_size> travelers, each with their own beginning."
+        "subtitle": "You arrived with {companions}, led by {party_leader}.\n{party_size} travelers, each with their own beginning."
       }
     ]
   },

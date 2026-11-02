@@ -6,8 +6,8 @@
   "search_radius": 6400,
   "order": 40,
   "intro": {
-    "text": "A <gold><structure|new settlement></gold> waits for you, <player>.",
-    "subtitle": "<biome> / <dimension>\nChosen kit: <kit>. You bring <equipment>.\n<var:heritage_example:guide>: Press <key:inventory> to look inside.",
+    "text": "A <gold>{structure|new settlement}</gold> waits for you, {player}.",
+    "subtitle": "{biome} / {dimension}\nChosen kit: {kit}. You bring {equipment}.\n{var:heritage_example:guide}: Press {key:inventory} to look inside.",
     "title_position": "left_center",
     "subtitle_position": "left_center",
     "cinematic_bars": true,
@@ -36,7 +36,7 @@
           "tag": "keeps_belongings",
           "equals": true
         },
-        "subtitle": "<var:heritage_example:guide>: Your belongings made the journey.\nPress <key:inventory> to see <equipment>."
+        "subtitle": "{var:heritage_example:guide}: Your belongings made the journey.\nPress {key:inventory} to see {equipment}."
       },
       {
         "when": {
@@ -51,7 +51,7 @@
             }
           ]
         },
-        "subtitle": "<var:heritage_example:guide>: The fields need a farmer.\nYour <kit> supplies are ready. Press <key:inventory>."
+        "subtitle": "{var:heritage_example:guide}: The fields need a farmer.\nYour {kit} supplies are ready. Press {key:inventory}."
       }
     ]
   },

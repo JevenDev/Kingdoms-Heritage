@@ -32,7 +32,7 @@ test('every documentation JSON block parses and every copyable intro validates',
     }
   }
   const reference = pages.get('dialogue').markdown;
-  for (const tag of Object.keys(P.contextDefaults)) assert.ok(reference.includes('<' + tag + '>'), tag);
+  for (const tag of Object.keys(P.contextDefaults)) assert.ok(reference.includes('{' + tag + '}'), tag);
 });
 
 test('embedded pack examples and the complete dialogue template match their source files', () => {

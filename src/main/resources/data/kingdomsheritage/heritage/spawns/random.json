@@ -7,7 +7,7 @@
   "title_key": "heritage.kingdomsheritage.spawns.random.title",
   "subtitle_key": "heritage.kingdomsheritage.spawns.random.subtitle",
   "intro": {
-    "text": "You woke up in a <biome>...",
+    "text": "You woke up in a {biome}...",
     "subtitle": "... How did you get here?",
     "title_position": "left_center",
     "subtitle_position": "right_center",

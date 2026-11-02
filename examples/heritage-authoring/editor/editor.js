@@ -570,8 +570,9 @@ $('apply-color').addEventListener('click',()=>wrapSelection('<color:'+$('color')
 $('apply-gradient').addEventListener('click',()=>wrapSelection('<gradient:'+$('color').value+':'+$('gradient-end').value+'>','</gradient>'));
 function insertTag(tag){
   if(activeField.readOnly){$('copy-status').textContent='Edit structured text in JSON. Your component has been kept.';return;}
-  if(visualText&&richEditors.has(activeField.id)){richEditors.get(activeField.id).insert('<'+tag+'>');return;}
-  activeField.setRangeText('<'+tag+'>',activeField.selectionStart,activeField.selectionEnd,'end');
+  const placeholder=P.pacingCue(tag)?'<'+tag+'>':'{'+tag+'}';
+  if(visualText&&richEditors.has(activeField.id)){richEditors.get(activeField.id).insert(placeholder);return;}
+  activeField.setRangeText(placeholder,activeField.selectionStart,activeField.selectionEnd,'end');
   activeField.focus();editing({target:activeField});
 }
 document.querySelectorAll('[data-token]').forEach(button=>button.addEventListener('click',()=>insertTag(button.dataset.token)));
@@ -585,7 +586,7 @@ $('preset').addEventListener('change',()=>{
     if(['wave','rainbow'].includes(value))example.text='<'+value+'>'+example.text+'</'+value+'>';
     if(value==='gradient')example.text='<gradient:#ffcc55:#55aaff>'+example.text+'</gradient>';
     if(value==='letter'||value==='word'){
-      example.text='You woke up in <gold><biome></gold>...';example.animation=value==='letter'?'letter_by_letter':'word_by_word';
+      example.text='You woke up in <gold>{biome}</gold>...';example.animation=value==='letter'?'letter_by_letter':'word_by_word';
     }
   }
   openIntro(JSON.stringify({intro:example},null,2),name);$('preset').value='custom';

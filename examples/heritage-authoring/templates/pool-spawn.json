@@ -12,7 +12,7 @@
       "target": "minecraft:forest",
       "intro": {
         "text": "You wake beneath the trees.",
-        "subtitle": "Find your way through <gold><biome></gold>.",
+        "subtitle": "Find your way through <gold>{biome}</gold>.",
         "title": true,
         "animation": "letter_by_letter",
         "blip": true
@@ -22,7 +22,7 @@
       "type": "structure",
       "target": "#minecraft:village",
       "intro": {
-        "text": "Welcome to <gold><structure></gold>.",
+        "text": "Welcome to <gold>{structure}</gold>.",
         "control": "during_title",
         "hold_ticks": 100,
         "title": true,
@@ -36,8 +36,8 @@
     }
   ],
   "intro": {
-    "text": "You woke up in <gold><biome></gold>...",
-    "subtitle": "<structure> / <dimension>",
+    "text": "You woke up in <gold>{biome}</gold>...",
+    "subtitle": "{structure} / {dimension}",
     "title_position": "left_center",
     "subtitle_position": "left_center",
     "cinematic_bars": true,

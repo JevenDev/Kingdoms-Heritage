@@ -8,7 +8,7 @@
   "title_key": "heritage.kingdomsheritage.spawns.village.title",
   "subtitle_key": "heritage.kingdomsheritage.spawns.village.subtitle",
   "intro": {
-    "text": "You woke up in a <structure>...",
+    "text": "You woke up in a {structure}...",
     "subtitle": "... How did you get here?",
     "title_position": "left_center",
     "subtitle_position": "right_center",

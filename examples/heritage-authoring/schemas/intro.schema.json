@@ -16,7 +16,7 @@
       "additionalProperties": {
         "$ref": "#/$defs/dialogueValue"
       },
-      "description": "Namespaced defaults used by <var:namespace:name>. Server extension values override these defaults."
+      "description": "Namespaced defaults used by {var:namespace:name}. Server extension values override these defaults."
     },
     "fallbacks": {
       "type": "object",
@@ -27,7 +27,7 @@
       "additionalProperties": {
         "$ref": "#/$defs/dialogueValue"
       },
-      "description": "Replacement components for absent context tags. Inline <tag|fallback> takes precedence."
+      "description": "Replacement components for absent context tags. Inline {tag|fallback} takes precedence."
     },
     "variants": {
       "type": "array",
@@ -65,7 +65,7 @@
       }
     },
     "text": {
-      "description": "Minecraft text with context tags, <var:namespace:name>, <key:inventory> and <tag|fallback>. Sequential reveals support <pause=500> in milliseconds and <speed=0.5>, with at most 64 pacing cues across the resolved title and subtitle.",
+      "description": "Minecraft text with context tags, {var:namespace:name}, {key:inventory} and {tag|fallback}. Sequential reveals support <pause=500> in milliseconds and <speed=0.5>, with at most 64 pacing cues across the resolved title and subtitle. Existing angle-bracket placeholders remain supported as aliases.",
       "allOf": [
         {
           "$ref": "#/$defs/component"

@@ -11,8 +11,8 @@ function atoms(source,names={}){
     if(source[index]==='§'&&index+1<source.length){index+=2;continue;}
     const control=/^<([^<>]+)>/.exec(source.slice(index)),cue=control?P.pacingCue(control[1]):null;
     if(cue){result.push({start:index,end:index+control[0].length,text:'['+cue.kind+' '+cue.value+(cue.kind==='pause'?' ms':'×')+']',token:control[1],cue:true,style:{effect:{},tint:0xaaaaaa}});index+=control[0].length;continue;}
-    const match=/^<([a-z_][a-z0-9_:./-]*(?:\|[^<>]*)?)>/.exec(source.slice(index)),resolved=match?P.token(match[1],names):null,token=resolved?match:null,text=resolved?resolved.text:source[index]==='\r'?'\n':String.fromCodePoint(source.codePointAt(index)),length=token?token[0].length:source[index]==='\r'&&source[index+1]==='\n'?2:String.fromCodePoint(source.codePointAt(index)).length;
-    result.push({start:index,end:index+length,text,token:token?.[1]??null,style:glyphs[glyph]??{effect:{},tint:0xffffff}});glyph+=Array.from(text).length;index+=length;
+    const match=/^(?:\{([a-z_][a-z0-9_:./-]*(?:\|[^{}]*)?)\}|<([a-z_][a-z0-9_:./-]*(?:\|[^<>]*)?)>)/.exec(source.slice(index)),resolved=match?P.token(match[1]??match[2],names):null,token=resolved?match:null,text=resolved?P.parse(resolved.value,{...names,__substitution:true}).map(glyph=>glyph.ch).join(''):source[index]==='\r'?'\n':String.fromCodePoint(source.codePointAt(index)),length=token?token[0].length:source[index]==='\r'&&source[index+1]==='\n'?2:String.fromCodePoint(source.codePointAt(index)).length;
+    result.push({start:index,end:index+length,text,token:token?(token[1]??token[2]):null,source:token?.[0]??null,style:glyphs[glyph]??{effect:{},tint:0xffffff}});glyph+=Array.from(text).length;index+=length;
   }
   return result;
 }
@@ -49,7 +49,7 @@ function create(field,config){
     const list=field.readOnly?Array.from(source).map((text,index)=>({text,start:index,end:index+text.length,style:{effect:{},tint:0xffffff}})):atoms(source,config.names());
     for(const atom of list){
       const span=document.createElement('span');span.textContent=atom.text;span.dataset.start=atom.start;span.dataset.end=atom.end;const effect=atom.style.effect;span.style.color='#'+atom.style.tint.toString(16).padStart(6,'0');if(effect.bold)span.style.fontWeight='700';if(effect.italic)span.style.fontStyle='italic';span.style.textDecoration=[effect.underline?'underline':'',effect.strike?'line-through':''].filter(Boolean).join(' ');
-      if(atom.token){span.dataset.locationToken=atom.token;span.contentEditable='false';span.title='<'+atom.token+'>';span.setAttribute('aria-label',atom.token+' placeholder: '+atom.text);}else if(P.active(effect))span.title=Object.keys(effect).filter(key=>effect[key]===true).join(', ');
+      if(atom.token){span.dataset.locationToken=atom.token;span.contentEditable='false';span.title=atom.source??'<'+atom.token+'>';span.setAttribute('aria-label',atom.token+' placeholder: '+atom.text);}else if(P.active(effect))span.title=Object.keys(effect).filter(key=>effect[key]===true).join(', ');
       editor.append(span);
     }
   }
@@ -74,7 +74,7 @@ function create(field,config){
   editor.addEventListener('compositionstart',()=>{remember();composition={source:field.value,...selection};});
   editor.addEventListener('compositionend',event=>{const original=composition;composition=null;if(original)apply(replace(original.source,original.start,original.end,event.data??'',config.names()));});
   editor.addEventListener('paste',event=>{event.preventDefault();remember();insert(event.clipboardData.getData('text/plain'));});
-  const copySelection=event=>{remember();if(selection.start===selection.end)return;event.preventDefault();event.clipboardData.setData('text/plain',atoms(field.value,config.names()).filter(atom=>atom.end>selection.start&&atom.start<selection.end).map(atom=>atom.token?'<'+atom.token+'>':atom.text).join(''));if(event.type==='cut')insert('');};
+  const copySelection=event=>{remember();if(selection.start===selection.end)return;event.preventDefault();event.clipboardData.setData('text/plain',atoms(field.value,config.names()).filter(atom=>atom.end>selection.start&&atom.start<selection.end).map(atom=>atom.token?atom.source??'<'+atom.token+'>':atom.text).join(''));if(event.type==='cut')insert('');};
   editor.addEventListener('copy',copySelection);editor.addEventListener('cut',copySelection);editor.addEventListener('drop',event=>{event.preventDefault();remember();insert(event.dataTransfer.getData('text/plain'));});
   editor.addEventListener('keydown',event=>{
     if(!(event.ctrlKey||event.metaKey)||event.altKey)return;const key=event.key.toLowerCase();

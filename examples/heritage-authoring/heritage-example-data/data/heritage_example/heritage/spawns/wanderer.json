@@ -5,8 +5,8 @@
   "random_radius": 2000,
   "order": 20,
   "intro": {
-    "text": "You found <wave><gold><place></gold></wave>.<pause=750>\n<speed=0.5>Your journey begins, <player>.<speed=1>",
-    "subtitle": "Open your inventory with <key:inventory>.\nYou carry <equipment>.",
+    "text": "You found <wave><gold>{place}</gold></wave>.<pause=750>\n<speed=0.5>Your journey begins, {player}.<speed=1>",
+    "subtitle": "Open your inventory with {key:inventory}.\nYou carry {equipment}.",
     "title_position": "left_center",
     "subtitle_position": "left_center",
     "cinematic_bars": true,

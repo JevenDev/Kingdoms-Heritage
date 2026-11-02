@@ -7,7 +7,7 @@
     "#heritage_example:starter"
   ],
   "intro": {
-    "text": "You woke up in a <wave><gold><biome></gold></wave>...",
+    "text": "You woke up in a <wave><gold>{biome}</gold></wave>...",
     "subtitle": "<italic>A new journey begins.</italic>",
     "title_position": "left_center",
     "subtitle_position": "left_center",

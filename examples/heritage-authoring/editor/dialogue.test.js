@@ -84,3 +84,34 @@ test('context substitutions remain atomic and inherit surrounding styles',()=>{
   assert.equal(atoms.length,1);assert.equal(atoms[0].text,'Sam');assert.equal(atoms[0].style.tint,P.colors.gold);
   assert.equal(R.replace(source,8,10,'Jo').source,'<gold>Jo</gold>');
 });
+
+test('brace placeholders resolve beside legacy aliases and leave style braces literal',()=>{
+  assert.equal(plain('{player} / <kit> / {companions|alone}'),'Alex / Traveler / alone');
+  assert.equal(plain('{gold} <gold>{player}</gold> {unknown}'),'{gold} Alex {unknown}');
+  assert.equal(P.parse('<gold>{player}</gold>').every(glyph=>glyph.tint===P.colors.gold),true);
+  assert.equal(plain('<companions|{player}>'),'{player}');
+  assert.equal(plain('{unknown|<gold>home</gold>}'),'home');
+  assert.equal(P.diagnostics({...P.packDefaults,text:'{oops} <gold>{player}</gold> <pause=500>'}).length,1);
+});
+
+test('brace variables, conditions, keybindings and fallbacks match legacy playback',()=>{
+  const base={...P.packDefaults,text:'{var:story:greeting}',subtitle:'{structure} {key:inventory} {key:missing|unbound}',variables:{'story:greeting':{text:'Welcome, {player}<pause=500>',bold:true}},fallbacks:{structure:{text:'Home',color:'gold'}},variants:[{when:{tag:'party_size',min:2},subtitle:'{party_leader} / {companions}'}],animation:'letter_by_letter'};
+  for(const names of [{player:'Sam',structure:'',keys:{'key.inventory':'I'}},{player:'Sam',party_size:'2',party_leader:'Jo',companions:'Jo'}]){
+    const legacy=JSON.parse(JSON.stringify(base).replace(/\{([a-z_][a-z0-9_:./-]*(?:\|[^{}]*)?)\}/g,'<$1>'));
+    const a=P.playback(base,names),b=P.playback(legacy,names);
+    assert.deepEqual(a.all,b.all);
+    assert.equal(a.revealTicks,b.revealTicks);
+    assert.equal(P.duration(base,names),P.duration(legacy,names));
+  }
+  assert.equal(resolved({text:'{var:story:message}'},{variables:{'story:message':'{player}'}}),'{player}');
+});
+
+test('visual brace placeholders preserve their spelling and source selection boundaries',()=>{
+  const source='<gold>{party_leader}</gold> / <player>',atoms=R.atoms(source,{party_leader:'Jo'});
+  assert.equal(atoms[0].token,'party_leader');
+  assert.equal(atoms[0].source,'{party_leader}');
+  assert.equal(atoms[0].text,'Jo');
+  assert.equal(atoms[0].style.tint,P.colors.gold);
+  assert.equal(atoms.at(-1).source,'<player>');
+  assert.equal(R.replace(source,9,11,'Sam').source,'<gold>Sam</gold> / <player>');
+});

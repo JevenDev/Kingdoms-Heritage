@@ -13,7 +13,7 @@ function token(raw,names={}) {
   return {key,value:value??'',text:componentText(value??'')};
 }
 const positions = {mid_center:[1,1],top_center:[1,0],bottom_center:[1,2],left_center:[0,1],right_center:[2,1],top_left:[0,0],top_right:[2,0],bottom_left:[0,2],bottom_right:[2,2]};
-const defaults = {text:'You woke up in <wave><gold><biome></gold></wave>...',subtitle:'<italic>A new journey begins.</italic>',title:false,large_subtitle:false,outline:true,animation:'word_by_word',control:'after_title',blip:true,black_hold_ticks:60,fade_from_black_ticks:60,reveal_ticks:40,hold_ticks:60,fade_out_ticks:20,cinematic_bars:true,bar_style:'random',bar_transition_ticks:40,bar_height:26,timeline:null,hide_hud_during_bars:true,title_position:'left_center',subtitle_position:'left_center'};
+const defaults = {text:'You woke up in <wave><gold>{biome}</gold></wave>...',subtitle:'<italic>A new journey begins.</italic>',title:false,large_subtitle:false,outline:true,animation:'word_by_word',control:'after_title',blip:true,black_hold_ticks:60,fade_from_black_ticks:60,reveal_ticks:40,hold_ticks:60,fade_out_ticks:20,cinematic_bars:true,bar_style:'random',bar_transition_ticks:40,bar_height:26,timeline:null,hide_hud_during_bars:true,title_position:'left_center',subtitle_position:'left_center'};
 const packDefaults = {...defaults,variables:{},fallbacks:{},variants:[],text:'',subtitle:'',animation:'fade_in',blip:false,cinematic_bars:false,hide_hud_during_bars:false,title_position:'mid_center',subtitle_position:'mid_center'};
 const positionAliases = {center:'mid_center',mc:'mid_center',mid_c:'mid_center',tc:'top_center',top_c:'top_center',bc:'bottom_center',bottom_c:'bottom_center',lc:'left_center',left_c:'left_center',rc:'right_center',right_c:'right_center',tl:'top_left',tr:'top_right',bl:'bottom_left',br:'bottom_right'};
 function readJson(source,{validate:check=true}={}) {
@@ -130,8 +130,8 @@ function expandComponent(value,names){
   }
   if(typeof value!=='string')return String(value);
   const parts=[];let cursor=0;
-  for(const match of value.matchAll(/<([a-z_][a-z0-9_:./-]*(?:\|[^<>]*)?)>/g)){
-    const replacement=token(match[1],names);if(!replacement)continue;
+  for(const match of value.matchAll(/\{([a-z_][a-z0-9_:./-]*(?:\|[^{}]*)?)\}|<([a-z_][a-z0-9_:./-]*(?:\|[^<>]*)?)>/g)){
+    const replacement=token(match[1]??match[2],names);if(!replacement)continue;
     parts.push(value.slice(cursor,match.index),replacement.value);cursor=match.index+match[0].length;
   }
   return cursor?{text:'',extra:[...parts,value.slice(cursor)]}:value;
@@ -188,11 +188,11 @@ function validateSamples(values){
 function diagnostics(config,names={}) {
   const resolved=dialogue(config,names),warnings=new Set();
   for(const source of [config.text,config.subtitle,...Object.values(config.variables??{}),...(config.variants??[]).flatMap(entry=>[entry.text,entry.subtitle])]){
-    for(const match of componentText(source).matchAll(/<(\/?)([^<>]+)>/g)){
-      const raw=match[2].trim();
-      if(effects(raw.toLowerCase())||match[1]&&effects(raw.toLowerCase())||pacingCue(raw))continue;
+    for(const match of componentText(source).matchAll(/\{([a-z_][a-z0-9_:./-]*(?:\|[^{}]*)?)\}|<(\/?)([^<>]+)>/g)){
+      const brace=match[1]!==undefined,raw=(brace?match[1]:match[3]).trim();
+      if(!brace&&(effects(raw.toLowerCase())||pacingCue(raw)))continue;
       if(token(raw,resolved.names))continue;
-      warnings.add('Unknown dialogue tag <'+raw+'>. Add a sample value for extension variables or modded keybindings.');
+      warnings.add('Unknown dialogue '+(brace?'placeholder '+match[0]:'tag <'+raw+'>')+'. Add a sample value for extension variables or modded keybindings.');
     }
   }
   return [...warnings];
@@ -283,9 +283,9 @@ function parse(text, names={}, offset=0, inherited={}) {
     i+=ch.length;
   }
   const plain=chars.join(''), tags=[];
-  for(const m of plain.matchAll(/<(\/?)([^<>]+)>/g)) {
-    const raw=m[2].trim().toLowerCase();
-    tags.push({start:m.index,end:m.index+m[0].length,name:canonical(raw.split(':')[0]),closing:!!m[1],effect:effects(raw),cue:pacingCue(m[2].trim()),replacement:!m[1]&&!names.__substitution?token(m[2],names):null});
+  for(const m of plain.matchAll(/\{([a-z_][a-z0-9_:./-]*(?:\|[^{}]*)?)\}|<(\/?)([^<>]+)>/g)) {
+    const brace=m[1]!==undefined,value=brace?m[1]:m[3],raw=value.trim().toLowerCase(),closing=!brace&&!!m[2];
+    tags.push({start:m.index,end:m.index+m[0].length,name:canonical(raw.split(':')[0]),closing,effect:brace?null:effects(raw),cue:brace?null:pacingCue(value.trim()),replacement:!closing&&!names.__substitution?token(value,names):null});
   }
   function closed(index,name) {
     let depth=1;

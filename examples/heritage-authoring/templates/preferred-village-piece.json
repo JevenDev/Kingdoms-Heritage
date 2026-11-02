@@ -7,7 +7,7 @@
     "#heritage_example:starter"
   ],
   "intro": {
-    "text": "You woke up in a <structure>...",
+    "text": "You woke up in a {structure}...",
     "subtitle": "<italic>A new journey begins.</italic>",
     "title_position": "left_center",
     "subtitle_position": "left_center",
