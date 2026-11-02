@@ -26,7 +26,7 @@ public final class DialogueContext {
     }
 
     public Optional<Component> value(String key) { return Optional.ofNullable(values.get(key)).map(Component::copy); }
-    public Optional<String> fact(String key) { return Optional.ofNullable(facts.get(key)); }
+    public Optional<String> fact(String key) { return Optional.ofNullable(facts.get(key)).or(() -> value(key).map(Component::getString)); }
     public boolean present(String key) { return !facts.getOrDefault(key, values.containsKey(key) ? values.get(key).getString() : "").isEmpty(); }
 
     public DialogueContext with(String key, Component value, String fact) {
@@ -37,15 +37,22 @@ public final class DialogueContext {
         return new DialogueContext(nextValues, nextFacts);
     }
 
-    public Component resolve(Component source) {
+    public Component resolve(Component source) { return resolve(source, Map.of(), ignored -> null); }
+
+    public Component resolve(Component source, Map<String, Component> fallbacks, java.util.function.Function<String, Component> keys) {
         var result = Component.empty();
         String plain = source.getString();
         var matcher = TAG.matcher(plain);
         int previous = 0;
         while (matcher.find()) {
-            Component replacement = values.get(matcher.group(1));
-            String fallback = matcher.group(2);
-            if (fallback != null && !present(matcher.group(1))) replacement = Component.literal(fallback);
+            String tag = matcher.group(1);
+            Component replacement = values.get(tag);
+            if (replacement == null && tag.startsWith("key:")) replacement = keys.apply(tag.substring(4));
+            boolean available = values.containsKey(tag) ? present(tag) : replacement != null && !replacement.getString().isEmpty();
+            if (!available) {
+                if (matcher.group(2) != null) replacement = Component.literal(matcher.group(2));
+                else if (fallbacks.containsKey(tag)) replacement = fallbacks.get(tag);
+            }
             if (replacement == null) continue;
             result.append(slice(source, previous, matcher.start()));
             Style style = styleAt(source, matcher.start());

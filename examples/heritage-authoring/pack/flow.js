@@ -33,6 +33,12 @@ function locations(spawn,sample={}) {
   if(['biome','structure'].includes(spawn.type)&&!spawn.target?.startsWith('#'))names[spawn.type]=place(spawn.target);
   return names;
 }
+function context(spawn,kit,player,names,translations={}) {
+  let placeName=(names.structure!=='Wilderness'?names.structure:names.biome).replace(/^Village .+$/,'Village').replace(/^Ruined Portal.*$/,'Ruined Portal').replace(/^Ocean Ruin .+$/,'Ocean Ruins').toLowerCase();
+  if(!/^(the |a |an )/.test(placeName))placeName='the '+placeName;
+  return {...names,player,party_leader:player,party_size:'1',companions:'',spawn:label(spawn,'title',translations),kit:label(kit,'title',translations),equipment:kit.items?.length?label(kit,'title',translations):'nothing but your own two hands',place:placeName,
+    facts:{kit:kit.id??'',spawn:spawn.id??'',dimension:spawn.dimension??'minecraft:overworld',biome:spawn.type==='biome'&&!spawn.target?.startsWith('#')?spawn.target:'minecraft:plains',structure:spawn.type==='structure'&&!spawn.target?.startsWith('#')?spawn.target:'',inventory_policy:'merge',keeps_belongings:'false',receives_kit:String(!!kit.items?.length)}};
+}
 function narration(player,names,kit,translations={}) {
   let location=names.structure!=='Wilderness'?names.structure:names.biome;
   location=location.replace(/^Village .+$/,'Village').replace(/^Ruined Portal.*$/,'Ruined Portal').replace(/^Ocean Ruin .+$/,'Ocean Ruins').toLowerCase();
@@ -93,7 +99,7 @@ class Session {
     if(this.phase==='review')this.phase=this.allowed().length===1?'location-confirm':'kit';
   }
 }
-const api={compare,catalog,label,place,destination,locations,narration,revealed,Session};
+const api={compare,catalog,label,place,destination,locations,context,narration,revealed,Session};
 if(typeof module!=='undefined')module.exports=api;
 else globalThis.HeritageFlow=api;
 })();

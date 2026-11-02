@@ -4,14 +4,17 @@ const colors = {black:0x000000,dark_blue:0x0000aa,dark_green:0x00aa00,dark_aqua:
 const aliases = {i:'italic',italics:'italic',b:'bold',u:'underline',underlined:'underline',s:'strike',strikethrough:'strike',obfuscate:'obfuscated',magic:'obfuscated',wavy:'wave',shaky:'shake',pulsing:'pulse',jumping:'jump',bounce:'jump',bouncy:'jump'};
 const contextDefaults={player:'Alex',kit:'Traveler',spawn:'Homeland',biome:'Plains',structure:'Wilderness',dimension:'Overworld',place:'the plains',companions:'',party_size:'1',party_leader:'Alex',equipment:'Traveler'};
 function token(raw,names={}) {
-  const [key,...fallback]=raw.split('|'),known=Object.hasOwn(contextDefaults,key)||Object.hasOwn(names,key);
-  if(!known&&!fallback.length)return null;
-  const value=Object.hasOwn(names,key)?names[key]:contextDefaults[key];
-  return {key,text:!value&&fallback.length?fallback.join('|'):value??''};
+  const [key,...fallback]=raw.split('|'),binding=key.startsWith('key:')?(key.slice(4).startsWith('key.')?key.slice(4):'key.'+key.slice(4)):null;
+  const known=Object.hasOwn(contextDefaults,key)||key.startsWith('var:')&&Object.hasOwn(names,key)||binding&&Object.hasOwn(names.__keys??keyDefaults,binding);
+  if(!known&&!fallback.length&&!Object.hasOwn(names.__fallbacks??{},key))return null;
+  let value=binding?(names.__keys??keyDefaults)[binding]:Object.hasOwn(names,key)?names[key]:contextDefaults[key];
+  const missing=Object.hasOwn(names.__facts??{},key)?String(names.__facts[key])==='':value===undefined||value===null||componentText(value)==='';
+  if(missing){if(fallback.length)value=fallback.join('|');else if(Object.hasOwn(names.__fallbacks??{},key))value=names.__fallbacks[key];}
+  return {key,value:value??'',text:componentText(value??'')};
 }
 const positions = {mid_center:[1,1],top_center:[1,0],bottom_center:[1,2],left_center:[0,1],right_center:[2,1],top_left:[0,0],top_right:[2,0],bottom_left:[0,2],bottom_right:[2,2]};
 const defaults = {text:'You woke up in <wave><gold><biome></gold></wave>...',subtitle:'<italic>A new journey begins.</italic>',title:false,large_subtitle:false,outline:true,animation:'word_by_word',control:'after_title',blip:true,black_hold_ticks:60,fade_from_black_ticks:60,reveal_ticks:40,hold_ticks:60,fade_out_ticks:20,cinematic_bars:true,bar_style:'random',bar_transition_ticks:40,bar_height:26,timeline:null,hide_hud_during_bars:true,title_position:'left_center',subtitle_position:'left_center'};
-const packDefaults = {...defaults,text:'',subtitle:'',animation:'fade_in',blip:false,cinematic_bars:false,hide_hud_during_bars:false,title_position:'mid_center',subtitle_position:'mid_center'};
+const packDefaults = {...defaults,variables:{},fallbacks:{},variants:[],text:'',subtitle:'',animation:'fade_in',blip:false,cinematic_bars:false,hide_hud_during_bars:false,title_position:'mid_center',subtitle_position:'mid_center'};
 const positionAliases = {center:'mid_center',mc:'mid_center',mid_c:'mid_center',tc:'top_center',top_c:'top_center',bc:'bottom_center',bottom_c:'bottom_center',lc:'left_center',left_c:'left_center',rc:'right_center',right_c:'right_center',tl:'top_left',tr:'top_right',bl:'bottom_left',br:'bottom_right'};
 function readJson(source,{validate:check=true}={}) {
   let document;
@@ -83,6 +86,100 @@ function componentText(value) {
   }
   return String(text)+(value.extra??[]).map(componentText).join('');
 }
+const factDefaults={kit:'example:traveler',spawn:'example:homeland',biome:'minecraft:plains',structure:'',dimension:'minecraft:overworld',inventory_policy:'merge',keeps_belongings:'false',receives_kit:'true'};
+const keyDefaults={'key.inventory':'E','key.jump':'Space','key.sneak':'Left Shift','key.sprint':'Left Control','key.forward':'W','key.left':'A','key.back':'S','key.right':'D','key.attack':'Left Button','key.use':'Right Button','key.drop':'Q'};
+function condition(value,facts) {
+  if(value.all)return value.all.every(entry=>condition(entry,facts));
+  if(value.any)return value.any.some(entry=>condition(entry,facts));
+  if(value.not)return !condition(value.not,facts);
+  const raw=facts[value.tag],present=raw!==undefined&&raw!==null&&String(raw)!=='';
+  if(value.present!==undefined&&value.present!==present)return false;
+  if(value.equals!==undefined&&(!present||String(raw)!==String(value.equals)))return false;
+  if(value.min!==undefined||value.max!==undefined){
+    if(!present||!/^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$/.test(String(raw)))return false;
+    const number=Number(raw);
+    if(!Number.isFinite(number)||value.min!==undefined&&number<value.min||value.max!==undefined&&number>value.max)return false;
+  }
+  return true;
+}
+function validateCondition(value,depth=0,count={value:0}) {
+  const object=value=>value!==null&&typeof value==='object'&&!Array.isArray(value);
+  if(!object(value)||depth>16||++count.value>128)throw new Error('Dialogue conditions require objects with at most 16 nesting levels and 128 nodes.');
+  for(const key of ['all','any','not'])if(Object.hasOwn(value,key)){
+    if(Object.keys(value).length!==1)throw new Error(key+' cannot be combined with other condition fields.');
+    if(key==='not')validateCondition(value.not,depth+1,count);
+    else {
+      if(!Array.isArray(value[key])||!value[key].length)throw new Error(key+' requires a non-empty list of conditions.');
+      value[key].forEach(entry=>validateCondition(entry,depth+1,count));
+    }
+    return;
+  }
+  if(typeof value.tag!=='string'||! /^[a-z_][a-z0-9_:./-]*$/.test(value.tag)||Object.keys(value).length<2||Object.keys(value).some(key=>!['tag','equals','present','min','max'].includes(key)))throw new Error('A dialogue condition requires a tag and equals, present, min or max.');
+  if(Object.hasOwn(value,'equals')&&!['string','number','boolean'].includes(typeof value.equals))throw new Error('equals requires text, a boolean or a finite number.');
+  if(typeof value.equals==='number'&&!Number.isFinite(value.equals))throw new Error('equals requires a finite number.');
+  if(Object.hasOwn(value,'present')&&typeof value.present!=='boolean')throw new Error('present must be true or false.');
+  for(const key of ['min','max'])if(Object.hasOwn(value,key)&&(typeof value[key]!=='number'||!Number.isFinite(value[key])))throw new Error(key+' must be a finite number.');
+  if(value.min!==undefined&&value.max!==undefined&&value.min>value.max)throw new Error('min cannot exceed max.');
+}
+function expandComponent(value,names){
+  if(Array.isArray(value))return value.map(entry=>expandComponent(entry,names));
+  if(value&&typeof value==='object'){
+    const own={...value};delete own.extra;
+    const style=Object.fromEntries(['color','bold','italic','underlined','strikethrough','obfuscated'].filter(key=>Object.hasOwn(value,key)).map(key=>[key,value[key]]));
+    return {text:'',...style,extra:[expandComponent(componentText(own),names),...(value.extra??[]).map(entry=>expandComponent(entry,names))]};
+  }
+  if(typeof value!=='string')return String(value);
+  const parts=[];let cursor=0;
+  for(const match of value.matchAll(/<([a-z_][a-z0-9_:./-]*(?:\|[^<>]*)?)>/g)){
+    const replacement=token(match[1],names);if(!replacement)continue;
+    parts.push(value.slice(cursor,match.index),replacement.value);cursor=match.index+match[0].length;
+  }
+  return cursor?{text:'',extra:[...parts,value.slice(cursor)]}:value;
+}
+function dialogue(config,names={}) {
+  const context={...contextDefaults,...names,__fallbacks:config.fallbacks??{},__keys:{...keyDefaults,...names.keys}},facts={...context,...factDefaults,...names.facts};
+  if(!names.facts||!Object.hasOwn(names.facts,'structure'))facts.structure=context.structure==='Wilderness'?'':names.facts?.structure??context.structure;
+  for(const [id,value] of Object.entries({...config.variables,...names.variables})){
+    const tag='var:'+id,resolved=Object.hasOwn(names.variables??{},id)?value:expandComponent(value,{...context,__fallbacks:{}});
+    context[tag]=typeof resolved==='number'||typeof resolved==='boolean'?String(resolved):resolved;
+    facts[tag]=componentText(context[tag]);
+  }
+  context.__facts=facts;
+  const variant=(config.variants??[]).find(entry=>condition(entry.when,facts));
+  return {text:variant?.text??config.text,subtitle:variant?.subtitle??config.subtitle,names:context};
+}
+function validateDialogue(config) {
+  const object=value=>value!==null&&typeof value==='object'&&!Array.isArray(value);
+  for(const field of ['variables','fallbacks']){
+    const values=config[field]===undefined?{}:config[field];
+    if(!object(values)||Object.keys(values).length>64)throw Object.assign(new Error(field+' must contain at most 64 entries.'),{field});
+    for(const [key,value] of Object.entries(values)){
+      if(!(field==='variables'?/^[a-z0-9_.-]+:[a-z0-9/._-]+$/:/^[a-z_][a-z0-9_:./-]*$/).test(key))throw Object.assign(new Error('Invalid '+field+' key: '+key),{field});
+      if(typeof value==='number'||typeof value==='boolean'){if(typeof value==='number'&&!Number.isFinite(value))throw new Error('Dialogue values must be finite.');}
+      else validateComponent(value,0,[field,key]);
+    }
+  }
+  if(!Array.isArray(config.variants===undefined?[]:config.variants)||(config.variants??[]).length>32)throw Object.assign(new Error('variants must contain at most 32 entries.'),{field:'variants'});
+  (config.variants??[]).forEach((entry,index)=>{
+    try{
+      if(!object(entry)||!Object.hasOwn(entry,'when')||!['text','subtitle'].some(key=>Object.hasOwn(entry,key))||Object.keys(entry).some(key=>!['when','text','subtitle'].includes(key)))throw new Error('Each dialogue variant requires when and text or subtitle.');
+      validateCondition(entry.when);
+      for(const key of ['text','subtitle'])if(Object.hasOwn(entry,key))validateComponent(entry[key],0,['variants',index,key]);
+    }catch(error){error.field??='variants';error.path??=['variants',index];throw error;}
+  });
+}
+function diagnostics(config,names={}) {
+  const resolved=dialogue(config,names),warnings=new Set();
+  for(const source of [config.text,config.subtitle,...Object.values(config.variables??{}),...(config.variants??[]).flatMap(entry=>[entry.text,entry.subtitle])]){
+    for(const match of componentText(source).matchAll(/<(\/?)([^<>]+)>/g)){
+      const raw=match[2].trim();
+      if(effects(raw.toLowerCase())||match[1]&&effects(raw.toLowerCase()))continue;
+      if(token(raw,resolved.names))continue;
+      warnings.add('Unknown dialogue tag <'+raw+'>. Add a sample value for extension variables or modded keybindings.');
+    }
+  }
+  return [...warnings];
+}
 function validateComponent(value,depth=0,path=[]) {
   const invalid=(message,part=[])=>Object.assign(new Error(message),{path:[...path,...part],field:path[0]});
   if(depth>64)throw invalid('Text components are nested too deeply.');
@@ -120,7 +217,7 @@ function parse(text, names={}, offset=0, inherited={}) {
     return result;
   }
 
-  text=text.replace(/\r\n?/g,'\n').replace(/<([a-z_][a-z0-9_:./-]*(?:\|[^<>]*)?)>/g,(literal,raw)=>token(raw,names)?.text??literal);
+  text=text.replace(/\r\n?/g,'\n');
   const base=[], chars=[];
   let style={};
   for(const [key,target] of [['bold','bold'],['italic','italic'],['underlined','underline'],['strikethrough','strike'],['obfuscated','obfuscated']])if(typeof inherited[key]==='boolean')style[target]=inherited[key];
@@ -142,7 +239,7 @@ function parse(text, names={}, offset=0, inherited={}) {
   const plain=chars.join(''), tags=[];
   for(const m of plain.matchAll(/<(\/?)([^<>]+)>/g)) {
     const raw=m[2].trim().toLowerCase();
-    tags.push({start:m.index,end:m.index+m[0].length,name:canonical(raw.split(':')[0]),closing:!!m[1],effect:effects(raw)});
+    tags.push({start:m.index,end:m.index+m[0].length,name:canonical(raw.split(':')[0]),closing:!!m[1],effect:effects(raw),replacement:!m[1]&&!names.__substitution?token(m[2],names):null});
   }
   function closed(index,name) {
     let depth=1;
@@ -167,6 +264,15 @@ function parse(text, names={}, offset=0, inherited={}) {
   }
   let cursor=0;
   tags.forEach((tag,index)=>{
+    if(tag.replacement){
+      append(cursor,tag.start,stack.at(-1).effect);
+      const inherited={...base[tag.start],...stack.at(-1).effect};
+      for(const glyph of parse(tag.replacement.value,{...names,__substitution:true},offset+result.length)){
+        const effect={...inherited,...glyph.effect},phase=glyph.phase,tint=effect.rainbow?rainbow(phase/Math.max(1,tag.replacement.text.length)):effect.gradient?lerpColor(...effect.gradient,phase/Math.max(1,tag.replacement.text.length-1)):effect.color??glyph.tint;
+        result.push({...glyph,effect,tint});
+      }
+      cursor=tag.end;return;
+    }
     const valid=tag.closing ? stack.length>1 && stack.at(-1).tag===tag.name : tag.effect && stack.length<64 && closed(index,tag.name);
     if(!valid) return;
     append(cursor,tag.start,stack.at(-1).effect);
@@ -339,7 +445,7 @@ function revealCues(glyphs,visibleAt,total,{start=0,first=3,step=3,pitch=.9,spre
 }
 function blipCues(cfg,names={},random=Math.random){
   if(!cfg.blip)return [];
-  const main=parse(cfg.text,names),sub=parse(cfg.subtitle,names,main.length+1),glyphs=[...main,{ch:'\n',index:main.length},...sub],ends=wordEnds(glyphs),start=textStart(cfg);
+  const resolved=dialogue(cfg,names),main=parse(resolved.text,resolved.names),sub=parse(resolved.subtitle,resolved.names,main.length+1),glyphs=[...main,{ch:'\n',index:main.length},...sub],ends=wordEnds(glyphs),start=textStart(cfg);
   return revealCues(glyphs,tick=>visible(cfg,glyphs,tick-start,ends),duration(cfg),{start},random);
 }
 function glyphFrame(g,tick,alpha) {
@@ -354,10 +460,11 @@ function glyphFrame(g,tick,alpha) {
   return {x:e.shake?Math.sin(tick*1.7+i*1.31)*1.15:0,y:(e.wave?Math.sin((tick+i*6*.55)*.24)*1.75:0)-(e.jump?Math.abs(Math.sin(tick*.28-i*.55))*2.4:0),tint,alpha};
 }
 function validate(cfg) {
+  validateDialogue(cfg);
   for(const field of ['text','subtitle'])validateComponent(cfg[field],0,[field]);
   for(const key of ['title','large_subtitle','outline','blip','cinematic_bars','hide_hud_during_bars']) if(typeof cfg[key]!=='boolean') throw Object.assign(new Error(key+' must be true or false.'),{field:key});
   if(!componentText(cfg.text).trim()) throw Object.assign(new Error('Enter some main text.'),{field:'text'});
-  if(JSON.stringify({text:cfg.text}).length+JSON.stringify({text:cfg.subtitle}).length>16384) throw Object.assign(new Error('Text and subtitle exceed the 16,384-character limit.'),{field:'text'});
+  if(JSON.stringify({text:cfg.text}).length+JSON.stringify({text:cfg.subtitle}).length+JSON.stringify({variables:cfg.variables??{},fallbacks:cfg.fallbacks??{},variants:cfg.variants??[]}).length>16384) throw Object.assign(new Error('Text and subtitle exceed the 16,384-character limit.'),{field:'text'});
   for(const field of ['black_hold_ticks','fade_from_black_ticks','reveal_ticks','hold_ticks','fade_out_ticks','bar_transition_ticks']) {
     const min=field==='black_hold_ticks'?0:1;
     if(!Number.isInteger(cfg[field])||cfg[field]<min||cfg[field]>1200) throw Object.assign(new Error(({black_hold_ticks:'Black screen',fade_from_black_ticks:'World fade',reveal_ticks:'Text reveal',hold_ticks:'Text hold',fade_out_ticks:'Text fade out',bar_transition_ticks:'Bar movement'})[field]+' must be a whole number from '+min+' to 1200.'),{field});
@@ -384,7 +491,7 @@ function validate(cfg) {
   if(!['random','straight'].includes(cfg.bar_style)) throw Object.assign(new Error('Unknown bar style.'),{field:'bar_style'});
   return cfg;
 }
-const api={contextDefaults,token,effects,canonical,barHeight,barVisibility,sampleSlant,componentText,validateComponent,colors,positions,defaults,packDefaults,readJson,updateJson,parse,wrap,padding,bounds,guiViewport,layout,presentation,trackTiming,textStart,textDuration,barProgress,duration,wordEnds,visible,revealCues,blipCues,glyphFrame,validate,clamp,active};
+const api={factDefaults,keyDefaults,condition,validateCondition,dialogue,diagnostics,contextDefaults,token,effects,canonical,barHeight,barVisibility,sampleSlant,componentText,validateComponent,colors,positions,defaults,packDefaults,readJson,updateJson,parse,wrap,padding,bounds,guiViewport,layout,presentation,trackTiming,textStart,textDuration,barProgress,duration,wordEnds,visible,revealCues,blipCues,glyphFrame,validate,clamp,active};
 if(typeof module!=='undefined') module.exports=api;
 else globalThis.HeritagePreview=api;
 })();

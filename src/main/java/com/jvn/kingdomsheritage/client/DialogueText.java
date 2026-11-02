@@ -20,6 +20,14 @@ public final class DialogueText {
         return context.with("place", place, place.getString());
     }
 
+    public static Component key(String id) {
+        String name = id.startsWith("key.") ? id : "key." + id;
+        for (var mapping : net.minecraft.client.Minecraft.getInstance().options.keyMappings) {
+            if (mapping.getName().equals(name)) return mapping.getTranslatedKeyMessage();
+        }
+        return null;
+    }
+
     private static Component place(JsonObject locations) {
         String kind = locations.has("structure") ? "structure" : "biome";
         String id = locations.has(kind) ? locations.get(kind).getAsString() : "";

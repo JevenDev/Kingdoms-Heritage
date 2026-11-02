@@ -37,10 +37,11 @@ final class DialogueContexts {
         values.put("party_size", Component.literal(Integer.toString(members.size())));
         values.put("companions", names);
         values.put("equipment", equipment);
-        return new DialogueContext(values, Map.of("player", player.getGameProfile().getName(), "kit", kit.id().toString(),
+        var context = new DialogueContext(values, Map.of("player", player.getGameProfile().getName(), "kit", kit.id().toString(),
                 "spawn", spawn.id().toString(), "party_leader", leader.getGameProfile().getName(),
                 "party_size", Integer.toString(members.size()), "companions", String.join(", ", companions),
                 "inventory_policy", policy.name().toLowerCase(java.util.Locale.ROOT),
                 "keeps_belongings", Boolean.toString(keeps), "receives_kit", Boolean.toString(receives)));
+        return com.jvn.kingdomsheritage.api.HeritageDialogue.context(player, SelectionLifecycle.state(player), context);
     }
 }

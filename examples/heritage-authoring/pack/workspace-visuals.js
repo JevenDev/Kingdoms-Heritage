@@ -30,7 +30,7 @@ function create({editLocation,editIntro,testFlow,selectContext,reorder,editText,
   function arrival(model){
     const index=poolIndex===''?null:Number(poolIndex),spawn=model.spawn?.type==='pool'&&Number.isInteger(index)?F.destination(model.spawn,index):model.spawn;
     let config=null,error='';if(spawn?.intro)try{config=P.readJson(JSON.stringify(spawn.intro)).config;}catch(issue){error='This intro needs fixing. '+issue.message;}
-    return {config,error,names:F.locations(spawn??{}),spawn};
+    return {config,error,names:F.context(spawn??{},model.kit??{title:'Empty-handed',items:[]},'Player',F.locations(spawn??{}),monitors.pack.defaults.translations),spawn};
   }
   function draw(now){
     frame=0;if(!current||!monitors||document.hidden||$('flow-dialog').open||current.embedded||!['pack','locations'].includes(current.step)){stopSpeech();return;}

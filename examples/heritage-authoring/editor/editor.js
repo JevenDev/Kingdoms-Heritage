@@ -3,7 +3,7 @@
 const P=HeritagePreview, $=id=>document.getElementById(id),storageKey='heritage.introEditor.v1';
 if(!await HeritageSession.acquire(storageKey))return;
 const editorRoute=new URLSearchParams(location.search),requested=editorRoute.get('draft');
-const previewFields=['resolution','viewport','background',...Object.keys(P.contextDefaults),'loop','show-text-boxes'];
+const previewFields=['resolution','viewport','background',...Object.keys(P.contextDefaults),'preview-variables','preview-facts','preview-keys','loop','show-text-boxes'];
 const canvas=$('preview'), ctx=canvas.getContext('2d'), renderer=new HeritageCanvas(ctx),font=renderer.font,sprite=renderer.sprite;
 let jsonState=P.readJson(JSON.stringify({intro:P.defaults}));
 let config=jsonState.config, main=[], sub=[], all=[], blocks=[], cues=[], revealEnds=[];
@@ -125,6 +125,7 @@ function restoreHistory(direction) {
   $('resolution').value=snapshot.preview?.resolution??'1920x1080';
   if(!$('resolution').value)$('resolution').value='1920x1080';
   for(const id of previewFields)if(id!=='resolution'&&id!=='viewport'&&snapshot.preview?.[id]!==undefined){if($(id).type==='checkbox')$(id).checked=snapshot.preview[id];else $(id).value=snapshot.preview[id];}
+  restoreSamples();
   updateGuiScale(Number(snapshot.preview?.viewport??4));
   $('json').setSelectionRange(...snapshot.selection);
   $('preset').value='custom';
@@ -142,7 +143,18 @@ document.querySelector('[data-wrap="italic"]').prepend(HeritageIcons.create('ita
 document.querySelector('[data-wrap="underline"]').prepend(HeritageIcons.create('underline'));
 HeritageIcons.action('play','play','Play');
 HeritageIcons.action('mute','volume-2','Mute');
-const names=()=>Object.fromEntries(Object.keys(P.contextDefaults).map(id=>[id,$(id).value]));
+let sampleData={variables:{},facts:{},keys:{}};
+function restoreSamples(){for(const kind of ['variables','facts','keys']){try{const value=JSON.parse($('preview-'+kind).value);if(value&&typeof value==='object'&&!Array.isArray(value))sampleData[kind]=value;}catch(error){$('preview-'+kind).setCustomValidity(error.message);}}}
+const names=()=>({...Object.fromEntries(Object.keys(P.contextDefaults).map(id=>[id,$(id).value])),...sampleData});
+for(const kind of ['variables','facts','keys']){
+  $('preview-'+kind).addEventListener('input',()=>{
+    try{
+      const value=JSON.parse($('preview-'+kind).value);
+      if(!value||typeof value!=='object'||Array.isArray(value))throw new Error('Use a JSON object.');
+      sampleData={...sampleData,[kind]:value};$('preview-'+kind).setCustomValidity('');refreshPreview();
+    }catch(error){$('preview-'+kind).setCustomValidity(error.message);$('dialogue-warning').hidden=false;$('dialogue-warning').textContent='Sample '+kind+': '+error.message;}
+  });
+}
 const code=new HeritageJsonEditor($('json'),$('line-count'));
 const syncCode=()=>code.sync();
 const syncCodeScroll=()=>code.syncScroll();
@@ -158,7 +170,7 @@ function fillFields() {
   for(const field of fields) {
     const value=configValue(config,field.dataset.field);
     if(field.type==='checkbox') field.checked=value;
-    else {field.value=['text','subtitle'].includes(field.dataset.field)?P.componentText(value):value;field.readOnly=['text','subtitle'].includes(field.dataset.field)&&typeof value!=='string';}
+    else {field.value=field.dataset.json!==undefined?JSON.stringify(value,null,2):['text','subtitle'].includes(field.dataset.field)?P.componentText(value):value;field.readOnly=['text','subtitle'].includes(field.dataset.field)&&typeof value!=='string';}
     if(field.readOnly)field.title='Structured Minecraft text is preserved. Edit this field in JSON.';else field.removeAttribute('title');
   }
   updateCoordinateControls();
@@ -190,8 +202,10 @@ function updateGuiScale(requested=Number($('viewport').value)) {
   $('pack-preview-scale').hidden=!packContext?.guiScale;$('pack-preview-scale').textContent='Using this pack’s GUI scale '+packContext?.guiScale+'.';
 }
 function rebuild() {
-  main=P.parse(config.text,names());
-  sub=P.parse(config.subtitle,names(),main.length+1);
+  const resolved=P.dialogue(config,names());
+  main=P.parse(resolved.text,resolved.names);
+  sub=P.parse(resolved.subtitle,resolved.names,main.length+1);
+  const warnings=P.diagnostics(config,names());$('dialogue-warning').hidden=!warnings.length;$('dialogue-warning').textContent=warnings.join(' ');
   all=[...main,{ch:'\n',index:main.length,effect:{}},...sub];
   revealEnds=config.animation==='word_by_word'?P.wordEnds(all):[];
   updateGuiScale();
@@ -281,6 +295,7 @@ function editing(event,{record=true}={}) {
       let value=field.value;
       if(field.type==='checkbox') value=field.checked;
       else if(field.dataset.field==='outline')value=field.value==='true';
+      else if(field.dataset.json!==undefined){try{value=JSON.parse(field.value);}catch(error){throw Object.assign(new Error('Invalid '+field.dataset.field+' JSON: '+error.message),{field:field.dataset.field});}}
       else if(field.type==='number') {
         if(!field.value.trim()) throw Object.assign(new Error(field.closest('label').firstChild.textContent.trim()+' is required.'),{field:field.dataset.field});
         value=Number(field.value);
@@ -288,7 +303,7 @@ function editing(event,{record=true}={}) {
       if(part) {
         if(key==='timeline'){if(value===configValue(base.config,field.dataset.field))continue;const next=HeritageTimeline.changes(base.config,field.dataset.field,value);changes.timeline={...next.timeline,...changes.timeline,[part]:value};if(!base.config.timeline)changes.hold_ticks??=next.hold_ticks;}
         else{changes[key]??={...base.config[key]};changes[key][part]=value;}
-      } else if(value!==base.config[key]) changes[key]=value;
+      } else if(field.dataset.json!==undefined?JSON.stringify(value)!==JSON.stringify(base.config[key]):value!==base.config[key]) changes[key]=value;
     }
     for(const kind of ['title','subtitle'])if(!$(kind+'-custom').checked&&(!invalidSource||event?.target?.id===kind+'-custom'))changes[kind+'_coordinates']=undefined;
     const timingField=event?.target?.dataset.field;
@@ -608,7 +623,7 @@ function authorIssue(){
 }
 HeritageIntroLayout.create({textFocus:()=>{if(visualText)richEditors.get(activeField.id)?.focus();else activeField.focus();}});
 for(const id of ['text','subtitle']){
-  const field=$(id);richEditors.set(id,HeritageRichText.create(field,{label:id==='text'?'Main text':'Subtitle',names,focus:field=>{activeField=field;},change:field=>{$('preset').value='custom';editing({type:'input',target:field});}}));field.hidden=true;
+  const field=$(id);richEditors.set(id,HeritageRichText.create(field,{label:id==='text'?'Main text':'Subtitle',names:()=>P.dialogue(config,names()).names,focus:field=>{activeField=field;},change:field=>{$('preset').value='custom';editing({type:'input',target:field});}}));field.hidden=true;
 }
 function textMode(visual){
   visualText=visual;for(const [id,editor] of richEditors){$(id).hidden=visual;editor.element.hidden=!visual;editor.refresh();}

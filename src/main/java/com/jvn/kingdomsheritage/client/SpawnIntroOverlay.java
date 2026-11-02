@@ -58,8 +58,9 @@ public final class SpawnIntroOverlay {
         JsonObject locations = message.getAsJsonObject("locations");
         dimension = ResourceLocation.parse(locations.get("dimension").getAsString());
         var context = DialogueText.context(message);
-        var styledText = IntroMarkup.style(context.resolve(intro.text()));
-        var styledSubtitle = IntroMarkup.style(context.resolve(intro.subtitle()));
+        var resolved = intro.dialogue().resolve(intro.text(), intro.subtitle(), context, DialogueText::key);
+        var styledText = IntroMarkup.style(resolved.text());
+        var styledSubtitle = IntroMarkup.style(resolved.subtitle());
         text = ToucanGlyphLayout.glyphs(styledText, 0);
         subtitle = ToucanGlyphLayout.glyphs(styledSubtitle, text.size() + 1);
         var combined = new ArrayList<>(text);

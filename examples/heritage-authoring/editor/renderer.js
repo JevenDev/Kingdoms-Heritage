@@ -106,7 +106,7 @@ function bars(w,h,ticks,config,slant) {
 }
 
 function intro(config,names,time,w,h,slant=0) {
-  const main=P.parse(config.text,names),sub=P.parse(config.subtitle,names,main.length+1);
+  const resolved=P.dialogue(config,names),main=P.parse(resolved.text,resolved.names),sub=P.parse(resolved.subtitle,resolved.names,main.length+1);
   const all=[...main,{ch:'\n',index:main.length,effect:{}},...sub],elapsed=time-config.black_hold_ticks;
   if(time>=P.duration(config))return all.length;
   const progress=P.clamp(elapsed/config.fade_from_black_ticks),reveal=progress*progress*(3-2*progress);

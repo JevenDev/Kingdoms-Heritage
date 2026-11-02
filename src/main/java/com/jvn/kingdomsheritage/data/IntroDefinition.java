@@ -13,7 +13,18 @@ public record IntroDefinition(Component text, Component subtitle, boolean title,
                               int fadeOutTicks, int fadeFromBlackTicks, boolean cinematicBars, BarStyle barStyle,
                               int barTransitionTicks, Position titlePosition, Position subtitlePosition, int blackHoldTicks,
                               boolean outline, boolean hideHudDuringBars,
-                              Coordinates titleCoordinates, Coordinates subtitleCoordinates, boolean largeSubtitle, int barHeight, Timeline timeline) {
+                              Coordinates titleCoordinates, Coordinates subtitleCoordinates, boolean largeSubtitle, int barHeight, Timeline timeline, DialogueDefinition dialogue) {
+    public IntroDefinition(Component text, Component subtitle, boolean title, Animation animation,
+                           Control control, boolean blip, int revealTicks, int holdTicks,
+                           int fadeOutTicks, int fadeFromBlackTicks, boolean cinematicBars, BarStyle barStyle,
+                           int barTransitionTicks, Position titlePosition, Position subtitlePosition, int blackHoldTicks,
+                           boolean outline, boolean hideHudDuringBars, Coordinates titleCoordinates,
+                           Coordinates subtitleCoordinates, boolean largeSubtitle, int barHeight, Timeline timeline) {
+        this(text, subtitle, title, animation, control, blip, revealTicks, holdTicks, fadeOutTicks, fadeFromBlackTicks,
+                cinematicBars, barStyle, barTransitionTicks, titlePosition, subtitlePosition, blackHoldTicks,
+                outline, hideHudDuringBars, titleCoordinates, subtitleCoordinates, largeSubtitle, barHeight, timeline, DialogueDefinition.EMPTY);
+    }
+
     public IntroDefinition(Component text, Component subtitle, boolean title, Animation animation,
                            Control control, boolean blip, int revealTicks, int holdTicks,
                            int fadeOutTicks, int fadeFromBlackTicks, boolean cinematicBars, BarStyle barStyle,
@@ -109,7 +120,10 @@ public record IntroDefinition(Component text, Component subtitle, boolean title,
     public static IntroDefinition parse(JsonObject json) {
         Component text = component(json, "text", false);
         Component subtitle = component(json, "subtitle", true);
-        int size = ComponentSerialization.CODEC.encodeStart(JsonOps.INSTANCE, text).getOrThrow().toString().length()
+        var dialogue = DialogueDefinition.parse(json);
+        var dialogueJson = new JsonObject();
+        dialogue.write(dialogueJson);
+        int size = dialogueJson.toString().length() + ComponentSerialization.CODEC.encodeStart(JsonOps.INSTANCE, text).getOrThrow().toString().length()
                 + ComponentSerialization.CODEC.encodeStart(JsonOps.INSTANCE, subtitle).getOrThrow().toString().length();
         if (size > 16384) throw new IllegalArgumentException("intro text and subtitle must contain at most 16384 serialized characters");
         return new IntroDefinition(text, subtitle, GsonHelper.getAsBoolean(json, "title", false),
@@ -126,7 +140,7 @@ public record IntroDefinition(Component text, Component subtitle, boolean title,
                 coordinates(json, "title_coordinates"), coordinates(json, "subtitle_coordinates"),
                 GsonHelper.getAsBoolean(json, "large_subtitle", false), barHeight(json),
                 json.has("timeline") && !json.get("timeline").isJsonNull()
-                        ? Timeline.parse(GsonHelper.getAsJsonObject(json, "timeline")) : null);
+                        ? Timeline.parse(GsonHelper.getAsJsonObject(json, "timeline")) : null, dialogue);
     }
 
     private static int barHeight(JsonObject json) {
@@ -227,6 +241,7 @@ public record IntroDefinition(Component text, Component subtitle, boolean title,
         json.addProperty("bar_transition_ticks", barTransitionTicks);
         json.addProperty("bar_height", barHeight);
         if (timeline != null) json.add("timeline", timeline.json());
+        dialogue.write(json);
         json.addProperty("title_position", titlePosition.name().toLowerCase(Locale.ROOT));
         json.addProperty("subtitle_position", subtitlePosition.name().toLowerCase(Locale.ROOT));
         if (titleCoordinates != null) json.add("title_coordinates", titleCoordinates.json());

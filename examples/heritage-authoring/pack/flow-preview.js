@@ -296,7 +296,7 @@ function enter(focus=true){
   $('flow-status').textContent=[notice,custom?'Images from external resource packs use the fallback card here.':'',session.phase==='complete'?'Preview complete. Close this window to download your pack.':''].filter(Boolean).join(' ');
   for(const node of buttons.values())node.remove();buttons.clear();
 }
-function sampleNames(){return F.locations(session.arrival??session.spawn,{biome:$('flow-biome').value,structure:$('flow-structure').value});}
+function sampleNames(){const spawn=session.arrival??session.spawn;return F.context(spawn,session.kit,$('flow-player').value.trim()||'Player',F.locations(spawn,{biome:$('flow-biome').value,structure:$('flow-structure').value}),bundled.translations);}
 function next(){
   const phase=session.phase,now=clock();
   const advance=()=>{let index=0;if(session.spawn?.type==='pool')index=$('flow-pool').value==='random'?Math.floor(Math.random()*session.spawn.pool.length):Number($('flow-pool').value);session.next(index);enter();if(session.phase==='kit')transition.reveal(clock());else if(session.phase==='intro'){sound('confirmation');transition.clear();}else if(session.phase==='complete'){if(phase==='review'){sound('confirmation');transition.reveal(clock());}else transition.clear();}};
