@@ -187,10 +187,12 @@ final class KitSelectionView {
         view.frameConfirmation = view.confirmationProgress();
         view.updateButtons(view.frameConfirmation);
         view.positionControls(event.getScreen(), view.frameConfirmation);
+        var rendering = ClientParty.blocksInput() ? new ScreenEvent.Render.Pre(event.getScreen(), event.getGuiGraphics(),
+                -10000, -10000, event.getPartialTick()) : event;
         if (view.confirming || view.frameConfirmation > 0) {
-            view.renderConfirmation(event, view.frameConfirmation);
+            view.renderConfirmation(rendering, view.frameConfirmation);
         } else {
-            view.renderCarousel(event);
+            view.renderCarousel(rendering);
         }
         event.setCanceled(true);
     }
@@ -251,7 +253,7 @@ final class KitSelectionView {
         }
         boolean keyboard = Minecraft.getInstance().getLastInputType().isKeyboard();
         for (Button button : List.of(previous, next, back, confirm, disconnect)) {
-            if (button.visible && (button.isHovered() || keyboard && button.isFocused())) {
+            if (!ClientParty.blocksInput() && button.visible && (button.isHovered() || keyboard && button.isFocused())) {
                 Component message = button == confirm ? model.policyHint() : button.getMessage();
                 graphics.renderTooltip(Minecraft.getInstance().font,
                         Minecraft.getInstance().font.split(message, Math.min(300, screen.width - 20)),
@@ -399,11 +401,11 @@ final class KitSelectionView {
             }
         }
         boolean keyboard = Minecraft.getInstance().getLastInputType().isKeyboard();
-        if (disconnect.isHovered() || keyboard && disconnect.isFocused()) {
+        if (!ClientParty.blocksInput() && (disconnect.isHovered() || keyboard && disconnect.isFocused())) {
             graphics.renderTooltip(font, disconnect.getMessage(), disconnect.isHovered() ? event.getMouseX() : disconnect.getX() + disconnect.getWidth() / 2,
                     disconnect.isHovered() ? event.getMouseY() : disconnect.getY() + disconnect.getHeight());
         }
-        if (confirm.isHovered() || keyboard && confirm.isFocused()) {
+        if (!ClientParty.blocksInput() && (confirm.isHovered() || keyboard && confirm.isFocused())) {
             var message = model.policyHint();
             graphics.renderTooltip(font, font.split(message, Math.min(300, screen.width - 20)),
                     confirm.isHovered() ? event.getMouseX() : confirm.getX() + confirm.getWidth() / 2,
@@ -441,7 +443,7 @@ final class KitSelectionView {
         boolean overTitle = event.getMouseY() >= titleY && event.getMouseY() < titleY + font.lineHeight;
         boolean overDescription = showDescription && event.getMouseY() >= view.descriptionY
                 && event.getMouseY() < view.descriptionY + font.lineHeight;
-        if ((overTitle || overDescription) && !description.isEmpty()) {
+        if (!ClientParty.blocksInput() && (overTitle || overDescription) && !description.isEmpty()) {
             graphics.renderTooltip(font, font.split(Component.literal(description), Math.min(300, screen.width - 20)),
                     event.getMouseX(), event.getMouseY());
         }
@@ -460,6 +462,7 @@ final class KitSelectionView {
     private static void mouse(ScreenEvent.MouseButtonPressed.Pre event) {
         if (SelectionTransition.active()) return;
         if (current() == null || !isInventory(event.getScreen())) return;
+        if (ClientParty.blocksInput()) { event.setCanceled(true); return; }
         KitSelectionView view = current();
         boolean overNavigation = List.of(view.previous, view.next, view.confirm, view.back, view.disconnect).stream()
                 .anyMatch(button -> button.active && button.visible && button.isMouseOver(event.getMouseX(), event.getMouseY()));
@@ -494,6 +497,7 @@ final class KitSelectionView {
         KitSelectionView view = current();
         if (view == null || !isInventory(event.getScreen()) || event.getScrollDeltaY() == 0) return;
         event.setCanceled(true);
+        if (ClientParty.blocksInput()) return;
         if (SelectionTransition.active() || view.model.submitted() || view.confirming || view.frameConfirmation > 0) return;
         int index = view.carousel.scroll(event.getScrollDeltaY(), view.model.choices().size());
         if (index != view.model.index()) {
@@ -505,6 +509,7 @@ final class KitSelectionView {
     private static void key(ScreenEvent.KeyPressed.Pre event) {
         if (SelectionTransition.active()) return;
         if (current() == null || !isInventory(event.getScreen())) return;
+        if (ClientParty.blocksInput()) { event.setCanceled(true); return; }
         int key = event.getKeyCode();
         if (key == GLFW.GLFW_KEY_ESCAPE || Minecraft.getInstance().options.keyInventory.matches(key, event.getScanCode())) {
             if (!current().model.submitted()) {

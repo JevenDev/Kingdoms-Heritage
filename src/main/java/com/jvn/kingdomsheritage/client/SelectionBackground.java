@@ -33,6 +33,7 @@ public final class SelectionBackground {
 
     @SubscribeEvent
     public static void registerShaders(RegisterShadersEvent event) throws IOException {
+        ClientParty.closeListBlur();
         event.registerShader(new ShaderInstance(event.getResourceProvider(),
                 ResourceLocation.fromNamespaceAndPath(KingdomsHeritage.MOD_ID, "selection_background"),
                 DefaultVertexFormat.POSITION), value -> shader = value);

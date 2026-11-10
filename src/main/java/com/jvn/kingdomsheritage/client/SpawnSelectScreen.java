@@ -396,6 +396,7 @@ public final class SpawnSelectScreen extends Screen {
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        if (ClientParty.blocksInput()) mouseX = mouseY = -10000;
         long now = net.minecraft.Util.getMillis();
         float confirmation = confirmationProgress(now);
         positionConfirmation(confirmation);
@@ -426,10 +427,12 @@ public final class SpawnSelectScreen extends Screen {
         for (var card : cards) card.animate(delta, card == active, mouseX);
         Card front = foreground;
         for (Card card : outgoingCards) card.draw(graphics, mouseX, mouseY, partialTick, -10);
+        int cardMouseX = mouseX;
+        int cardMouseY = mouseY;
         SelectionDissolve.render(graphics, confirmation, () -> {
             int layer = 0;
             for (var card : cards) {
-                if (card != front) card.draw(graphics, mouseX, mouseY, partialTick, layer++ * 10);
+                if (card != front) card.draw(graphics, cardMouseX, cardMouseY, partialTick, layer++ * 10);
             }
         });
         if (foreground != null) foreground.draw(graphics, mouseX, mouseY, partialTick, cards.size() * 10);

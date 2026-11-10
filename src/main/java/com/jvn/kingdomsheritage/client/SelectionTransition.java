@@ -210,12 +210,14 @@ final class SelectionTransition {
 
     private static void mouse(ScreenEvent.MouseButtonPressed.Pre event) {
         if (!active() || joining() && loadingScreen(event.getScreen())) return;
+        if (ClientParty.blocksInput()) { event.setCanceled(true); return; }
         if (waiting() && disconnect != null) disconnect.mouseClicked(event.getMouseX(), event.getMouseY(), event.getButton());
         event.setCanceled(true);
     }
 
     private static void key(ScreenEvent.KeyPressed.Pre event) {
         if (!active() || joining() && loadingScreen(event.getScreen())) return;
+        if (ClientParty.blocksInput()) { event.setCanceled(true); return; }
         if (waiting() && disconnect != null) {
             if (event.getKeyCode() == GLFW.GLFW_KEY_TAB) disconnect.setFocused(true);
             else disconnect.keyPressed(event.getKeyCode(), event.getScanCode(), event.getModifiers());

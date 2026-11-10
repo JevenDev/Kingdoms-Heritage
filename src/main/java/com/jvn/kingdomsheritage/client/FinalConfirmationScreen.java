@@ -164,6 +164,7 @@ final class FinalConfirmationScreen extends Screen {
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        if (ClientParty.blocksInput()) mouseX = mouseY = -10000;
         updateButtons();
         super.render(graphics, mouseX, mouseY, partialTick);
         graphics.pose().pushPose();

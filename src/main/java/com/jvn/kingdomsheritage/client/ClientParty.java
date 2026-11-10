@@ -38,6 +38,7 @@ final class ClientParty {
     private static final ResourceLocation CROSSHAIR = ResourceLocation.fromNamespaceAndPath("kingdomsheritage", "textures/gui/party_crosshair.png");
     private static final ToucanPlayerSkinResolver SKINS = new ToucanPlayerSkinResolver(128, 30000);
     private static final Map<UUID, Peer> PLAYERS = new LinkedHashMap<>();
+    private static final PartyPlayerList PLAYER_LIST = new PartyPlayerList();
     private static final Set<UUID> MEMBERS = new LinkedHashSet<>();
     private static final Map<UUID, Invitation> INVITES = new LinkedHashMap<>();
     private static final Set<UUID> OUTGOING = new LinkedHashSet<>();
@@ -51,10 +52,9 @@ final class ClientParty {
     private static UUID leader;
     private static String spawn = "";
     private static String reportedStage = "";
-    private static int headPage;
     private static int ticks;
     private static int sentX = -1, sentY = -1, sentPage = -1;
-    private static int menuX, menuY, menuWidth;
+    private static int menuX, menuY, menuTop, menuWidth;
     private static UUID menuPlayer;
     private static UUID hovered;
     private static Button leave;
@@ -67,6 +67,7 @@ final class ClientParty {
         NeoForge.EVENT_BUS.addListener(EventPriority.LOWEST, ClientParty::renderScreen);
         NeoForge.EVENT_BUS.addListener(EventPriority.HIGHEST, true, ClientParty::mouse);
         NeoForge.EVENT_BUS.addListener(EventPriority.HIGHEST, true, ClientParty::key);
+        NeoForge.EVENT_BUS.addListener(EventPriority.HIGHEST, true, ClientParty::scroll);
     }
 
     static HeritageParty.Snapshot snapshot() {
@@ -84,6 +85,7 @@ final class ClientParty {
     private static boolean overlay(Screen screen) {
         if (overlayScreen != screen) {
             overlayScreen = screen;
+            PLAYER_LIST.reset();
             CONTROLS.clear();
             BUTTONS.clear();
             MENU.clear();
@@ -111,10 +113,8 @@ final class ClientParty {
         leader = leaderId.isEmpty() ? null : UUID.fromString(leaderId);
         MEMBERS.clear();
         for (var value : state.getAsJsonArray("members")) MEMBERS.add(UUID.fromString(value.getAsString()));
-        peers = PLAYERS.values().stream().filter(player -> !player.id().equals(self()))
-                .sorted(java.util.Comparator.comparing(player -> !MEMBERS.contains(player.id()))).toList();
+        peers = orderedPlayers(List.copyOf(PLAYERS.values()), MEMBERS, self());
         if (!previousMembers.equals(MEMBERS)) {
-            headPage = 0;
             if (!MEMBERS.isEmpty()) SelectionSounds.CONFIRMATION.play();
             CURSORS.clear();
             sentX = -1;
@@ -214,7 +214,8 @@ final class ClientParty {
         menuPlayer = hovered = null;
         leave = null;
         overlayScreen = null;
-        ticks = headPage = 0;
+        ticks = 0;
+        PLAYER_LIST.reset();
         sentX = sentY = sentPage = -1;
     }
 
@@ -244,10 +245,12 @@ final class ClientParty {
         return Component.translatable("screen.kingdomsheritage.party_" + key, arguments);
     }
 
+    static ResourceLocation skin(Peer player) { return SKINS.resolve(player.id(), player.name()).texture(); }
+
     private static void head(GuiGraphics graphics, Peer player, int x, int y, int size, boolean status) {
-        PlayerFaceRenderer.draw(graphics, SKINS.resolve(player.id(), player.name()).texture(), x, y, size);
+        graphics.fill(x - 1, y - 1, x + size + 1, y + size + 1, 0xff000000);
+        PlayerFaceRenderer.draw(graphics, skin(player), x, y, size);
         if (status && player.stage() != 0) graphics.fill(x, y, x + size, y + size, 0xaa343434);
-        if (MEMBERS.contains(player.id())) graphics.renderOutline(x - 1, y - 1, size + 2, size + 2, 0xffffffff);
         if (status && player.stage() == 2) {
             graphics.pose().pushPose();
             graphics.pose().translate(x + size / 2F, y + size / 2F, 0);
@@ -257,14 +260,22 @@ final class ClientParty {
         }
     }
 
-    private static List<Peer> others() {
-        return peers;
+    static boolean blocksInput() { return PLAYER_LIST.active(Util.getMillis()) || menuPlayer != null; }
+    static boolean menuOpen() { return menuPlayer != null; }
+
+    static void closeListBlur() { PLAYER_LIST.closeBlur(); }
+
+    static List<Peer> orderedPlayers(List<Peer> players, Set<UUID> members, UUID self) {
+        return players.stream().filter(player -> !player.id().equals(self))
+                .sorted(java.util.Comparator.comparing((Peer player) -> !members.contains(player.id()))
+                        .thenComparing(Peer::name, String.CASE_INSENSITIVE_ORDER).thenComparing(Peer::id)).toList();
     }
 
-    private static int columns(int width) {
-        int titleWidth = Minecraft.getInstance().font.width(Component.translatable("screen.kingdomsheritage.location"));
-        return Math.max(1, Math.min(3, ((width - titleWidth) / 2 - 16) / 20));
-    }
+    private static List<Peer> roster() { return peers; }
+
+    static boolean member(UUID player) { return MEMBERS.contains(player); }
+
+    static Component playerCount(int count) { return text(count == 1 ? "player_count_single" : "player_count", count); }
 
     private static void renderScreen(ScreenEvent.Render.Post event) {
         if (!overlay(event.getScreen()) || KitSelection.capturingPreview()) return;
@@ -278,29 +289,8 @@ final class ClientParty {
         graphics.flush();
         graphics.pose().pushPose();
         graphics.pose().translate(0, 0, 1200);
-        boolean selectingSpawn = partyScreen(minecraft.screen);
-        var others = others();
-        int columns = columns(width);
-        headPage = Math.min(headPage, Math.max(0, (others.size() - 1) / columns));
-        UUID nextHovered = null;
-        if (selectingSpawn || SelectionTransition.active()) {
-            for (int i = 0; i < columns && headPage * columns + i < others.size(); i++) {
-                var player = others.get(headPage * columns + i);
-                int x = 8 + i * 20;
-                head(graphics, player, x, 8, 16, true);
-                if (inside(mouseX, mouseY, x - 1, 7, 18, 18)) nextHovered = player.id();
-            }
-            if (others.size() > columns) {
-                String pageLabel = (headPage + 1) + "/" + ((others.size() + columns - 1) / columns);
-                pageArrow(4, false, headPage > 0);
-                SelectionText.draw(graphics, minecraft.font, pageLabel, 28, 32, 0xffcccccc);
-                pageArrow(32 + minecraft.font.width(pageLabel), true, (headPage + 1) * columns < others.size());
-            }
-        }
-        if (nextHovered != null && !nextHovered.equals(hovered) && !SelectionTransition.active()) SelectionSounds.HOVER.play();
-        hovered = nextHovered;
         if (grouped()) {
-            leave = control(43, height - 29, Math.min(104, width / 3), 21, text("leave"), true,
+            leave = control("leave", 43, height - 29, Math.min(104, width / 3), 21, text("leave"), true,
                     () -> action(HeritageNetwork.PartyAction.LEAVE, null, ""));
         } else leave = null;
         if (minecraft.screen instanceof SpawnSelectScreen selection && !SelectionTransition.active()) {
@@ -332,52 +322,59 @@ final class ClientParty {
             SelectionText.draw(graphics, minecraft.font, text("invite_toast", (entry.getValue().expires() - now + 999) / 1000), 30, 20, 0xffbbbbbb);
             graphics.pose().popPose();
             int buttonWidth = (toastWidth - 20) / 2;
-            control(x + 8, y + 35, buttonWidth, 18, text("join"), !SelectionTransition.active(), () -> respond(player.id(), true));
-            control(x + 12 + buttonWidth, y + 35, buttonWidth, 18, text("decline"), !SelectionTransition.active(), () -> respond(player.id(), false));
+            control(player.id() + ":join", x + 8, y + 35, buttonWidth, 18, text("join"), !SelectionTransition.active(), () -> respond(player.id(), true));
+            control(player.id() + ":decline", x + 12 + buttonWidth, y + 35, buttonWidth, 18, text("decline"), !SelectionTransition.active(), () -> respond(player.id(), false));
         }
         BUTTONS.values().removeIf(button -> !CONTROLS.contains(button));
         for (var button : CONTROLS) button.render(graphics, mouseX, mouseY, 0);
+        if (!peers.isEmpty()) {
+            PLAYER_LIST.render(graphics, width, height, roster(), mouseX, mouseY);
+            PLAYER_LIST.renderTrigger(graphics, peers, mouseX, mouseY);
+        } else PLAYER_LIST.reset();
+        hovered = PLAYER_LIST.open() ? PLAYER_LIST.selected() : null;
         if (menuPlayer != null) {
             var player = PLAYERS.get(menuPlayer);
             if (player != null) {
-                TooltipRenderUtil.renderTooltipBackground(graphics, menuX, menuY - 14, menuWidth, 16 + MENU.size() * 14, 0);
-                graphics.drawString(minecraft.font, player.name(), menuX, menuY - 14, 0xffffffff);
+                var header = layoutMenu(player);
+                int menuHeight = menuY - menuTop + MENU.size() * (minecraft.font.lineHeight + 1) - 2;
+                graphics.flush();
+                graphics.pose().pushPose();
+                graphics.pose().translate(0, 0, 400);
+                TooltipRenderUtil.renderTooltipBackground(graphics, menuX, menuTop, menuWidth, menuHeight, 0);
+                int y = menuTop;
+                for (int index = 0; index < header.size(); index++) {
+                    graphics.drawString(minecraft.font, header.get(index), menuX, y, 0xffffffff);
+                    y += minecraft.font.lineHeight + 1 + (index == 0 ? 2 : 0);
+                }
                 for (var button : MENU) button.render(graphics, mouseX, mouseY, 0);
+                graphics.flush();
+                graphics.pose().popPose();
             }
-        } else if (hovered != null && !SelectionTransition.active()) {
+        } else if (!peers.isEmpty() && PLAYER_LIST.overTrigger(mouseX, mouseY)) {
+            var lines = new ArrayList<Component>();
+            lines.add(playerCount(peers.size()).copy().withStyle(ChatFormatting.YELLOW));
+            if (grouped()) lines.add(waitingSummary().copy().withStyle(ChatFormatting.GRAY));
+            lines.add(text("list_hint", minecraft.options.keyPlayerList.getTranslatedKeyMessage()).copy().withStyle(ChatFormatting.GRAY));
+            graphics.renderComponentTooltip(minecraft.font, lines, mouseX, mouseY);
+        } else if (hovered != null) {
             var player = PLAYERS.get(hovered);
-            Component name = Component.literal(player.name()).append(" - ").append(text("stage_" + player.stage()));
-            graphics.renderComponentTooltip(minecraft.font, List.of(name,
-                    text("more").copy().withStyle(ChatFormatting.GRAY, ChatFormatting.ITALIC)), mouseX, mouseY);
+            if (player != null) graphics.renderComponentTooltip(minecraft.font, playerTooltip(player),
+                    PLAYER_LIST.keyboardFocused() ? PLAYER_LIST.menuX() : mouseX,
+                    PLAYER_LIST.keyboardFocused() ? PLAYER_LIST.menuY() : mouseY);
         }
         graphics.flush();
         graphics.pose().popPose();
     }
 
-    private static void pageArrow(int x, boolean forward, boolean active) {
-        String key = "page:" + forward;
-        var button = BUTTONS.computeIfAbsent(key, ignored -> SelectionControls.arrow(x, 26, forward,
-                Component.translatable(forward ? "spectatorMenu.next_page" : "spectatorMenu.previous_page"),
-                pressed -> headPage += forward ? 1 : -1));
-        button.setX(x);
-        button.setWidth(20);
-        button.setHeight(20);
-        button.active = active;
-        CONTROLS.add(button);
-    }
-
-    private static Button control(int x, int y, int width, int height, Component text, boolean active, Runnable action) {
-        String key = x + ":" + y + ":" + text.getString();
+    private static Button control(String key, int x, int y, int width, int height, Component text, boolean active, Runnable action) {
         var button = BUTTONS.computeIfAbsent(key, ignored ->
                 new SelectionControls.SoundButton(x, y, width, height, text, pressed -> action.run()));
+        button.setPosition(x, y);
         button.setWidth(width);
+        button.setHeight(height);
         button.active = active;
         CONTROLS.add(button);
         return button;
-    }
-
-    private static boolean inside(double x, double y, int left, int top, int width, int height) {
-        return x >= left && x < left + width && y >= top && y < top + height;
     }
 
     private static void respond(UUID id, boolean accept) {
@@ -393,8 +390,11 @@ final class ClientParty {
         if (!overlay(event.getScreen())) return;
         double x = event.getMouseX(), y = event.getMouseY();
         int button = event.getButton();
-        if (SelectionTransition.active()) {
-            if (button == 0 && leave != null && leave.mouseClicked(x, y, button)) event.setCanceled(true);
+        if (!peers.isEmpty() && button == 0 && PLAYER_LIST.overTrigger(x, y)) {
+            closeMenu();
+            PLAYER_LIST.setOpen(!PLAYER_LIST.open(), Util.getMillis());
+            SelectionSounds.CLICK.play();
+            event.setCanceled(true);
             return;
         }
         if (menuPlayer != null) {
@@ -402,30 +402,94 @@ final class ClientParty {
                 event.setCanceled(true);
                 return;
             }
-            MENU.clear();
-            menuPlayer = null;
+            closeMenu();
             event.setCanceled(true);
+            return;
+        }
+        if (PLAYER_LIST.active(Util.getMillis())) {
+            if (PLAYER_LIST.clickPageArrow(x, y, button)) {
+                event.setCanceled(true);
+                return;
+            }
+            UUID player = PLAYER_LIST.open() ? PLAYER_LIST.hit(x, y) : null;
+            if (player != null && (button == 0 || button == 1)) openMenu(player, (int) x + 12, (int) y - 12, false);
+            else if (button == 0 && PLAYER_LIST.open()) {
+                PLAYER_LIST.setOpen(false, Util.getMillis());
+                SelectionSounds.CLICK.play();
+            }
+            event.setCanceled(true);
+            return;
+        }
+        if (SelectionTransition.active()) {
+            if (button == 0 && leave != null && leave.mouseClicked(x, y, button)) event.setCanceled(true);
             return;
         }
         if (button == 0) for (var control : List.copyOf(CONTROLS)) if (control.mouseClicked(x, y, button)) {
             event.setCanceled(true);
             return;
         }
-        if (button != 0 && button != 1 || !partyScreen(event.getScreen())) return;
-        var others = others();
-        int columns = columns(event.getScreen().width);
-        for (int i = 0; i < columns && headPage * columns + i < others.size(); i++) {
-            var player = others.get(headPage * columns + i);
-            if (!inside(x, y, 7 + i * 20, 7, 18, 18)) continue;
-            menuPlayer = player.id();
-            menuWidth = Math.max(Minecraft.getInstance().font.width(player.name()), Minecraft.getInstance().font.width(text("invite"))) + 8;
-            menuX = Mth.clamp((int) x + 12, 4, Math.max(4, event.getScreen().width - menuWidth - 4));
-            menuY = Mth.clamp((int) y + 18, 20, Math.max(20, event.getScreen().height - 34));
-            refreshMenu();
-            SelectionSounds.CLICK.play();
-            event.setCanceled(true);
-            return;
+    }
+
+    private static void closeMenu() {
+        MENU.clear();
+        menuPlayer = null;
+    }
+
+    private static void openMenu(UUID id, int x, int y, boolean keyboard) {
+        var player = PLAYERS.get(id);
+        if (player == null) return;
+        closeMenu();
+        menuPlayer = id;
+        menuX = x;
+        menuTop = y;
+        refreshMenu();
+        layoutMenu(player);
+        if (keyboard) for (var button : MENU) if (button.active) {
+            button.setFocused(true);
+            break;
         }
+        SelectionSounds.CLICK.play();
+    }
+
+    private static List<Component> playerInfo(Peer player) {
+        var lines = new ArrayList<Component>();
+        lines.add(Component.literal(player.name()).withStyle(member(player.id()) ? ChatFormatting.YELLOW : ChatFormatting.WHITE));
+        lines.add(text("stage_" + player.stage()).copy().withStyle(ChatFormatting.GRAY));
+        if (player.id().equals(self())) lines.add(text("you").copy().withStyle(ChatFormatting.GRAY));
+        if (player.id().equals(leader)) lines.add(text("leader").copy().withStyle(ChatFormatting.GOLD));
+        else if (MEMBERS.contains(player.id())) lines.add(text("member").copy().withStyle(ChatFormatting.GREEN));
+        if (OUTGOING.contains(player.id())) lines.add(text("invited").copy().withStyle(ChatFormatting.GRAY));
+        var invite = INVITES.get(player.id());
+        if (invite != null && invite.expires() > Util.getMillis()) lines.add(text("invite_toast",
+                (invite.expires() - Util.getMillis() + 999) / 1000).copy().withStyle(ChatFormatting.GRAY));
+        return lines;
+    }
+
+    private static List<Component> playerTooltip(Peer player) {
+        var lines = new ArrayList<>(playerInfo(player));
+        lines.add(text(member(player.id()) ? "details" : "more").copy().withStyle(ChatFormatting.GRAY, ChatFormatting.ITALIC));
+        return lines;
+    }
+
+    private static List<Component> layoutMenu(Peer player) {
+        var header = playerInfo(player);
+        var minecraft = Minecraft.getInstance();
+        int lineHeight = minecraft.font.lineHeight + 1;
+        menuWidth = header.stream().mapToInt(minecraft.font::width).max().orElse(1);
+        for (var button : MENU) menuWidth = Math.max(menuWidth, minecraft.font.width(button.getMessage()));
+        int headerHeight = header.size() * lineHeight + 2;
+        int gap = MENU.isEmpty() ? 0 : 3;
+        int height = headerHeight + gap + MENU.size() * lineHeight - 2;
+        menuX = Mth.clamp(menuX, 4, Math.max(4, minecraft.screen.width - menuWidth - 4));
+        menuTop = Mth.clamp(menuTop, 4, Math.max(4, minecraft.screen.height - height - 4));
+        menuY = menuTop + headerHeight + gap;
+        for (int index = 0; index < MENU.size(); index++) {
+            var button = MENU.get(index);
+            button.setPosition(menuX, menuY + index * lineHeight);
+            button.setWidth(menuWidth);
+            button.setHeight(lineHeight);
+        }
+        return header;
     }
 
     private static void refreshMenu() {
@@ -435,6 +499,10 @@ final class ClientParty {
             menuPlayer = null;
             return;
         }
+        if (member(player.id())) {
+            MENU.clear();
+            return;
+        }
         var invitation = INVITES.get(player.id());
         boolean incoming = invitation != null && invitation.expires() > Util.getMillis();
         boolean outgoing = OUTGOING.contains(player.id());
@@ -442,7 +510,7 @@ final class ClientParty {
         boolean available = self != null && self.stage() == 0 && !follower() && spawn.isEmpty() && player.stage() == 0
                 && !MEMBERS.contains(player.id()) && MEMBERS.size() < 8 && !outgoing && player.available()
                 && (HeritageScreens.finished() || HeritageScreens.placement() == HeritageScreens.Placement.BEFORE_SPAWN);
-        Component label = text(incoming ? "join" : outgoing ? "invited" : "invite");
+        Component label = text(player.id().equals(self()) ? "you" : incoming ? "join" : outgoing ? "invited" : "invite");
         boolean active = incoming ? self != null && self.stage() == 0 && !grouped() && player.stage() == 0 : available;
         if (MENU.size() == (incoming ? 2 : 1) && MENU.getFirst().getMessage().equals(label) && MENU.getFirst().active == active) return;
         int focused = -1;
@@ -470,7 +538,7 @@ final class ClientParty {
                 boolean highlight = active && isHoveredOrFocused();
                 if (highlight && !highlighted) SelectionSounds.HOVER.play();
                 highlighted = highlight;
-                graphics.drawString(Minecraft.getInstance().font, getMessage(), getX(), getY() + 2,
+                graphics.drawString(Minecraft.getInstance().font, getMessage(), getX(), getY(),
                         active ? highlight ? 0xffffff55 : 0xffffffff : 0xff888888);
             }
         };
@@ -478,34 +546,81 @@ final class ClientParty {
         MENU.add(button);
     }
 
-    private static void key(ScreenEvent.KeyPressed.Pre event) {
-        if (!overlay(event.getScreen()) || menuPlayer == null) return;
-        int key = event.getKeyCode();
-        if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_ESCAPE) {
-            MENU.clear();
-            menuPlayer = null;
-            event.setCanceled(true);
-        } else if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_DOWN || key == org.lwjgl.glfw.GLFW.GLFW_KEY_UP
-                || key == org.lwjgl.glfw.GLFW.GLFW_KEY_TAB) {
-            int current = -1;
-            for (int i = 0; i < MENU.size(); i++) if (MENU.get(i).isFocused()) current = i;
-            int direction = key == org.lwjgl.glfw.GLFW.GLFW_KEY_UP
-                    || key == org.lwjgl.glfw.GLFW.GLFW_KEY_TAB && (event.getModifiers() & org.lwjgl.glfw.GLFW.GLFW_MOD_SHIFT) != 0 ? -1 : 1;
-            for (int step = 1; step <= MENU.size(); step++) {
-                int index = Math.floorMod(current + step * direction, MENU.size());
-                if (!MENU.get(index).active) continue;
-                for (var button : MENU) button.setFocused(false);
-                MENU.get(index).setFocused(true);
-                break;
-            }
-            event.setCanceled(true);
-        } else if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_ENTER || key == org.lwjgl.glfw.GLFW.GLFW_KEY_SPACE) {
-            for (var button : List.copyOf(MENU)) if (button.isFocused() && button.active) {
-                button.playDownSound(Minecraft.getInstance().getSoundManager());
-                button.onPress();
-                break;
-            }
-            event.setCanceled(true);
+    static int nextMenuFocus(List<Boolean> active, int current, int direction) {
+        int start = current < 0 && direction < 0 ? 0 : current;
+        for (int step = 1; step <= active.size(); step++) {
+            int index = Math.floorMod(start + step * direction, active.size());
+            if (active.get(index)) return index;
         }
+        return -1;
+    }
+
+    private static void key(ScreenEvent.KeyPressed.Pre event) {
+        if (!overlay(event.getScreen())) return;
+        int key = event.getKeyCode();
+        if (menuPlayer != null) {
+            if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_ESCAPE) {
+                closeMenu();
+                SelectionSounds.CLICK.play();
+            } else if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_DOWN || key == org.lwjgl.glfw.GLFW.GLFW_KEY_UP
+                    || key == org.lwjgl.glfw.GLFW.GLFW_KEY_TAB) {
+                int current = -1;
+                for (int i = 0; i < MENU.size(); i++) if (MENU.get(i).isFocused()) current = i;
+                int direction = key == org.lwjgl.glfw.GLFW.GLFW_KEY_UP
+                        || key == org.lwjgl.glfw.GLFW.GLFW_KEY_TAB && (event.getModifiers() & org.lwjgl.glfw.GLFW.GLFW_MOD_SHIFT) != 0 ? -1 : 1;
+                int next = nextMenuFocus(MENU.stream().map(button -> button.active).toList(), current, direction);
+                if (next >= 0) {
+                    for (var button : MENU) button.setFocused(false);
+                    MENU.get(next).setFocused(true);
+                }
+            } else if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_ENTER || key == org.lwjgl.glfw.GLFW.GLFW_KEY_SPACE) {
+                for (var button : List.copyOf(MENU)) if (button.isFocused() && button.active) {
+                    button.playDownSound(Minecraft.getInstance().getSoundManager());
+                    button.onPress();
+                    break;
+                }
+            }
+            event.setCanceled(true);
+            return;
+        }
+        if (!PLAYER_LIST.open() && !peers.isEmpty()
+                && Minecraft.getInstance().options.keyPlayerList.matches(key, event.getScanCode())) {
+            PLAYER_LIST.setOpen(true, Util.getMillis());
+            PLAYER_LIST.moveFocus(roster(), 1);
+            SelectionSounds.CLICK.play();
+            event.setCanceled(true);
+            return;
+        }
+        if (!PLAYER_LIST.active(Util.getMillis())) return;
+        if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_ESCAPE) {
+            PLAYER_LIST.setOpen(false, Util.getMillis());
+            SelectionSounds.CLICK.play();
+        } else if (PLAYER_LIST.open()) {
+            int direction = key == org.lwjgl.glfw.GLFW.GLFW_KEY_LEFT ? -1
+                    : key == org.lwjgl.glfw.GLFW.GLFW_KEY_RIGHT ? 1
+                    : key == org.lwjgl.glfw.GLFW.GLFW_KEY_UP ? -PLAYER_LIST.columns()
+                    : key == org.lwjgl.glfw.GLFW.GLFW_KEY_DOWN ? PLAYER_LIST.columns()
+                    : key == org.lwjgl.glfw.GLFW.GLFW_KEY_TAB
+                    ? (event.getModifiers() & org.lwjgl.glfw.GLFW.GLFW_MOD_SHIFT) != 0 ? -1 : 1 : 0;
+            if (direction != 0) {
+                PLAYER_LIST.moveFocus(roster(), direction);
+                SelectionSounds.HOVER.play();
+            } else if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_PAGE_UP || key == org.lwjgl.glfw.GLFW.GLFW_KEY_PAGE_DOWN) {
+                PLAYER_LIST.changePage(roster(), key == org.lwjgl.glfw.GLFW.GLFW_KEY_PAGE_UP ? -1 : 1);
+                SelectionSounds.HOVER.play();
+            } else if ((key == org.lwjgl.glfw.GLFW.GLFW_KEY_ENTER || key == org.lwjgl.glfw.GLFW.GLFW_KEY_SPACE)
+                    && PLAYER_LIST.focused() != null) {
+                openMenu(PLAYER_LIST.focused(), PLAYER_LIST.menuX(), PLAYER_LIST.menuY(), true);
+            }
+        }
+        event.setCanceled(true);
+    }
+
+    private static void scroll(ScreenEvent.MouseScrolled.Pre event) {
+        if (!overlay(event.getScreen()) || !PLAYER_LIST.active(Util.getMillis())) return;
+        if (PLAYER_LIST.open() && menuPlayer == null && event.getScrollDeltaY() != 0) {
+            if (PLAYER_LIST.scroll(roster(), event.getScrollDeltaY())) SelectionSounds.HOVER.play();
+        }
+        event.setCanceled(true);
     }
 }
