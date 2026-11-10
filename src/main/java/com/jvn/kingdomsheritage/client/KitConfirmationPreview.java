@@ -20,10 +20,17 @@ final class KitConfirmationPreview {
         if (target != null) {
             target.destroyBuffers();
             target = null;
+            // deleting a preview unbinds the framebuffer, including during carousel eviction
+            Minecraft.getInstance().getMainRenderTarget().bindWrite(true);
         }
     }
 
     void render(GuiGraphics graphics, Rect2i bounds, float x, float y, float scale, float tilt, Runnable inventory) {
+        capture(graphics, inventory);
+        draw(graphics, bounds, x, y, scale, tilt, 1);
+    }
+
+    void capture(GuiGraphics graphics, Runnable inventory) {
         var main = Minecraft.getInstance().getMainRenderTarget();
         graphics.flush();
         try {
@@ -41,6 +48,11 @@ final class KitConfirmationPreview {
         } finally {
             main.bindWrite(true);
         }
+    }
+
+    void draw(GuiGraphics graphics, Rect2i bounds, float x, float y, float scale, float tilt, float opacity) {
+        if (target == null || opacity <= 0) return;
+        graphics.flush();
         float u0 = bounds.getX() / (float) graphics.guiWidth();
         float u1 = (bounds.getX() + bounds.getWidth()) / (float) graphics.guiWidth();
         float v0 = 1 - bounds.getY() / (float) graphics.guiHeight();
@@ -57,7 +69,7 @@ final class KitConfirmationPreview {
         try {
             RenderSystem.setShader(GameRenderer::getPositionTexShader);
             RenderSystem.setShaderTexture(0, target.getColorTextureId());
-            RenderSystem.setShaderColor(1, 1, 1, 1);
+            RenderSystem.setShaderColor(opacity, opacity, opacity, opacity);
             var pose = graphics.pose().last().pose();
             var buffer = Tesselator.getInstance().begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_TEX);
             buffer.addVertex(pose, 0, bounds.getHeight(), 0).setUv(u0, v1);
@@ -66,6 +78,7 @@ final class KitConfirmationPreview {
             buffer.addVertex(pose, 0, 0, 0).setUv(u0, v0);
             BufferUploader.drawWithShader(buffer.buildOrThrow());
         } finally {
+            RenderSystem.setShaderColor(1, 1, 1, 1);
             RenderSystem.defaultBlendFunc();
             RenderSystem.disableBlend();
             RenderSystem.depthMask(true);

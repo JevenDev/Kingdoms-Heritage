@@ -21,11 +21,13 @@ final class KitSelectionView {
     private static final int CONFIRMATION_DURATION = 550;
     private final KitSelection model;
     private final KitConfirmationPreview confirmationPreview = new KitConfirmationPreview();
+    private final KitCarousel carousel = new KitCarousel();
     private boolean confirming;
     private float confirmationFrom;
     private long confirmationStarted;
     private float frameConfirmation;
     private boolean capturingPreview;
+    private boolean neighboringPreview;
     private float previewYaw = Float.NaN;
     private float previewPitch = Float.NaN;
     private float previewMouseX;
@@ -52,10 +54,12 @@ final class KitSelectionView {
     void reset() {
         confirming = false;
         confirmationFrom = 0;
+        carousel.select(model.index(), net.minecraft.Util.getMillis());
     }
 
     void close() {
         confirmationPreview.close();
+        carousel.close();
     }
 
     static void register() {
@@ -65,6 +69,7 @@ final class KitSelectionView {
         NeoForge.EVENT_BUS.addListener(KitSelectionView::hideCrafting);
         NeoForge.EVENT_BUS.addListener(EventPriority.HIGHEST, KitSelectionView::mouse);
         NeoForge.EVENT_BUS.addListener(EventPriority.HIGHEST, KitSelectionView::key);
+        NeoForge.EVENT_BUS.addListener(EventPriority.HIGHEST, KitSelectionView::scroll);
     }
 
     static boolean isInventory(Screen screen) {
@@ -85,6 +90,7 @@ final class KitSelectionView {
     static float previewAngle(net.minecraft.world.entity.LivingEntity entity, float angle, float center, boolean horizontal) {
         KitSelectionView view = current();
         if (view == null || entity != view.model.player() || !isInventory(Minecraft.getInstance().screen)) return angle;
+        if (view.neighboringPreview) return 0;
         float mouse = horizontal ? view.previewMouseX : view.previewMouseY;
         float target = (float) Math.atan((center - mouse) / 40);
         if (view.capturingPreview) target *= 1 - view.frameConfirmation;
@@ -107,7 +113,8 @@ final class KitSelectionView {
         next.active = model.index() + 1 < model.choices().size() && !model.submitted() && !reviewing;
         back.active = !model.submitted() && (confirming ? progress > 0.65F : progress == 0);
         back.setMessage(Component.translatable(reviewing ? "screen.kingdomsheritage.choose_another" : "gui.back"));
-        confirm.active = !model.submitted() && model.problem().getString().isEmpty() && (confirming ? progress == 1 : progress == 0);
+        confirm.active = !model.submitted() && model.problem().getString().isEmpty()
+                && !carousel.moving(net.minecraft.Util.getMillis()) && (confirming ? progress == 1 : progress == 0);
         confirm.setMessage(model.submitted() ? ClientSelection.progress() : Component.translatable(
                 reviewing ? "screen.kingdomsheritage.confirm_begin" : "screen.kingdomsheritage.next"));
         confirm.setTooltip(Tooltip.create(model.policyHint()));
@@ -143,6 +150,7 @@ final class KitSelectionView {
         KitSelectionView view = current();
         if (view == null || !isInventory(event.getScreen())) return;
         Screen screen = event.getScreen();
+        view.carousel.close();
         if (net.neoforged.fml.ModList.get().isLoaded("accessories")) AccessoriesControls.hideCrafting(screen);
         var container = (AbstractContainerScreen<?>) screen;
         for (var child : List.copyOf(screen.children())) {
@@ -181,7 +189,76 @@ final class KitSelectionView {
         view.positionControls(event.getScreen(), view.frameConfirmation);
         if (view.confirming || view.frameConfirmation > 0) {
             view.renderConfirmation(event, view.frameConfirmation);
-            event.setCanceled(true);
+        } else {
+            view.renderCarousel(event);
+        }
+        event.setCanceled(true);
+    }
+
+    int firstPreview() {
+        return carousel.first(net.minecraft.Util.getMillis(), model.choices().size());
+    }
+
+    int lastPreview() {
+        return carousel.last(net.minecraft.Util.getMillis(), model.choices().size());
+    }
+
+    private void renderInventory(Screen screen, net.minecraft.client.gui.GuiGraphics graphics, int index,
+                                 int mouseX, int mouseY, float partialTick) {
+        List<Button> buttons = List.of(previous, next, back, confirm, disconnect);
+        var visible = buttons.stream().map(button -> button.visible).toList();
+        capturingPreview = true;
+        neighboringPreview = index != model.index();
+        try {
+            for (Button button : buttons) button.visible = false;
+            model.renderNeighbor(index, () -> {
+                try {
+                    screen.renderWithTooltip(graphics, mouseX, mouseY, partialTick);
+                } finally {
+                    graphics.flush();
+                }
+            });
+        } finally {
+            capturingPreview = false;
+            neighboringPreview = false;
+            for (int i = 0; i < buttons.size(); i++) buttons.get(i).visible = visible.get(i);
+        }
+    }
+
+    private static void renderControlWithoutTooltip(Button button, net.minecraft.client.gui.GuiGraphics graphics,
+                                                    int mouseX, int mouseY, float partialTick) {
+        Tooltip tooltip = button.getTooltip();
+        button.setTooltip(null);
+        try {
+            button.render(graphics, mouseX, mouseY, partialTick);
+        } finally {
+            button.setTooltip(tooltip);
+        }
+    }
+
+    private void renderCarousel(ScreenEvent.Render.Pre event) {
+        var graphics = event.getGuiGraphics();
+        Screen screen = event.getScreen();
+        SelectionBackground.render(graphics, screen.width, screen.height);
+        long now = net.minecraft.Util.getMillis();
+        boolean moving = carousel.moving(now);
+        carousel.render(graphics, bounds, screen.width, model, event.getMouseX(), event.getMouseY(), now, 1, true,
+                index -> renderInventory(screen, graphics, index,
+                        index == model.index() && !moving ? event.getMouseX() : -10000,
+                        index == model.index() && !moving ? event.getMouseY() : -10000, event.getPartialTick()));
+        for (Button button : List.of(previous, next, back, confirm, disconnect)) {
+            if (button.visible) renderControlWithoutTooltip(button, graphics, event.getMouseX(), event.getMouseY(), event.getPartialTick());
+        }
+        boolean keyboard = Minecraft.getInstance().getLastInputType().isKeyboard();
+        for (Button button : List.of(previous, next, back, confirm, disconnect)) {
+            if (button.visible && (button.isHovered() || keyboard && button.isFocused())) {
+                Component message = button == confirm ? model.policyHint() : button.getMessage();
+                graphics.renderTooltip(Minecraft.getInstance().font,
+                        Minecraft.getInstance().font.split(message, Math.min(300, screen.width - 20)),
+                        button.isHovered() ? event.getMouseX() : button.getX() + button.getWidth() / 2,
+                        button.isHovered() ? event.getMouseY() : button.getY() + button.getHeight());
+                break;
+            }
         }
     }
 
@@ -262,6 +339,8 @@ final class KitSelectionView {
         var font = Minecraft.getInstance().font;
         long now = net.minecraft.Util.getMillis();
         SelectionBackground.render(graphics, screen.width, screen.height);
+        carousel.render(graphics, bounds, screen.width, model, -10000, -10000, now, 1 - progress, false,
+                index -> renderInventory(screen, graphics, index, -10000, -10000, event.getPartialTick()));
         float targetScale = confirmationScale(screen);
         float scale = Mth.lerp(progress, 1, targetScale);
         float phase = (now % 20000L) / 20000F * Mth.TWO_PI;
@@ -310,9 +389,9 @@ final class KitSelectionView {
                 textY += font.lineHeight;
             }
         }
-        confirm.render(graphics, event.getMouseX(), event.getMouseY(), event.getPartialTick());
-        back.render(graphics, event.getMouseX(), event.getMouseY(), event.getPartialTick());
-        disconnect.render(graphics, event.getMouseX(), event.getMouseY(), event.getPartialTick());
+        renderControlWithoutTooltip(confirm, graphics, event.getMouseX(), event.getMouseY(), event.getPartialTick());
+        renderControlWithoutTooltip(back, graphics, event.getMouseX(), event.getMouseY(), event.getPartialTick());
+        renderControlWithoutTooltip(disconnect, graphics, event.getMouseX(), event.getMouseY(), event.getPartialTick());
         if (!model.error().getString().isEmpty()) {
             var lines = font.split(model.error(), screen.width - 20);
             for (int i = 0; i < Math.min(2, lines.size()); i++) {
@@ -382,8 +461,22 @@ final class KitSelectionView {
         if (SelectionTransition.active()) return;
         if (current() == null || !isInventory(event.getScreen())) return;
         KitSelectionView view = current();
-        if (view.confirming || view.frameConfirmation > 0) {
-            boolean overControl = List.of(view.confirm, view.back, view.disconnect).stream().anyMatch(button ->
+        boolean overNavigation = List.of(view.previous, view.next, view.confirm, view.back, view.disconnect).stream()
+                .anyMatch(button -> button.active && button.visible && button.isMouseOver(event.getMouseX(), event.getMouseY()));
+        if (!view.confirming && view.frameConfirmation == 0 && !view.model.submitted() && !overNavigation && event.getButton() == 0) {
+            int index = view.carousel.hit(view.bounds, event.getScreen().width, view.model.choices().size(),
+                    event.getMouseX(), event.getMouseY(), net.minecraft.Util.getMillis());
+            if (index >= 0) {
+                SelectionSounds.CLICK.play();
+                view.model.select(index);
+                event.setCanceled(true);
+                return;
+            }
+        }
+        if (view.confirming || view.frameConfirmation > 0 || view.carousel.moving(net.minecraft.Util.getMillis())) {
+            var controls = view.confirming || view.frameConfirmation > 0 ? List.of(view.confirm, view.back, view.disconnect)
+                    : List.of(view.previous, view.next, view.confirm, view.back, view.disconnect);
+            boolean overControl = controls.stream().anyMatch(button ->
                     button.active && button.visible && button.isMouseOver(event.getMouseX(), event.getMouseY()));
             if (!overControl || event.getButton() != 0) event.setCanceled(true);
             return;
@@ -397,6 +490,18 @@ final class KitSelectionView {
         if (!overControl || event.getButton() != 0) event.setCanceled(true);
     }
 
+    private static void scroll(ScreenEvent.MouseScrolled.Pre event) {
+        KitSelectionView view = current();
+        if (view == null || !isInventory(event.getScreen()) || event.getScrollDeltaY() == 0) return;
+        event.setCanceled(true);
+        if (SelectionTransition.active() || view.model.submitted() || view.confirming || view.frameConfirmation > 0) return;
+        int index = view.carousel.scroll(event.getScrollDeltaY(), view.model.choices().size());
+        if (index != view.model.index()) {
+            SelectionSounds.CLICK.play();
+            view.model.select(index);
+        }
+    }
+
     private static void key(ScreenEvent.KeyPressed.Pre event) {
         if (SelectionTransition.active()) return;
         if (current() == null || !isInventory(event.getScreen())) return;
@@ -405,6 +510,15 @@ final class KitSelectionView {
             if (!current().model.submitted()) {
                 SelectionSounds.CLICK.play();
                 current().back();
+            }
+            event.setCanceled(true);
+        } else if (!current().confirming && current().frameConfirmation == 0
+                && (key == GLFW.GLFW_KEY_LEFT || key == GLFW.GLFW_KEY_RIGHT)) {
+            KitSelectionView view = current();
+            int index = view.model.index() + (key == GLFW.GLFW_KEY_LEFT ? -1 : 1);
+            if (!view.model.submitted() && index >= 0 && index < view.model.choices().size()) {
+                SelectionSounds.CLICK.play();
+                view.model.select(index);
             }
             event.setCanceled(true);
         } else if (current().confirming || current().frameConfirmation > 0) {
@@ -422,6 +536,16 @@ final class KitSelectionView {
                         button.keyPressed(key, event.getScanCode(), event.getModifiers());
                         break;
                     }
+                }
+            }
+            event.setCanceled(true);
+        } else if (current().carousel.moving(net.minecraft.Util.getMillis())
+                && (key == GLFW.GLFW_KEY_ENTER || key == GLFW.GLFW_KEY_SPACE)) {
+            KitSelectionView view = current();
+            for (Button button : List.of(view.previous, view.next, view.confirm, view.back, view.disconnect)) {
+                if (event.getScreen().getFocused() == button && button.active) {
+                    button.keyPressed(key, event.getScanCode(), event.getModifiers());
+                    break;
                 }
             }
             event.setCanceled(true);

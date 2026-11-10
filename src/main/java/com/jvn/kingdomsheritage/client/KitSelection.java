@@ -5,7 +5,9 @@ import com.jvn.kingdomsheritage.HeritageConfig;
 import com.jvn.kingdomsheritage.data.DefinitionJson;
 import com.jvn.kingdomsheritage.data.HeritageException;
 import com.jvn.kingdomsheritage.data.KitDefinition;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
@@ -19,6 +21,7 @@ public final class KitSelection {
     private final List<JsonObject> choices;
     private final Player player;
     private final KitPreview inventoryPreview;
+    private final Map<Integer, NeighborPreview> neighborPreviews = new HashMap<>();
     private final HeritageConfig.InventoryPolicy inventoryPolicy;
     private KitDefinition kit;
     private final boolean recipeBookOpen;
@@ -103,8 +106,43 @@ public final class KitSelection {
             return;
         }
         selection.preview();
+        selection.prepareNeighbors();
         selection.inventoryPreview.render(draw);
     }
+
+    private void prepareNeighbors() {
+        int first = view.firstPreview();
+        int last = view.lastPreview();
+        neighborPreviews.keySet().removeIf(index -> index < first || index > last || index == this.index);
+        for (int index = first; index <= last; index++) {
+            if (index == this.index) continue;
+            var preview = neighborPreviews.computeIfAbsent(index, this::neighborPreview);
+            try {
+                preview.inventory.apply(preview.kit, preview.stacks, inventoryPolicy);
+            } catch (IllegalArgumentException error) {
+                preview.inventory.apply(null, List.of(), inventoryPolicy);
+            }
+        }
+    }
+
+    private NeighborPreview neighborPreview(int index) {
+        KitDefinition definition = null;
+        List<KitDefinition.StackEntry> items = List.of();
+        try {
+            definition = KitDefinition.parse(ResourceLocation.parse(choices.get(index).get("id").getAsString()), choices.get(index));
+            items = definition.decode(player.registryAccess());
+        } catch (IllegalArgumentException error) {
+            definition = null;
+        }
+        return new NeighborPreview(definition, items, new KitPreview(player));
+    }
+
+    void renderNeighbor(int index, Runnable draw) {
+        if (index == this.index) draw.run();
+        else neighborPreviews.get(index).inventory.render(draw);
+    }
+
+    private record NeighborPreview(KitDefinition kit, List<KitDefinition.StackEntry> stacks, KitPreview inventory) {}
 
     void restore() {
         if (Minecraft.getInstance().player == player) Minecraft.getInstance().player.getRecipeBook().setOpen(net.minecraft.world.inventory.RecipeBookType.CRAFTING, recipeBookOpen);
