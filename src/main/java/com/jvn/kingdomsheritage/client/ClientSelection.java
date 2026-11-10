@@ -280,7 +280,10 @@ public final class ClientSelection {
         SelectionTransition.reveal();
     }
 
+    static boolean waitingForParty() { return progress.equals("party_waiting") && ClientParty.grouped(); }
+
     static Component progress() {
+        if (waitingForParty()) return ClientParty.waitingSummary();
         return Component.translatable("screen.kingdomsheritage."
                 + (progress.isEmpty() ? "wait" : progress));
     }

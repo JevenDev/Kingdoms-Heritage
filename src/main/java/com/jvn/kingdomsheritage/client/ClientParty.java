@@ -132,8 +132,13 @@ final class ClientParty {
         INVITES.putAll(nextInvites);
         OUTGOING.clear();
         for (var value : state.getAsJsonArray("outgoing")) OUTGOING.add(UUID.fromString(value.getAsString()));
-        MENU.clear();
-        menuPlayer = null;
+        if (state.has("feedback")) {
+            for (var value : state.getAsJsonArray("feedback")) {
+                var feedback = value.getAsJsonObject();
+                SelectionToasts.add(new PartyNoticeToast(feedback.get("name").getAsString(), feedback.get("result").getAsString()));
+                if (!feedback.get("result").getAsString().equals("accepted")) SelectionSounds.NOTICE.play();
+            }
+        }
         CURSORS.keySet().retainAll(PLAYERS.keySet());
         String nextSpawn = state.get("spawn").getAsString();
         long nextGeneration = state.get("generation").getAsLong();
@@ -141,6 +146,7 @@ final class ClientParty {
         spawn = nextSpawn;
         generation = nextGeneration;
         if (changed) pendingSpawn = spawn.isEmpty() ? null : spawn;
+        if (menuPlayer != null) refreshMenu();
         ClientSelectionEvents.party();
     }
 
@@ -212,6 +218,28 @@ final class ClientParty {
         sentX = sentY = sentPage = -1;
     }
 
+    record Readiness(int ready, int total, List<HeritageParty.Player> waiting) {}
+
+    static Readiness readiness(HeritageParty.Snapshot party) {
+        var members = party.players().stream().filter(player -> party.members().contains(player.id())).toList();
+        var waiting = members.stream().filter(player -> player.stage() != HeritageParty.Stage.READY).toList();
+        return new Readiness(members.size() - waiting.size(), members.size(), waiting);
+    }
+
+    static Component waitingSummary() {
+        var status = readiness(snapshot());
+        return text("ready_count", status.ready(), status.total());
+    }
+
+    static Component waitingNames() {
+        var names = Component.empty();
+        for (var player : readiness(snapshot()).waiting()) {
+            if (!names.getString().isEmpty()) names.append(", ");
+            names.append(text("waiting_member", player.name(), text("stage_" + player.stage().ordinal())));
+        }
+        return text("waiting_for", names);
+    }
+
     private static Component text(String key, Object... arguments) {
         return Component.translatable("screen.kingdomsheritage.party_" + key, arguments);
     }
@@ -220,7 +248,7 @@ final class ClientParty {
         PlayerFaceRenderer.draw(graphics, SKINS.resolve(player.id(), player.name()).texture(), x, y, size);
         if (status && player.stage() != 0) graphics.fill(x, y, x + size, y + size, 0xaa343434);
         if (MEMBERS.contains(player.id())) graphics.renderOutline(x - 1, y - 1, size + 2, size + 2, 0xffffffff);
-        if (status && (player.stage() == 2 || player.stage() == 4)) {
+        if (status && player.stage() == 2) {
             graphics.pose().pushPose();
             graphics.pose().translate(x + size / 2F, y + size / 2F, 0);
             graphics.pose().scale(0.5F, 0.5F, 1);
@@ -383,7 +411,7 @@ final class ClientParty {
             event.setCanceled(true);
             return;
         }
-        if (button != 1 || !partyScreen(event.getScreen())) return;
+        if (button != 0 && button != 1 || !partyScreen(event.getScreen())) return;
         var others = others();
         int columns = columns(event.getScreen().width);
         for (int i = 0; i < columns && headPage * columns + i < others.size(); i++) {
@@ -393,25 +421,44 @@ final class ClientParty {
             menuWidth = Math.max(Minecraft.getInstance().font.width(player.name()), Minecraft.getInstance().font.width(text("invite"))) + 8;
             menuX = Mth.clamp((int) x + 12, 4, Math.max(4, event.getScreen().width - menuWidth - 4));
             menuY = Mth.clamp((int) y + 18, 20, Math.max(20, event.getScreen().height - 34));
-            var invite = INVITES.get(player.id());
-            if (invite != null && invite.expires() > Util.getMillis()) {
-                menuButton(text("join"), true, () -> respond(player.id(), true));
-                menuButton(text("decline"), true, () -> respond(player.id(), false));
-            } else {
-                boolean outgoing = OUTGOING.contains(player.id());
-                boolean available = !follower() && spawn.isEmpty() && player.stage() == 0 && !MEMBERS.contains(player.id())
-                        && MEMBERS.size() < 8 && !outgoing && player.available()
-                        && (HeritageScreens.finished() || HeritageScreens.placement() == HeritageScreens.Placement.BEFORE_SPAWN);
-                menuButton(text(outgoing ? "invited" : "invite"), available, () -> {
-                    action(HeritageNetwork.PartyAction.INVITE, player.id(), "");
-                    MENU.clear();
-                    menuPlayer = null;
-                });
-            }
+            refreshMenu();
             SelectionSounds.CLICK.play();
             event.setCanceled(true);
             return;
         }
+    }
+
+    private static void refreshMenu() {
+        var player = PLAYERS.get(menuPlayer);
+        if (player == null) {
+            MENU.clear();
+            menuPlayer = null;
+            return;
+        }
+        var invitation = INVITES.get(player.id());
+        boolean incoming = invitation != null && invitation.expires() > Util.getMillis();
+        boolean outgoing = OUTGOING.contains(player.id());
+        var self = PLAYERS.get(self());
+        boolean available = self != null && self.stage() == 0 && !follower() && spawn.isEmpty() && player.stage() == 0
+                && !MEMBERS.contains(player.id()) && MEMBERS.size() < 8 && !outgoing && player.available()
+                && (HeritageScreens.finished() || HeritageScreens.placement() == HeritageScreens.Placement.BEFORE_SPAWN);
+        Component label = text(incoming ? "join" : outgoing ? "invited" : "invite");
+        boolean active = incoming ? self != null && self.stage() == 0 && !grouped() && player.stage() == 0 : available;
+        if (MENU.size() == (incoming ? 2 : 1) && MENU.getFirst().getMessage().equals(label) && MENU.getFirst().active == active) return;
+        int focused = -1;
+        for (int index = 0; index < MENU.size(); index++) if (MENU.get(index).isFocused()) focused = index;
+        MENU.clear();
+        if (incoming) {
+            menuButton(label, active, () -> respond(player.id(), true));
+            menuButton(text("decline"), true, () -> respond(player.id(), false));
+        } else {
+            menuButton(label, active, () -> {
+                action(HeritageNetwork.PartyAction.INVITE, player.id(), "");
+                MENU.clear();
+                menuPlayer = null;
+            });
+        }
+        if (focused >= 0) MENU.get(Math.min(focused, MENU.size() - 1)).setFocused(true);
     }
 
     private static void menuButton(Component text, boolean active, Runnable action) {
@@ -442,7 +489,8 @@ final class ClientParty {
                 || key == org.lwjgl.glfw.GLFW.GLFW_KEY_TAB) {
             int current = -1;
             for (int i = 0; i < MENU.size(); i++) if (MENU.get(i).isFocused()) current = i;
-            int direction = key == org.lwjgl.glfw.GLFW.GLFW_KEY_UP ? -1 : 1;
+            int direction = key == org.lwjgl.glfw.GLFW.GLFW_KEY_UP
+                    || key == org.lwjgl.glfw.GLFW.GLFW_KEY_TAB && (event.getModifiers() & org.lwjgl.glfw.GLFW.GLFW_MOD_SHIFT) != 0 ? -1 : 1;
             for (int step = 1; step <= MENU.size(); step++) {
                 int index = Math.floorMod(current + step * direction, MENU.size());
                 if (!MENU.get(index).active) continue;

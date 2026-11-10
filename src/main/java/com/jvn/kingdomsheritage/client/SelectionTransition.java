@@ -172,6 +172,14 @@ final class SelectionTransition {
                             : joining() ? Component.translatable("screen.kingdomsheritage.loading") : ClientSelection.progress(),
                     graphics.guiWidth() / 2, graphics.guiHeight() / 2 + 16, alpha << 24 | 0xffffff);
         }
+        if (waiting() && ClientSelection.waitingForParty()) {
+            var font = Minecraft.getInstance().font;
+            var lines = font.split(ClientParty.waitingNames(), Math.max(1, graphics.guiWidth() - 40));
+            for (int i = 0; i < Math.min(3, lines.size()); i++) {
+                SelectionText.centered(graphics, font, lines.get(i), graphics.guiWidth() / 2,
+                        graphics.guiHeight() / 2 + 32 + i * font.lineHeight, alpha << 24 | 0xcccccc);
+            }
+        }
         if (waiting()) {
             Minecraft minecraft = Minecraft.getInstance();
             if (disconnect == null) disconnect = SelectionControls.disconnect(graphics.guiHeight(), true);

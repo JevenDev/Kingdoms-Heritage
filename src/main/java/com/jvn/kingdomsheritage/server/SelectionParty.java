@@ -25,6 +25,7 @@ public final class SelectionParty {
         long lastCursor = -100;
         long lastStage = -100;
         HeritageNetwork.Cursor cursor;
+        final JsonArray feedback = new JsonArray();
         Participant(ServerPlayer player) { this.player = player; }
     }
     private static final class Party {
@@ -52,7 +53,7 @@ public final class SelectionParty {
     static void stage(ServerPlayer player, int stage) {
         var participant = PLAYERS.get(player.getUUID());
         if (stage != 0 && (stage != 2 || SelectionManager.busy(player))) {
-            if (INVITES.removeIf(invite -> invite.sender().equals(player.getUUID()) || invite.recipient().equals(player.getUUID()))) dirty = true;
+            removeInvites(invite -> invite.sender().equals(player.getUUID()) || invite.recipient().equals(player.getUUID()));
         }
         if (participant != null && participant.stage != stage) {
             participant.stage = stage;
@@ -181,7 +182,7 @@ public final class SelectionParty {
             } else if (party != null && party.leader.equals(player.getUUID())) {
                 if (party.spawn.equals(request.spawn())) return;
                 party.spawn = request.spawn();
-                INVITES.removeIf(invite -> party.members.contains(invite.sender()));
+                removeInvites(invite -> party.members.contains(invite.sender()));
                 for (var member : members(player)) SelectionLifecycle.choices(member, id, null);
                 refresh(player, com.jvn.kingdomsheritage.api.ScreenStep.Placement.AFTER_SPAWN);
             }
@@ -198,12 +199,14 @@ public final class SelectionParty {
                     || INVITES.stream().filter(invite -> invite.recipient().equals(request.target())).count() >= 16
                     || INVITES.stream().anyMatch(invite -> invite.sender().equals(player.getUUID()) && invite.recipient().equals(request.target()))) return;
             INVITES.add(new Invite(player.getUUID(), request.target(), now + 30_000_000_000L));
+            feedback(player.getUUID(), request.target(), "sent");
             dirty = true;
         } else {
             var invite = INVITES.stream().filter(value -> value.sender().equals(request.target())
                     && value.recipient().equals(player.getUUID()) && value.expires() > now).findFirst().orElse(null);
             if (invite == null) return;
             if (action == HeritageNetwork.PartyAction.DECLINE) {
+                feedback(invite.sender(), invite.recipient(), "declined");
                 INVITES.remove(invite);
                 dirty = true;
             } else if (action == HeritageNetwork.PartyAction.ACCEPT) {
@@ -211,12 +214,14 @@ public final class SelectionParty {
                 if (party != null || self.stage != 0 || target.stage != 0 || SelectionManager.busy(player)
                         || SelectionManager.busy(target.player) || destination != null && (!destination.leader.equals(request.target())
                         || !destination.spawn.isEmpty() || destination.members.size() >= 8)) return;
+                feedback(invite.sender(), invite.recipient(), "accepted");
                 if (destination == null) destination = new Party(request.target());
                 destination.members.add(player.getUUID());
                 for (var member : destination.members) PARTIES.put(member, destination);
                 UUID inviter = destination.leader;
                 boolean full = destination.members.size() == 8;
-                INVITES.removeIf(value -> value.recipient().equals(player.getUUID()) || value.sender().equals(player.getUUID())
+                INVITES.remove(invite);
+                removeInvites(value -> value.recipient().equals(player.getUUID()) || value.sender().equals(player.getUUID())
                         || full && value.sender().equals(inviter));
                 refresh(player);
             }
@@ -243,7 +248,7 @@ public final class SelectionParty {
         var party = PARTIES.get(player.getUUID());
         if (party == null) return;
         var members = members(player);
-        INVITES.removeIf(invite -> invite.sender().equals(party.leader));
+        removeInvites(invite -> invite.sender().equals(party.leader));
         for (var member : members) SelectionManager.cancelPreparation(member.getUUID());
         if (party.search != null) party.search.close();
         party.search = null;
@@ -269,14 +274,37 @@ public final class SelectionParty {
 
     static void remove(ServerPlayer player) {
         leave(player);
+        removeInvites(invite -> invite.sender().equals(player.getUUID()) || invite.recipient().equals(player.getUUID()));
         PLAYERS.remove(player.getUUID());
-        INVITES.removeIf(invite -> invite.sender().equals(player.getUUID()) || invite.recipient().equals(player.getUUID()));
+        dirty = true;
+    }
+
+    private static void removeInvites(java.util.function.Predicate<Invite> predicate) {
+        if (INVITES.removeIf(invite -> {
+            if (!predicate.test(invite)) return false;
+            feedback(invite.sender(), invite.recipient(), "cancelled");
+            return true;
+        })) dirty = true;
+    }
+
+    private static void feedback(UUID sender, UUID recipient, String result) {
+        var participant = PLAYERS.get(sender);
+        var target = PLAYERS.get(recipient);
+        if (participant == null || target == null) return;
+        var entry = new JsonObject();
+        entry.addProperty("name", target.player.getGameProfile().getName());
+        entry.addProperty("result", result);
+        participant.feedback.add(entry);
         dirty = true;
     }
 
     static void tick() {
         long now = System.nanoTime();
-        if (INVITES.removeIf(invite -> invite.expires() <= now)) dirty = true;
+        if (INVITES.removeIf(invite -> {
+            if (invite.expires() > now) return false;
+            feedback(invite.sender(), invite.recipient(), "expired");
+            return true;
+        })) dirty = true;
         if (revision != HeritageCatalog.revision()) {
             revision = HeritageCatalog.revision();
             INVITES.clear();
@@ -323,6 +351,8 @@ public final class SelectionParty {
             }
             state.add("invites", invites);
             state.add("outgoing", outgoing);
+            state.add("feedback", participant.feedback.deepCopy());
+            participant.feedback.asList().clear();
             var message = new JsonObject();
             message.add("party", state);
             PacketDistributor.sendToPlayer(player, new HeritageNetwork.Catalog(message.toString()));
