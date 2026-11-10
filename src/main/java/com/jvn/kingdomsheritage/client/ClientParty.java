@@ -247,7 +247,11 @@ final class ClientParty {
 
     static ResourceLocation skin(Peer player) { return SKINS.resolve(player.id(), player.name()).texture(); }
 
-    private static void head(GuiGraphics graphics, Peer player, int x, int y, int size, boolean status) {
+    static Peer player(String name) {
+        return PLAYERS.values().stream().filter(player -> player.name().equals(name)).findFirst().orElse(null);
+    }
+
+    static void head(GuiGraphics graphics, Peer player, int x, int y, int size, boolean status) {
         graphics.fill(x - 1, y - 1, x + size + 1, y + size + 1, 0xff000000);
         PlayerFaceRenderer.draw(graphics, skin(player), x, y, size);
         if (status && player.stage() != 0) graphics.fill(x, y, x + size, y + size, 0xaa343434);
@@ -258,6 +262,35 @@ final class ClientParty {
             LoadingIndicator.render(graphics, 0, 0, Util.getMillis(), 255);
             graphics.pose().popPose();
         }
+    }
+
+    private record CursorMarker(Peer player, int x, int y) {
+        boolean contains(int mouseX, int mouseY) {
+            return mouseX >= x - 7 && mouseX < x + 8 && mouseY >= y - 7 && mouseY < y + 8
+                    || mouseX >= x + 4 && mouseX < x + 14 && mouseY >= y + 4 && mouseY < y + 14;
+        }
+    }
+
+    private static List<CursorMarker> cursorMarkers(SpawnSelectScreen screen, long now) {
+        var markers = new ArrayList<CursorMarker>();
+        for (var entry : CURSORS.entrySet()) {
+            var cursor = entry.getValue();
+            var player = PLAYERS.get(entry.getKey());
+            if (player == null || player.stage() != 0 || cursor.page() != screen.page() || now - cursor.received() > 1000) continue;
+            int x = Mth.clamp(Math.round(cursor.x(now) * screen.width), 0, screen.width - 16);
+            int y = Mth.clamp(Math.round(cursor.y(now) * screen.height), 0, screen.height - 16);
+            markers.add(new CursorMarker(player, x, y));
+        }
+        return markers;
+    }
+
+    static Peer hoveredName(SpawnSelectScreen screen, int mouseX, int mouseY) {
+        if (blocksInput() || SelectionTransition.active()) return null;
+        var suggestion = screen.suggestionAt(mouseX, mouseY);
+        if (suggestion != null) return suggestion;
+        Peer hovered = null;
+        for (var marker : cursorMarkers(screen, Util.getMillis())) if (marker.contains(mouseX, mouseY)) hovered = marker.player;
+        return hovered;
     }
 
     static boolean blocksInput() { return PLAYER_LIST.active(Util.getMillis()) || menuPlayer != null; }
@@ -294,18 +327,13 @@ final class ClientParty {
                     () -> action(HeritageNetwork.PartyAction.LEAVE, null, ""));
         } else leave = null;
         if (minecraft.screen instanceof SpawnSelectScreen selection && !SelectionTransition.active()) {
-            int page = selection.page();
-            for (var entry : CURSORS.entrySet()) {
-                var cursor = entry.getValue();
-                var player = PLAYERS.get(entry.getKey());
-                if (player == null || player.stage() != 0 || cursor.page() != page || now - cursor.received() > 1000) continue;
-                int x = Mth.clamp(Math.round(cursor.x(now) * width), 0, width - 16);
-                int y = Mth.clamp(Math.round(cursor.y(now) * height), 0, height - 16);
+            for (var marker : cursorMarkers(selection, now)) {
+                int x = marker.x, y = marker.y;
                 RenderSystem.enableBlend();
                 RenderSystem.defaultBlendFunc();
                 graphics.blit(CROSSHAIR, x - 7, y - 7, 0, 0, 15, 15, 15, 15);
                 RenderSystem.disableBlend();
-                head(graphics, player, x + 5, y + 5, 8, false);
+                head(graphics, marker.player, x + 5, y + 5, 8, false);
             }
         }
         int toastIndex = 0;
@@ -361,6 +389,9 @@ final class ClientParty {
             if (player != null) graphics.renderComponentTooltip(minecraft.font, playerTooltip(player),
                     PLAYER_LIST.keyboardFocused() ? PLAYER_LIST.menuX() : mouseX,
                     PLAYER_LIST.keyboardFocused() ? PLAYER_LIST.menuY() : mouseY);
+        } else if (minecraft.screen instanceof SpawnSelectScreen selection) {
+            var player = hoveredName(selection, mouseX, mouseY);
+            if (player != null) graphics.renderTooltip(minecraft.font, Component.literal(player.name()).withStyle(ChatFormatting.YELLOW), mouseX, mouseY);
         }
         graphics.flush();
         graphics.pose().popPose();

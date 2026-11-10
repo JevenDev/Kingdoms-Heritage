@@ -53,6 +53,7 @@ public final class SpawnSelectScreen extends Screen {
     private boolean submitted;
     private long renderedAt;
     private Component suggestion;
+    private String suggestionSender;
     private long suggestionUntil;
 
     int page() { return navigation.page(); }
@@ -61,7 +62,13 @@ public final class SpawnSelectScreen extends Screen {
         var choice = choices.stream().filter(value -> value.get("id").getAsString().equals(spawn)).findFirst().orElse(null);
         if (choice == null) return;
         suggestion = Component.translatable("screen.kingdomsheritage.party_suggestion", player, DefinitionJson.component(choice, "title"));
+        suggestionSender = player;
         suggestionUntil = net.minecraft.Util.getMillis() + 5000;
+    }
+
+    ClientParty.Peer suggestionAt(int mouseX, int mouseY) {
+        return mouseX >= width / 2 - 5 && mouseX < width / 2 + 5 && mouseY >= height - 55 && mouseY < height - 45
+                && net.minecraft.Util.getMillis() < suggestionUntil ? ClientParty.player(suggestionSender) : null;
     }
 
     public SpawnSelectScreen(JsonObject catalog) {
@@ -396,7 +403,7 @@ public final class SpawnSelectScreen extends Screen {
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        if (ClientParty.blocksInput()) mouseX = mouseY = -10000;
+        if (ClientParty.blocksInput() || ClientParty.hoveredName(this, mouseX, mouseY) != null) mouseX = mouseY = -10000;
         long now = net.minecraft.Util.getMillis();
         float confirmation = confirmationProgress(now);
         positionConfirmation(confirmation);
@@ -452,7 +459,15 @@ public final class SpawnSelectScreen extends Screen {
                     Math.round(last.layout.x + last.layout.width * last.layout.scale / 2),
                     Math.round(last.layout.y + CARD_HEIGHT * last.layout.scale) + 8, 0xffffff);
         }
-        if (suggestion != null && now < suggestionUntil) SelectionText.centered(graphics, font, suggestion, width / 2, height - 62, 0xfff2cd83);
+        if (suggestion != null && now < suggestionUntil) {
+            graphics.pose().pushPose();
+            graphics.pose().translate(0, 0, (cards.size() + 1) * 10);
+            SelectionText.centered(graphics, font, suggestion, width / 2, height - 66, 0xfff2cd83);
+            var player = ClientParty.player(suggestionSender);
+            if (player != null) ClientParty.head(graphics, player, width / 2 - 4, height - 54, 8, false);
+            graphics.flush();
+            graphics.pose().popPose();
+        }
         if (ClientParty.follower() && confirmation == 0) SelectionText.centered(graphics, font,
                 Component.translatable("screen.kingdomsheritage.party_suggest_hint"), width / 2, height - 28, 0xffcccccc);
         if (confirmation < 1) SelectionText.centered(graphics, font, title, width / 2, 12,
