@@ -28,17 +28,20 @@ public final class SpawnSelectScreen extends Screen {
     private static final ResourceLocation FALLBACK = texture("campaign_select_screen_card_fallback");
     private final JsonObject catalog;
     private final List<JsonObject> choices;
+    private final LocationNavigation navigation;
     private JsonObject automaticKit;
     private JsonObject selected;
     private JsonObject expanded;
     private final List<Card> cards = new ArrayList<>();
+    private final List<Card> outgoingCards = new ArrayList<>();
     private final List<Button> pageButtons = new ArrayList<>();
     private JsonObject preview;
     private Card hovered;
     private Card highlighted;
     private boolean hoverSoundReady;
     private Button description;
-    private int page;
+    private boolean changingPage;
+    private boolean browsing;
     private float scale;
     private int top;
     private Button next;
@@ -52,7 +55,7 @@ public final class SpawnSelectScreen extends Screen {
     private Component suggestion;
     private long suggestionUntil;
 
-    int page() { return page; }
+    int page() { return navigation.page(); }
 
     void suggestion(String spawn, String player) {
         var choice = choices.stream().filter(value -> value.get("id").getAsString().equals(spawn)).findFirst().orElse(null);
@@ -65,6 +68,7 @@ public final class SpawnSelectScreen extends Screen {
         super(Component.translatable("screen.kingdomsheritage.location"));
         this.catalog = catalog;
         choices = catalog.getAsJsonArray("spawns").asList().stream().map(value -> value.getAsJsonObject()).toList();
+        navigation = new LocationNavigation(choices.size(), PAGE_SIZE);
     }
 
     void retry() {
@@ -77,7 +81,7 @@ public final class SpawnSelectScreen extends Screen {
     void restoreSelection(String id) {
         selected = choices.stream().filter(choice -> choice.get("id").getAsString().equals(id)).findFirst().orElse(null);
         if (selected != null) {
-            page = choices.indexOf(selected) / PAGE_SIZE;
+            navigation.focus(choices.indexOf(selected));
             confirming = true;
             confirmationFrom = 1;
         }
@@ -89,17 +93,19 @@ public final class SpawnSelectScreen extends Screen {
 
     @Override
     protected void init() {
+        if (!changingPage) outgoingCards.clear();
         cards.clear();
         pageButtons.clear();
         hovered = null;
         highlighted = null;
         hoverSoundReady = false;
         renderedAt = net.minecraft.Util.getMillis();
-        int count = Math.min(PAGE_SIZE, choices.size() - page * PAGE_SIZE);
-        List<JsonObject> visible = choices.subList(page * PAGE_SIZE, page * PAGE_SIZE + count);
+        int count = Math.min(PAGE_SIZE, choices.size() - page() * PAGE_SIZE);
+        List<JsonObject> visible = choices.subList(page() * PAGE_SIZE, page() * PAGE_SIZE + count);
         for (JsonObject choice : visible) cards.add(addWidget(new Card(choice)));
         layoutCards(false);
-        preview = expanded != null ? expanded : visible.contains(selected) ? selected : visible.getFirst();
+        preview = expanded != null ? expanded : visible.contains(preview) ? preview
+                : visible.contains(selected) ? selected : visible.getFirst();
         description = addWidget(new SelectionControls.SoundButton(0, 0, Math.max(12, Math.round(19 * scale)), Math.max(18, Math.round(32 * scale)),
                 Component.translatable(expanded == null ? "screen.kingdomsheritage.expand" : "screen.kingdomsheritage.collapse"),
                 button -> {
@@ -134,16 +140,63 @@ public final class SpawnSelectScreen extends Screen {
         updateNext();
         if (choices.size() > PAGE_SIZE) {
             var previous = addRenderableWidget(SelectionControls.arrow((width - buttonWidth) / 2 - 40, height - 34, false,
-                    Component.translatable("spectatorMenu.previous_page"), button -> { page--; rebuildWidgets(); }));
-            previous.active = page > 0;
+                    Component.translatable("spectatorMenu.previous_page"), button -> browse(-1, true)));
+            previous.active = page() > 0;
             previous.visible = expanded == null && !confirming;
             pageButtons.add(previous);
             var forward = addRenderableWidget(SelectionControls.arrow((width + buttonWidth) / 2 + 8, height - 34, true,
-                    Component.translatable("spectatorMenu.next_page"), button -> { page++; rebuildWidgets(); }));
-            forward.active = (page + 1) * PAGE_SIZE < choices.size();
+                    Component.translatable("spectatorMenu.next_page"), button -> browse(1, true)));
+            forward.active = (page() + 1) * PAGE_SIZE < choices.size();
             forward.visible = expanded == null && !confirming;
             pageButtons.add(forward);
         }
+    }
+
+    private boolean canBrowse() {
+        return expanded == null && !confirming && confirmationProgress(net.minecraft.Util.getMillis()) == 0
+                && !submitted && !SelectionTransition.active();
+    }
+
+    private void browse(int direction, boolean byPage) {
+        if (!canBrowse()) return;
+        navigation.focus(choices.indexOf(preview));
+        int previousPage = page();
+        if (byPage ? navigation.changePage(direction) : navigation.move(direction)) showNavigatedChoice(previousPage);
+    }
+
+    private void showNavigatedChoice(int previousPage) {
+        preview = choices.get(navigation.index());
+        if (page() != previousPage) {
+            long now = net.minecraft.Util.getMillis();
+            int direction = Integer.signum(page() - previousPage);
+            outgoingCards.clear();
+            for (Card card : cards) {
+                card.sample(now);
+                var layout = card.layout;
+                card.moveTo(new Layout(layout.x - direction * 24 * layout.scale, layout.y, layout.scale,
+                        layout.width, 0, 0), now, true, 0);
+                card.duration = 180;
+                card.active = card.visible = false;
+                outgoingCards.add(card);
+            }
+            changingPage = true;
+            try {
+                rebuildWidgets();
+            } finally {
+                changingPage = false;
+            }
+            for (int index = 0; index < cards.size(); index++) {
+                Card card = cards.get(index);
+                var target = card.layout;
+                card.layout = new Layout(target.x + direction * 24 * target.scale, target.y, target.scale,
+                        target.width, 0, 0);
+                card.moveTo(target, now, true, index * 10);
+            }
+        }
+        browsing = true;
+        hoverSoundReady = true;
+        setFocused(cards.get(navigation.index() % PAGE_SIZE));
+        updateDescription();
     }
 
     private void layoutCards(boolean animate) {
@@ -223,6 +276,7 @@ public final class SpawnSelectScreen extends Screen {
     @Override
     public void mouseMoved(double mouseX, double mouseY) {
         hoverSoundReady = true;
+        browsing = false;
         super.mouseMoved(mouseX, mouseY);
     }
 
@@ -248,16 +302,14 @@ public final class SpawnSelectScreen extends Screen {
             cancelChoice();
             return true;
         }
-        if (getFocused() instanceof Card card && (keyCode == GLFW.GLFW_KEY_LEFT || keyCode == GLFW.GLFW_KEY_RIGHT)) {
-            if (expanded != null) return true;
-            int index = cards.indexOf(card) + (keyCode == GLFW.GLFW_KEY_LEFT ? -1 : 1);
-            if (index >= 0 && index < cards.size()) {
-                setFocused(cards.get(index));
-                preview = cards.get(index).choice;
-                updateDescription();
-            }
+        if (canBrowse() && (keyCode == GLFW.GLFW_KEY_LEFT || keyCode == GLFW.GLFW_KEY_RIGHT
+                || keyCode == GLFW.GLFW_KEY_PAGE_UP || keyCode == GLFW.GLFW_KEY_PAGE_DOWN)) {
+            browse(keyCode == GLFW.GLFW_KEY_LEFT || keyCode == GLFW.GLFW_KEY_PAGE_UP ? -1 : 1,
+                    keyCode == GLFW.GLFW_KEY_PAGE_UP || keyCode == GLFW.GLFW_KEY_PAGE_DOWN);
             return true;
         }
+        if (expanded != null && getFocused() instanceof Card
+                && (keyCode == GLFW.GLFW_KEY_LEFT || keyCode == GLFW.GLFW_KEY_RIGHT)) return true;
         return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
@@ -330,7 +382,7 @@ public final class SpawnSelectScreen extends Screen {
         for (int index = 0; index < pageButtons.size(); index++) {
             Button button = pageButtons.get(index);
             button.visible = expanded == null && !confirming && progress == 0;
-            button.active = index == 0 ? page > 0 : (page + 1) * PAGE_SIZE < choices.size();
+            button.active = index == 0 ? page() > 0 : (page() + 1) * PAGE_SIZE < choices.size();
         }
         next.setMessage(submitted ? ClientSelection.progress() : Component.translatable(
                 ClientParty.follower() ? "screen.kingdomsheritage.party_suggest" : automaticKit == null ? "screen.kingdomsheritage.confirm_kit" : "screen.kingdomsheritage.confirm_begin"));
@@ -348,8 +400,10 @@ public final class SpawnSelectScreen extends Screen {
         float confirmation = confirmationProgress(now);
         positionConfirmation(confirmation);
         for (Card card : cards) card.sample(now);
+        for (Card card : outgoingCards) card.sample(now);
+        outgoingCards.removeIf(card -> card.layout.opacity < 0.02F);
         hovered = cardAt(mouseX, mouseY);
-        Card foreground = minecraft.getLastInputType().isKeyboard() && getFocused() instanceof Card focused
+        Card foreground = (browsing || minecraft.getLastInputType().isKeyboard()) && getFocused() instanceof Card focused
                 ? focused : hovered;
         Card moving = cards.stream().filter(card -> card.visible && card.layout.width > CARD_WIDTH).findFirst().orElse(null);
         if (moving != null) foreground = moving;
@@ -371,6 +425,7 @@ public final class SpawnSelectScreen extends Screen {
         renderedAt = now;
         for (var card : cards) card.animate(delta, card == active, mouseX);
         Card front = foreground;
+        for (Card card : outgoingCards) card.draw(graphics, mouseX, mouseY, partialTick, -10);
         SelectionDissolve.render(graphics, confirmation, () -> {
             int layer = 0;
             for (var card : cards) {
@@ -390,7 +445,7 @@ public final class SpawnSelectScreen extends Screen {
         }
         if (expanded == null && choices.size() > PAGE_SIZE && confirmation == 0) {
             Card last = cards.getLast();
-            SelectionText.centered(graphics, font, Component.literal((page + 1) + " / " + ((choices.size() + PAGE_SIZE - 1) / PAGE_SIZE)),
+            SelectionText.centered(graphics, font, Component.literal((page() + 1) + " / " + ((choices.size() + PAGE_SIZE - 1) / PAGE_SIZE)),
                     Math.round(last.layout.x + last.layout.width * last.layout.scale / 2),
                     Math.round(last.layout.y + CARD_HEIGHT * last.layout.scale) + 8, 0xffffff);
         }
@@ -474,6 +529,14 @@ public final class SpawnSelectScreen extends Screen {
     public boolean mouseScrolled(double mouseX, double mouseY, double horizontal, double vertical) {
         if (expanded != null) {
             descriptionScroll = Math.max(0, descriptionScroll - vertical * 16);
+            return true;
+        }
+        if (vertical != 0) {
+            if (canBrowse()) {
+                navigation.focus(choices.indexOf(preview));
+                int previousPage = page();
+                if (navigation.scroll(vertical)) showNavigatedChoice(previousPage);
+            }
             return true;
         }
         return super.mouseScrolled(mouseX, mouseY, horizontal, vertical);

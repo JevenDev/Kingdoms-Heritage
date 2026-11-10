@@ -14,6 +14,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+import net.minecraft.util.Mth;
 import net.neoforged.neoforge.network.PacketDistributor;
 import org.lwjgl.glfw.GLFW;
 
@@ -23,6 +24,7 @@ final class FinalConfirmationScreen extends Screen {
     private final List<ToucanGlyphLayout.Glyph> glyphs;
     private List<ToucanGlyphLayout.Line> lines = List.of();
     private long started = -1;
+    private long revealedAt = -1;
     private boolean skipped;
     private boolean submitted;
     private int lastAudible;
@@ -73,11 +75,22 @@ final class FinalConfirmationScreen extends Screen {
     private boolean complete() { return skipped || started >= 0 && timeline.complete(elapsed()); }
 
     private void updateButtons() {
-        boolean revealed = !confirm.visible && complete();
-        confirm.visible = back.visible = complete();
-        confirm.active = back.active = complete() && !submitted;
+        boolean complete = complete();
+        boolean revealed = revealedAt < 0 && complete;
+        if (revealed) revealedAt = Util.getMillis();
+        float alpha = controlsAlpha(revealedAt, Util.getMillis());
+        confirm.visible = back.visible = complete;
+        confirm.setAlpha(alpha);
+        back.setAlpha(alpha);
+        confirm.active = back.active = complete && alpha == 1 && !submitted;
         confirm.setMessage(submitted ? ClientSelection.progress() : Component.translatable("screen.kingdomsheritage.review_accept"));
         if (revealed && getFocused() == null && minecraft.getLastInputType().isKeyboard()) setFocused(confirm);
+    }
+
+    static float controlsAlpha(long revealedAt, long now) {
+        if (revealedAt < 0) return 0;
+        float progress = Mth.clamp((now - revealedAt) / 220F, 0, 1);
+        return progress * progress * (3 - 2 * progress);
     }
 
     @Override
@@ -102,7 +115,7 @@ final class FinalConfirmationScreen extends Screen {
     }
 
     private void confirm() {
-        if (!complete() || submitted || SelectionTransition.active()) return;
+        if (!complete() || !confirm.active || submitted || SelectionTransition.active()) return;
         submitted = true;
         updateButtons();
         SelectionTransition.fadeOut(() -> PacketDistributor.sendToServer(new HeritageNetwork.ReviewDecision(token, true)));
@@ -151,6 +164,7 @@ final class FinalConfirmationScreen extends Screen {
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        updateButtons();
         super.render(graphics, mouseX, mouseY, partialTick);
         graphics.pose().pushPose();
         graphics.pose().translate(width / 2F, textTop, 0);
@@ -162,7 +176,8 @@ final class FinalConfirmationScreen extends Screen {
                     i * (font.lineHeight + 5), 0xffeeeae0, (int) (elapsed() / 50));
         }
         graphics.pose().popPose();
-        if (!complete()) SelectionText.centered(graphics, font, Component.translatable("screen.kingdomsheritage.review_skip"),
-                width / 2, height - 27, 0xffaaaaaa);
+        int hintAlpha = Math.round((1 - controlsAlpha(revealedAt, Util.getMillis())) * 255);
+        if (hintAlpha >= 4) SelectionText.centered(graphics, font, Component.translatable("screen.kingdomsheritage.review_skip"),
+                width / 2, height - 27, hintAlpha << 24 | 0xaaaaaa);
     }
 }
