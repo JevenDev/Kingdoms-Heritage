@@ -13,7 +13,10 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
+import net.minecraft.locale.Language;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.FormattedText;
+import net.minecraft.network.chat.Style;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 import net.minecraft.world.inventory.InventoryMenu;
@@ -23,7 +26,7 @@ final class KitShopScreen extends Screen {
     private static final int SHOP_WIDTH = 68, INVENTORY_WIDTH = 176, PANEL_HEIGHT = 166;
     private static final int COLUMNS = 3, PAGE_SIZE = 24, SLOT_PITCH = 18, BAR_WIDTH = 182;
     private static final int EFFECT_DURATION = 270;
-    private static final int DETAIL_WIDTH = 68;
+    private static final int DETAIL_WIDTH = 68, NAME_LINES = 2;
     private static final int DETAIL_INK = 0xff404040, DETAIL_MUTED = 0xff545454;
     private static final int DETAIL_GAIN = 0xff385023, DETAIL_BLOCKED = 0xff812c23;
     private static final ResourceLocation SHOP = ResourceLocation.fromNamespaceAndPath(
@@ -350,13 +353,30 @@ final class KitShopScreen extends Screen {
         int index = selling ? refund.offer() : hovered;
         var entry = shop.offers().get(index);
         var stack = stock.get(index);
-        detailLines(graphics, Component.literal(stack.getHoverName().getString()), x, top + 27, 2, DETAIL_INK);
+        renderItemName(graphics, stack, x);
         detailLines(graphics, text("stack_price", stack.getCount(), points(entry.cost())), x, top + 46, 1, DETAIL_MUTED);
         var status = selling ? text("refund_points", points(entry.cost())) : blocked != null ? blocked
                 : text("after_purchase", points(shop.budget() - spent - entry.cost()));
         detailLines(graphics, status, x, top + 56, 2, blocked != null ? DETAIL_BLOCKED : DETAIL_GAIN);
         if (entry.limit() > 1 && font.split(status, DETAIL_WIDTH).size() == 1) {
             detailLines(graphics, text("bought", bought[index], entry.limit()), x, top + 67, 1, DETAIL_MUTED);
+        }
+    }
+
+    private List<FormattedText> itemNameLines(ItemStack stack) {
+        return font.getSplitter().splitLines(stack.getHoverName().getString(), DETAIL_WIDTH, Style.EMPTY);
+    }
+
+    private void renderItemName(GuiGraphics graphics, ItemStack stack, int x) {
+        var lines = itemNameLines(stack);
+        for (int index = 0; index < Math.min(NAME_LINES, lines.size()); index++) {
+            var line = lines.get(index);
+            if (index == NAME_LINES - 1 && lines.size() > NAME_LINES) {
+                String ellipsis = "…";
+                String prefix = font.plainSubstrByWidth(line.getString(), DETAIL_WIDTH - font.width(ellipsis)).stripTrailing();
+                line = FormattedText.of(prefix + ellipsis);
+            }
+            graphics.drawString(font, Language.getInstance().getVisualOrder(line), x, top + 27 + index * font.lineHeight, DETAIL_INK, false);
         }
     }
 
@@ -394,9 +414,10 @@ final class KitShopScreen extends Screen {
     private void renderOfferTooltip(GuiGraphics graphics, int offer, int x, int y) {
         var stack = stock.get(offer);
         var lines = getTooltipFromItem(minecraft, stack);
-        if (lines.size() > 1 || stack.getTooltipImage().isPresent()
-                || font.split(stack.getHoverName(), DETAIL_WIDTH).size() > 2) {
-            graphics.renderTooltip(font, lines, stack.getTooltipImage(), stack, x, y);
+        boolean shortened = itemNameLines(stack).size() > NAME_LINES;
+        if (shortened || lines.size() > 1 || stack.getTooltipImage().isPresent()) {
+            int tooltipY = shortened ? Math.max(y, top + 100) : y;
+            graphics.renderTooltip(font, lines, stack.getTooltipImage(), stack, x, tooltipY);
         }
     }
 
