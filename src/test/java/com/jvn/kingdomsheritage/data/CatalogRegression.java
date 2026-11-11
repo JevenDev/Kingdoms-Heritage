@@ -2,15 +2,25 @@ package com.jvn.kingdomsheritage.data;
 
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import net.minecraft.SharedConstants;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.Bootstrap;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.neoforged.fml.loading.LoadingModList;
 
 public final class CatalogRegression {
     private CatalogRegression() {}
 
     public static void run() {
         shopLayoutsKeepGapsAndOfferIds();
+        purchasesStackWithoutOverfilling();
         Map<ResourceLocation, JsonElement> resources = new LinkedHashMap<>();
         resources.put(ResourceLocation.parse("test:spawns/default"), JsonParser.parseString("""
                 {"title":"Default","type":"default"}
@@ -34,6 +44,34 @@ public final class CatalogRegression {
             throw new AssertionError("Catalog rejected the pack for the wrong reason", error);
         }
         throw new AssertionError("Catalog accepted a pack too large to send to players");
+    }
+
+    private static void purchasesStackWithoutOverfilling() {
+        SharedConstants.tryDetectVersion();
+        LoadingModList.of(List.of(), List.of(), List.of(), List.of(), Map.of());
+        Bootstrap.bootStrap();
+
+        var bread = new ItemStack(Items.BREAD, 4);
+        var namedBread = new ItemStack(Items.BREAD, 63);
+        namedBread.set(DataComponents.CUSTOM_NAME, Component.literal("Saved bread"));
+        var inventory = new ArrayList<>(List.of(new ItemStack(Items.BREAD, 62), namedBread, ItemStack.EMPTY));
+        int slot = KitLoadout.purchaseSlot(inventory::get, inventory.size(), -1, bread);
+        if (slot != 0) throw new AssertionError("Shop did not choose the matching stack first");
+        KitLoadout.placePurchase(inventory, inventory.size(), slot, bread.copy());
+        if (inventory.get(0).getCount() != 64 || inventory.get(1).getCount() != 63
+                || inventory.get(2).getCount() != 2 || bread.getCount() != 4) {
+            throw new AssertionError("Shop overflow changed stock, ignored components or overfilled a stack");
+        }
+
+        inventory.set(1, new ItemStack(Items.BREAD, 62));
+        inventory.set(2, new ItemStack(Items.BREAD, 62));
+        slot = KitLoadout.purchaseSlot(inventory::get, inventory.size(), -1, bread);
+        if (slot != 1) throw new AssertionError("Shop rejected a purchase that fits across existing stacks");
+        KitLoadout.placePurchase(inventory, inventory.size(), slot, bread.copy());
+        if (inventory.stream().anyMatch(stack -> stack.getCount() != 64)
+                || KitLoadout.purchaseSlot(inventory::get, inventory.size(), -1, bread) != -1) {
+            throw new AssertionError("Shop capacity disagreed with the delivered stacks");
+        }
     }
 
     private static void shopLayoutsKeepGapsAndOfferIds() {

@@ -4,6 +4,7 @@ import com.jvn.kingdomsheritage.HeritageConfig.InventoryPolicy;
 import com.jvn.kingdomsheritage.data.DefinitionJson;
 import com.jvn.kingdomsheritage.data.HeritageException;
 import com.jvn.kingdomsheritage.data.KitDefinition;
+import com.jvn.kingdomsheritage.data.KitLoadout;
 import com.jvn.kingdomsheritage.data.KitShop;
 import com.mojang.math.Axis;
 import java.util.ArrayList;
@@ -70,7 +71,6 @@ final class KitShopScreen extends Screen {
     private int left, top, page, spent, section, sectionPage;
     private double scrollRemainder;
     private Trade trade;
-    private long occupied;
     private boolean controlsDirty = true;
     private final OfferStatus[] offerStatuses = new OfferStatus[PAGE_SIZE];
     private final int[] offerSlots = new int[PAGE_SIZE];
@@ -217,7 +217,10 @@ final class KitShopScreen extends Screen {
     private boolean busy() { return selection.submitted() || SelectionTransition.active() || ClientParty.blocksInput(); }
 
     private KitShop.Pick purchaseInSlot(int slot) {
-        for (var pick : picks) if (pick.slot() == slot) return pick;
+        for (int i = picks.size() - 1; i >= 0; i--) {
+            var pick = picks.get(i);
+            if (pick.slot() == slot) return pick;
+        }
         return null;
     }
 
@@ -269,12 +272,33 @@ final class KitShopScreen extends Screen {
         var pick = purchaseInSlot(slot);
         if (pick == null) return;
         var requested = new ArrayList<>(picks);
-        requested.remove(pick);
+        requested.remove(requested.lastIndexOf(pick));
         trade(requested, pick, false);
     }
 
+    private boolean reflowAfterRefund(List<KitShop.Pick> requested) {
+        var player = selection.player();
+        var original = KitLoadout.capture(player, false);
+        int mainSize = player.getInventory().items.size();
+        var placed = new ArrayList<KitShop.Pick>();
+        var entries = fixed;
+        try {
+            for (var pick : requested) {
+                var planned = KitLoadout.plan(original, mainSize, kit, entries, policy);
+                int slot = KitShop.nextSlot(player, planned::item, stock.get(pick.offer()));
+                if (slot < 0) return false;
+                placed.add(new KitShop.Pick(pick.offer(), slot));
+                entries = shop.loadout(player, policy, fixed, stock, placed);
+            }
+            return choose(placed);
+        } catch (IllegalArgumentException error) {
+            problem = HeritageException.component(error);
+            return false;
+        }
+    }
+
     private void trade(List<KitShop.Pick> requested, KitShop.Pick pick, boolean buying) {
-        if (choose(requested)) {
+        if (choose(requested) || !buying && reflowAfterRefund(requested)) {
             trade = new Trade(pick.offer(), pick.slot(), buying, Util.getMillis());
             SelectionSounds.DISSOLVE.play(0.5F);
         } else SelectionSounds.ERROR.play();
@@ -284,6 +308,7 @@ final class KitShopScreen extends Screen {
     private OfferStatus purchaseStatus(int index, int slot) {
         var offer = shop.offers().get(index);
         if (bought[index] >= offer.limit()) return OfferStatus.LIMIT;
+        if (picks.size() >= KitShop.MAX_PICKS) return OfferStatus.SPACE;
         if (offer.cost() > shop.budget() - spent) return OfferStatus.POINTS;
         return slot < 0 ? OfferStatus.SPACE : OfferStatus.AVAILABLE;
     }
@@ -301,10 +326,16 @@ final class KitShopScreen extends Screen {
     }
 
     private void updateControls() {
-        long current = KitShop.occupiedSlots(selection.player(), policy, fixed, picks);
-        boolean refresh = controlsDirty || current != occupied;
+        boolean refresh = controlsDirty;
+        boolean canBuy = policy != InventoryPolicy.PRESERVE;
+        try {
+            refresh |= preview.apply(kit, loadout, policy);
+        } catch (IllegalArgumentException error) {
+            problem = HeritageException.component(error);
+            refresh = true;
+            canBuy = false;
+        }
         controlsDirty = false;
-        occupied = current;
         boolean available = !busy();
         previous.visible = next.visible = pages() > 1;
         previous.active = available && page > 0;
@@ -335,7 +366,7 @@ final class KitShopScreen extends Screen {
             button.visible = offer >= 0;
             button.active = button.visible && available;
             if (refresh && button.visible) {
-                offerSlots[cell] = KitShop.nextSlot(selection.player(), occupied, stock.get(offer));
+                offerSlots[cell] = canBuy ? KitShop.nextSlot(selection.player(), preview::item, stock.get(offer)) : -1;
                 offerStatuses[cell] = purchaseStatus(offer, offerSlots[cell]);
                 var message = text("buy", stock.get(offer).getHoverName(), shop.offers().get(offer).cost()).copy();
                 Component blocked = purchaseProblem(offer, offerStatuses[cell]);
@@ -434,11 +465,6 @@ final class KitShopScreen extends Screen {
             graphics.pose().popPose();
         }
 
-        try {
-            preview.apply(kit, loadout, policy);
-        } catch (IllegalArgumentException error) {
-            problem = HeritageException.component(error);
-        }
         int aimX = mouseX, aimY = mouseY;
         preview.render(() -> {
             InventoryScreen.renderEntityInInventoryFollowsMouse(graphics, inv + 26, top + 8, inv + 75, top + 78,

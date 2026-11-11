@@ -135,7 +135,7 @@ async function loadArt(){
   artLoading=(async()=>{
     const response=await fetch(new URL('defaults.json?v=4',base));if(!response.ok)throw new Error('Default locations could not load.');bundled=await response.json();
     await Promise.all(['card','card_expanded','card_fallback','default','random','plains','village','disconnect','disconnect_highlighted','select','select_highlighted','unselect','unselect_highlighted','button','button_highlighted','button_disabled','tab_button','tab_button_selected','empty_slot','send_request','shop','tab_top_selected_1','tab_top_selected_2','tab_top_unselected_1','experience_bar_background','experience_bar_progress'].map(async name=>{
-      const image=new Image();image.src=name.startsWith('button')?new URL('../../kit/assets/widget/'+name+'.png',base):new URL((name==='shop'?'../../kit/assets/':'')+name+'.png',base);await image.decode();images.set(name,image);
+      const image=new Image();image.src=name.startsWith('button')?new URL('../../kit/assets/widget/'+name+'.png',base):new URL((name==='shop'?'../../kit/assets/shop.png?v=2':name+'.png'),base);await image.decode();images.set(name,image);
     }));
     const bar=images.get('experience_bar_progress'),red=document.createElement('canvas');
     red.width=bar.width;red.height=bar.height;
@@ -851,12 +851,13 @@ function shopScreen(w,h,now){
       outline(x-1,y-1,18,'#ffe4a1');detail={status,name,refunding:false};
     }
   }
-  for(const {offer,slot} of session.purchases){
+  const refundable=new Map(session.purchases.map(pick=>[pick.slot,pick.offer]));
+  for(const [slot,offer] of refundable){
     const position=inventory.layout.slots.find(position=>position.index===slot);
     const x=inv+position.x,y=top+position.y,status=session.shopStatus(offer),name=HeritageItemText.name(status.offer.item);
     const action=shopText('sell',name,status.offer.cost);
     const node=hit('shop-refund-'+slot,action,x-1,y-1,slotPitch,slotPitch,()=>{
-      const pick=session.purchases.find(pick=>pick.slot===slot);
+      const pick=session.purchases.findLast(pick=>pick.slot===slot);
       if(!pick||!session.refund(slot))return;
       const refundedOffer=offers[pick.offer];
       updateShop(shopText('sell',HeritageItemText.name(refundedOffer.item),refundedOffer.cost)+'.',pick);

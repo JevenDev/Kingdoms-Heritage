@@ -20,10 +20,10 @@ final class KitPreview {
         this.player = player;
     }
 
-    void apply(KitDefinition kit, List<KitDefinition.StackEntry> stacks, InventoryPolicy policy) {
+    boolean apply(KitDefinition kit, List<KitDefinition.StackEntry> stacks, InventoryPolicy policy) {
         if (this.kit == kit && this.stacks == stacks && this.policy == policy && original != null && original.matches(player)) {
             if (failure != null) throw failure;
-            return;
+            return false;
         }
         original = KitLoadout.capture(player, true);
         expected = null;
@@ -39,6 +39,7 @@ final class KitPreview {
             failure = error;
             throw error;
         }
+        return true;
     }
 
     ItemStack item(int slot) {
