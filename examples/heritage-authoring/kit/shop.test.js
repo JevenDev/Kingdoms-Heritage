@@ -13,6 +13,8 @@ test('the Trail Kit example keeps its budget and second page of offers',()=>{
   assert.deepEqual(document.items,[]);
   assert.deepEqual(document.shop,trail.shop);
   assert.equal(document.shop.offers.length,25);
+  assert.equal(document.shop.offers[24].limit,3);
+  assert.equal(document.shop.offers[2].limit,undefined);
   assert.deepEqual(warnings,[]);
 });
 
@@ -28,4 +30,9 @@ test('shop validation reports invalid prices, stacks, and offer lists at their J
   draft=shop();
   draft.shop.offers=[];
   check(draft,['shop','offers']);
+  for(const limit of [0,42,1.5,null]){
+    draft=shop();
+    draft.shop.offers[24].limit=limit;
+    check(draft,['shop','offers',24,'limit']);
+  }
 });

@@ -4,6 +4,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.jvn.kingdomsheritage.KingdomsHeritage;
 import com.jvn.kingdomsheritage.data.DefinitionJson;
+import com.jvn.kingdomsheritage.data.KitShop;
 import com.jvn.kingdomsheritage.network.HeritageNetwork;
 import java.util.List;
 import net.minecraft.client.Minecraft;
@@ -231,7 +232,7 @@ public final class ClientSelection {
                 HeritageScreens.Placement.AFTER_KIT, spawn, kit, () -> requestReview(spawn, kit)));
     }
 
-    static void review(String spawn, String kit, List<Integer> offers) {
+    static void review(String spawn, String kit, List<KitShop.Pick> offers) {
         choicesChanged(spawn, kit);
         SelectionTransition.fadeOut(() -> {
             if (kits != null) kits.close();
@@ -245,7 +246,7 @@ public final class ClientSelection {
         requestReview(spawn, kit, List.of());
     }
 
-    private static void requestReview(String spawn, String kit, List<Integer> offers) {
+    private static void requestReview(String spawn, String kit, List<KitShop.Pick> offers) {
         var request = new HeritageNetwork.Choose(spawn, kit, catalog.get("revision").getAsLong(), offers);
         net.neoforged.neoforge.network.PacketDistributor.sendToServer(new HeritageNetwork.Review(request));
     }

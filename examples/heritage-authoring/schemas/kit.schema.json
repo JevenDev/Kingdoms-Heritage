@@ -76,6 +76,13 @@
               "required": ["cost", "item"],
               "properties": {
                 "cost": { "type": "integer", "minimum": 0, "maximum": 1000000 },
+                "limit": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 41,
+                  "default": 1,
+                  "description": "Maximum stacks of this offer each player can select."
+                },
                 "item": { "$ref": "#/$defs/stack" }
               }
             }

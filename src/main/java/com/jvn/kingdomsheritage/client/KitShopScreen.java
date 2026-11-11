@@ -6,6 +6,7 @@ import com.jvn.kingdomsheritage.data.HeritageException;
 import com.jvn.kingdomsheritage.data.KitDefinition;
 import com.jvn.kingdomsheritage.data.KitShop;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import net.minecraft.Util;
 import net.minecraft.client.gui.GuiGraphics;
@@ -22,6 +23,9 @@ final class KitShopScreen extends Screen {
     private static final int SHOP_WIDTH = 68, INVENTORY_WIDTH = 176, PANEL_HEIGHT = 166;
     private static final int COLUMNS = 3, PAGE_SIZE = 24, SLOT_PITCH = 18, BAR_WIDTH = 182;
     private static final int EFFECT_DURATION = 270;
+    private static final int DETAIL_WIDTH = 68;
+    private static final int DETAIL_INK = 0xff404040, DETAIL_MUTED = 0xff545454;
+    private static final int DETAIL_GAIN = 0xff385023, DETAIL_BLOCKED = 0xff812c23;
     private static final ResourceLocation SHOP = ResourceLocation.fromNamespaceAndPath(
             "kingdomsheritage", "textures/gui/selection/kit_shop.png");
     private static final ResourceLocation INVENTORY = ResourceLocation.withDefaultNamespace("textures/gui/container/inventory.png");
@@ -42,8 +46,8 @@ final class KitShopScreen extends Screen {
     private final KitPreview preview;
     private final List<SlotButton> offers = new ArrayList<>();
     private final List<SlotButton> inventory = new ArrayList<>();
-    private List<Integer> picks = List.of();
-    private List<KitShop.Purchase> purchases = List.of();
+    private final int[] bought;
+    private List<KitShop.Pick> picks = List.of();
     private List<KitDefinition.StackEntry> loadout;
     private Component problem = Component.empty();
     private Button previous, next, back, review, reset;
@@ -60,12 +64,13 @@ final class KitShopScreen extends Screen {
         this.fixed = fixed;
         this.loadout = fixed;
         stock = kit.decodeOffers(selection.player().registryAccess());
+        bought = new int[stock.size()];
         preview = new KitPreview(selection.player());
     }
 
-    List<Integer> picks() { return picks; }
+    List<KitShop.Pick> picks() { return picks; }
 
-    void restore(List<Integer> picks) { choose(picks); }
+    void restore(List<KitShop.Pick> picks) { choose(picks); }
 
     @Override
     protected void init() {
@@ -76,14 +81,11 @@ final class KitShopScreen extends Screen {
         for (int cell = 0; cell < PAGE_SIZE; cell++) {
             int index = cell;
             offers.add(addWidget(new SlotButton(left + 8 + cell % COLUMNS * SLOT_PITCH, top + 12 + cell / COLUMNS * SLOT_PITCH,
-                    () -> toggle(page * PAGE_SIZE + index))));
+                    () -> buy(page * PAGE_SIZE + index))));
         }
         for (int slot = 0; slot < KitShop.MAX_PICKS; slot++) {
             int index = slot;
-            inventory.add(addWidget(new SlotButton(slotX(slot), slotY(slot), () -> {
-                var purchase = purchaseInSlot(index);
-                if (purchase != null) toggle(purchase.offer());
-            })));
+            inventory.add(addWidget(new SlotButton(slotX(slot), slotY(slot), () -> refund(index))));
         }
         int bottom = top + PANEL_HEIGHT + 4;
         previous = addRenderableWidget(SelectionControls.arrow(left + 3, bottom + 2, false, text("previous_page"), button -> page(-1)));
@@ -124,21 +126,23 @@ final class KitShopScreen extends Screen {
 
     private boolean busy() { return selection.submitted() || SelectionTransition.active() || ClientParty.blocksInput(); }
 
-    private KitShop.Purchase purchaseInSlot(int slot) {
-        for (var purchase : purchases) if (purchase.entry().index() == slot) return purchase;
+    private KitShop.Pick purchaseInSlot(int slot) {
+        for (var pick : picks) if (pick.slot() == slot) return pick;
         return null;
     }
 
-    private boolean choose(List<Integer> requested) {
+    private boolean choose(List<KitShop.Pick> requested) {
         try {
-            int cost = shop.cost(requested);
-            var nextPurchases = shop.place(selection.player(), policy, fixed, stock, requested);
-            var entries = KitShop.combine(fixed, nextPurchases);
+            var entries = shop.loadout(selection.player(), policy, fixed, stock, requested);
             preview.apply(kit, entries, policy);
             picks = List.copyOf(requested);
-            purchases = nextPurchases;
             loadout = entries;
-            spent = cost;
+            Arrays.fill(bought, 0);
+            spent = 0;
+            for (var pick : picks) {
+                bought[pick.offer()]++;
+                spent += shop.offers().get(pick.offer()).cost();
+            }
             problem = Component.empty();
             return true;
         } catch (IllegalArgumentException error) {
@@ -154,18 +158,45 @@ final class KitShopScreen extends Screen {
         updateControls();
     }
 
-    private void toggle(int offer) {
+    private void buy(int offer) {
         if (busy() || offer >= stock.size()) return;
+        int slot = purchaseProblem(offer) == null ? nextSlot(offer) : -1;
+        if (slot < 0) {
+            SelectionSounds.ERROR.play();
+            return;
+        }
+        var pick = new KitShop.Pick(offer, slot);
         var requested = new ArrayList<>(picks);
-        boolean buying = !requested.remove(Integer.valueOf(offer));
-        var before = purchases.stream().filter(purchase -> purchase.offer() == offer).findFirst().orElse(null);
-        if (buying) requested.add(offer);
+        requested.add(pick);
+        trade(requested, pick, true);
+    }
+
+    private void refund(int slot) {
+        if (busy()) return;
+        var pick = purchaseInSlot(slot);
+        if (pick == null) return;
+        var requested = new ArrayList<>(picks);
+        requested.remove(pick);
+        trade(requested, pick, false);
+    }
+
+    private void trade(List<KitShop.Pick> requested, KitShop.Pick pick, boolean buying) {
         if (choose(requested)) {
-            var changed = buying ? purchases.stream().filter(purchase -> purchase.offer() == offer).findFirst().orElseThrow() : before;
-            trade = new Trade(offer, changed.entry().index(), buying, Util.getMillis());
+            trade = new Trade(pick.offer(), pick.slot(), buying, Util.getMillis());
             SelectionSounds.DISSOLVE.play(0.5F);
         } else SelectionSounds.ERROR.play();
         updateControls();
+    }
+
+    private Component purchaseProblem(int index) {
+        var offer = shop.offers().get(index);
+        if (bought[index] >= offer.limit()) return text("limit_reached");
+        int shortfall = offer.cost() - (shop.budget() - spent);
+        return shortfall > 0 ? text("short", shortfall) : null;
+    }
+
+    private int nextSlot(int offer) {
+        return KitShop.nextSlot(selection.player(), policy, fixed, picks, stock.get(offer));
     }
 
     private void updateControls() {
@@ -181,7 +212,7 @@ final class KitShopScreen extends Screen {
             var button = offers.get(cell);
             button.visible = offer < stock.size();
             button.active = button.visible && available;
-            if (button.visible) button.setMessage(text(picks.contains(offer) ? "sell" : "buy", stock.get(offer).getHoverName(), shop.offers().get(offer).cost()));
+            if (button.visible) button.setMessage(text("buy", stock.get(offer).getHoverName(), shop.offers().get(offer).cost()));
         }
         for (int slot = 0; slot < inventory.size(); slot++) {
             var purchase = purchaseInSlot(slot);
@@ -219,13 +250,20 @@ final class KitShopScreen extends Screen {
             var button = offers.get(cell);
             if (button.visible && hovered(button, mouseX, mouseY)) hoveredOffer = page * PAGE_SIZE + cell;
         }
-        renderBudget(graphics, hoveredOffer);
+        int hoveredSlot = -1;
+        for (int slot = 0; slot < inventory.size(); slot++) {
+            var button = inventory.get(slot);
+            if (hovered(button, mouseX, mouseY)) hoveredSlot = slot;
+        }
+        var refund = purchaseInSlot(hoveredSlot);
+        Component blocked = hoveredOffer < 0 ? null : purchaseProblem(hoveredOffer);
+        if (hoveredOffer >= 0 && blocked == null && nextSlot(hoveredOffer) < 0) blocked = text("no_space");
+        renderBudget(graphics, blocked == null ? hoveredOffer : -1);
         graphics.blit(SHOP, left, top, 0, 0, SHOP_WIDTH, PANEL_HEIGHT, SHOP_WIDTH, PANEL_HEIGHT);
         int inv = left + SHOP_WIDTH;
         graphics.blit(INVENTORY, inv, top, 0, 0, INVENTORY_WIDTH, PANEL_HEIGHT);
         graphics.fill(inv + 95, top + 4, inv + 173, top + 78, 0xffc6c6c6);
-        String name = font.plainSubstrByWidth(kitName.getString(), 75);
-        graphics.drawString(font, name, inv + 133 - font.width(name) / 2, top + 10, 0xff404040, false);
+        renderDetails(graphics, inv, hoveredOffer, refund, blocked);
 
         float elapsed = trade == null ? 1 : Mth.clamp((Util.getMillis() - trade.started()) / (float) EFFECT_DURATION, 0, 1);
         if (elapsed >= 1) trade = null;
@@ -235,16 +273,21 @@ final class KitShopScreen extends Screen {
             if (!button.visible) continue;
             int offer = page * PAGE_SIZE + cell;
             var stack = stock.get(offer);
-            boolean picked = picks.contains(offer);
+            var entry = shop.offers().get(offer);
+            boolean atLimit = bought[offer] >= entry.limit();
             int x = button.getX(), y = button.getY();
             graphics.renderItem(stack, x + (trade != null && trade.offer() == offer ? -shake : 0), y);
             graphics.renderItemDecorations(font, stack, x, y);
-            if (!picked && shop.offers().get(offer).cost() > shop.budget() - spent) graphics.fill(x, y, x + 16, y + 16, 0x66000000);
-            if (picked || hoveredOffer == offer) graphics.renderOutline(x - 1, y - 1, 18, 18, picked ? 0xff7bdb48 : 0xffffe4a1);
             graphics.pose().pushPose();
-            graphics.pose().translate(x, y, 220);
+            graphics.pose().translate(0, 0, 220);
+            if (!atLimit && entry.cost() > shop.budget() - spent) graphics.fill(x, y, x + 16, y + 16, 0x66000000);
+            if (bought[offer] > 0 || hoveredOffer == offer) {
+                int color = hoveredOffer == offer ? 0xffffe4a1 : atLimit ? 0xff7bdb48 : 0xff629d42;
+                graphics.renderOutline(x - 1, y - 1, 18, 18, color);
+            }
+            graphics.pose().translate(x, y, 0);
             graphics.pose().scale(0.65F, 0.65F, 1);
-            graphics.drawString(font, Integer.toString(shop.offers().get(offer).cost()), 0, 0, 0xffffc45b);
+            graphics.drawString(font, Integer.toString(entry.cost()), 0, 0, 0xffffc45b);
             graphics.pose().popPose();
         }
 
@@ -261,7 +304,6 @@ final class KitShopScreen extends Screen {
             for (int slot = 0; slot < KitShop.MAX_PICKS; slot++) shown.add(selection.player().getInventory().getItem(slot).copy());
             graphics.flush();
         });
-        int hoveredSlot = -1;
         for (int slot = 0; slot < shown.size(); slot++) {
             int x = slotX(slot), y = slotY(slot);
             var stack = shown.get(slot);
@@ -272,10 +314,7 @@ final class KitShopScreen extends Screen {
                 graphics.renderItem(stack, x, y);
                 graphics.renderItemDecorations(font, stack, x, y);
             }
-            if (hovered(inventory.get(slot), mouseX, mouseY)) {
-                hoveredSlot = slot;
-                if (inventory.get(slot).visible) graphics.renderOutline(x - 1, y - 1, 18, 18, 0xffffe4a1);
-            }
+            if (slot == hoveredSlot && refund != null) graphics.renderOutline(x - 1, y - 1, 18, 18, 0xffffe4a1);
         }
         if (trade != null) {
             int x = slotX(trade.slot()) + shake, y = slotY(trade.slot());
@@ -291,10 +330,40 @@ final class KitShopScreen extends Screen {
         }
         super.render(graphics, mouseX, mouseY, partialTick);
         if (hoveredOffer >= 0) renderOfferTooltip(graphics, hoveredOffer, mouseX, mouseY);
+        else if (refund != null) renderOfferTooltip(graphics, refund.offer(), mouseX, mouseY);
         else if (hoveredSlot >= 0 && !shown.get(hoveredSlot).isEmpty()) {
-            var purchase = purchaseInSlot(hoveredSlot);
-            if (purchase != null) renderOfferTooltip(graphics, purchase.offer(), mouseX, mouseY);
-            else graphics.renderTooltip(font, shown.get(hoveredSlot), mouseX, mouseY);
+            graphics.renderTooltip(font, shown.get(hoveredSlot), mouseX, mouseY);
+        }
+    }
+
+    private void renderDetails(GuiGraphics graphics, int inv, int hovered, KitShop.Pick refund, Component blocked) {
+        int x = inv + 100;
+        String name = font.plainSubstrByWidth(kitName.getString(), DETAIL_WIDTH);
+        graphics.drawString(font, name, inv + 134 - font.width(name) / 2, top + 10, DETAIL_INK, false);
+        graphics.fill(x, top + 21, x + DETAIL_WIDTH, top + 22, 0xffa2a2a2);
+        if (hovered < 0 && refund == null) {
+            detailLines(graphics, text("add_hint"), x, top + 29, 2, DETAIL_MUTED);
+            detailLines(graphics, text("refund_hint"), x, top + 52, 2, DETAIL_MUTED);
+            return;
+        }
+        boolean selling = hovered < 0;
+        int index = selling ? refund.offer() : hovered;
+        var entry = shop.offers().get(index);
+        var stack = stock.get(index);
+        detailLines(graphics, Component.literal(stack.getHoverName().getString()), x, top + 27, 2, DETAIL_INK);
+        detailLines(graphics, text("stack_price", stack.getCount(), points(entry.cost())), x, top + 46, 1, DETAIL_MUTED);
+        var status = selling ? text("refund_points", points(entry.cost())) : blocked != null ? blocked
+                : text("after_purchase", points(shop.budget() - spent - entry.cost()));
+        detailLines(graphics, status, x, top + 56, 2, blocked != null ? DETAIL_BLOCKED : DETAIL_GAIN);
+        if (entry.limit() > 1 && font.split(status, DETAIL_WIDTH).size() == 1) {
+            detailLines(graphics, text("bought", bought[index], entry.limit()), x, top + 67, 1, DETAIL_MUTED);
+        }
+    }
+
+    private void detailLines(GuiGraphics graphics, Component value, int x, int y, int maxLines, int color) {
+        var lines = font.split(value, DETAIL_WIDTH);
+        for (int index = 0; index < Math.min(maxLines, lines.size()); index++) {
+            graphics.drawString(font, lines.get(index), x, y + index * font.lineHeight, color, false);
         }
     }
 
@@ -304,7 +373,7 @@ final class KitShopScreen extends Screen {
                 top - 19, 0xffffffff);
         graphics.blitSprite(BAR, x, y, BAR_WIDTH, 5);
         int used = fillWidth(spent);
-        if (hovered >= 0 && !picks.contains(hovered)) {
+        if (hovered >= 0) {
             int potential = fillWidth(Math.min(shop.budget(), spent + shop.offers().get(hovered).cost()));
             if (potential > used) {
                 drawFill(graphics, x, y, potential);
@@ -324,18 +393,22 @@ final class KitShopScreen extends Screen {
 
     private void renderOfferTooltip(GuiGraphics graphics, int offer, int x, int y) {
         var stack = stock.get(offer);
-        var lines = new ArrayList<>(getTooltipFromItem(minecraft, stack));
-        int cost = shop.offers().get(offer).cost();
-        lines.add(text("stack", stack.getCount(), cost));
-        if (picks.contains(offer)) lines.add(text("refund", cost));
-        else if (spent + cost > shop.budget()) lines.add(text("short", spent + cost - shop.budget()));
-        graphics.renderTooltip(font, lines, stack.getTooltipImage(), stack, x, y);
+        var lines = getTooltipFromItem(minecraft, stack);
+        if (lines.size() > 1 || stack.getTooltipImage().isPresent()
+                || font.split(stack.getHoverName(), DETAIL_WIDTH).size() > 2) {
+            graphics.renderTooltip(font, lines, stack.getTooltipImage(), stack, x, y);
+        }
     }
 
     private boolean hovered(SlotButton button, int mouseX, int mouseY) {
+        if (mouseX == -10000) return false;
+        if (minecraft.getLastInputType().isKeyboard()) return button.isFocused() && button.visible;
         return mouseX >= button.getX() && mouseX < button.getX() + 16
-                && mouseY >= button.getY() && mouseY < button.getY() + 16
-                || mouseX != -10000 && minecraft.getLastInputType().isKeyboard() && button.isFocused();
+                && mouseY >= button.getY() && mouseY < button.getY() + 16;
+    }
+
+    private static Component points(int value) {
+        return text(value == 1 ? "one_point" : "points", value);
     }
 
     private static Component text(String key, Object... values) {

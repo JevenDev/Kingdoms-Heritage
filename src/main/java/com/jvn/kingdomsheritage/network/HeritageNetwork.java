@@ -36,7 +36,7 @@ public final class HeritageNetwork {
         @Override public Type<JoinState> type() { return TYPE; }
     }
 
-    public record Choose(String spawn, String kit, long revision, List<Integer> offers) implements CustomPacketPayload {
+    public record Choose(String spawn, String kit, long revision, List<KitShop.Pick> offers) implements CustomPacketPayload {
         public Choose {
             offers = List.copyOf(offers);
             if (offers.size() > KitShop.MAX_PICKS) throw new IllegalArgumentException("Too many starter kit offers");
@@ -53,15 +53,18 @@ public final class HeritageNetwork {
                     buffer.writeUtf(value.kit, 256);
                     buffer.writeLong(value.revision);
                     buffer.writeVarInt(value.offers.size());
-                    for (int offer : value.offers) buffer.writeVarInt(offer);
+                    for (var pick : value.offers) {
+                        buffer.writeVarInt(pick.offer());
+                        buffer.writeVarInt(pick.slot());
+                    }
                 }, buffer -> {
                     String spawn = buffer.readUtf(256);
                     String kit = buffer.readUtf(256);
                     long revision = buffer.readLong();
                     int count = buffer.readVarInt();
                     if (count < 0 || count > KitShop.MAX_PICKS) throw new io.netty.handler.codec.DecoderException("Invalid starter kit offer count");
-                    var offers = new ArrayList<Integer>(count);
-                    for (int index = 0; index < count; index++) offers.add(buffer.readVarInt());
+                    var offers = new ArrayList<KitShop.Pick>(count);
+                    for (int index = 0; index < count; index++) offers.add(new KitShop.Pick(buffer.readVarInt(), buffer.readVarInt()));
                     return new Choose(spawn, kit, revision, offers);
                 });
         @Override public Type<Choose> type() { return TYPE; }
@@ -142,7 +145,7 @@ public final class HeritageNetwork {
     }
 
     public static void register(RegisterPayloadHandlersEvent event) {
-        var registrar = event.registrar("9");
+        var registrar = event.registrar("10");
         registrar.playToServer(IntroReady.TYPE, IntroReady.CODEC, (packet, context) ->
                 com.jvn.kingdomsheritage.server.SpawnIntro.ready((ServerPlayer) context.player(), packet.token, packet.durationTicks));
         registrar.playToServer(FlowAction.TYPE, FlowAction.CODEC, (packet, context) ->

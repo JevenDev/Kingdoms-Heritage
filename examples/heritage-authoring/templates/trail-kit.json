@@ -29,7 +29,7 @@
       { "cost": 1, "item": { "id": "minecraft:oak_planks", "count": 16 } },
       { "cost": 1, "item": { "id": "minecraft:oak_boat" } },
       { "cost": 2, "item": { "id": "minecraft:compass" } },
-      { "cost": 1, "item": { "id": "minecraft:torch", "count": 16 } }
+      { "cost": 1, "limit": 3, "item": { "id": "minecraft:torch", "count": 16 } }
     ]
   }
 }

@@ -5,6 +5,7 @@ import com.jvn.kingdomsheritage.HeritageConfig;
 import com.jvn.kingdomsheritage.data.DefinitionJson;
 import com.jvn.kingdomsheritage.data.HeritageException;
 import com.jvn.kingdomsheritage.data.KitDefinition;
+import com.jvn.kingdomsheritage.data.KitShop;
 import com.jvn.kingdomsheritage.data.SelectionSettings;
 import java.util.HashMap;
 import java.util.List;
@@ -203,7 +204,7 @@ public final class KitSelection {
                 + inventoryPolicy.name().toLowerCase(java.util.Locale.ROOT)) : problem;
     }
 
-    void submit(List<Integer> offers) {
+    void submit(List<KitShop.Pick> offers) {
         submitted = true;
         view.updateButtons();
         ClientSelection.review(spawn, kitId(), offers);

@@ -68,6 +68,7 @@ function validateShop(shop,warnings) {
     const path=['shop','offers',index],label='Offer '+(index+1);
     if(!object(offer))throw issue(label+' must be an object.',path);
     integer(offer.cost,0,1000000,label+' cost',[...path,'cost']);
+    if(offer.limit!==undefined)integer(offer.limit,1,41,label+' purchase limit',[...path,'limit']);
     validateStack({item:offer.item},label,path,warnings);
   }
 }

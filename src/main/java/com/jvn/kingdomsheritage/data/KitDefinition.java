@@ -73,9 +73,9 @@ public record KitDefinition(ResourceLocation id, String title, String descriptio
         return shop.offers().stream().map(offer -> decodeItem(ops, offer.item())).toList();
     }
 
-    public List<StackEntry> loadout(Player player, InventoryPolicy policy, List<Integer> picks) {
+    public List<StackEntry> loadout(Player player, InventoryPolicy policy, List<KitShop.Pick> picks) {
         var fixed = decode(player.registryAccess());
-        if (shop != null) return KitShop.combine(fixed, shop.place(player, policy, fixed, decodeOffers(player.registryAccess()), picks));
+        if (shop != null) return shop.loadout(player, policy, fixed, decodeOffers(player.registryAccess()), picks);
         if (!picks.isEmpty()) throw new HeritageException("shop_offer", "This starter kit does not have a shop");
         return fixed;
     }
