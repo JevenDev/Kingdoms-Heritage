@@ -60,6 +60,7 @@ java {
 
 neoForge {
     version = neo_version
+    addModdingDependenciesTo sourceSets.test
 
     parchment {
         mappingsVersion = parchment_mappings_version
@@ -116,6 +117,19 @@ tasks.named('processResources', ProcessResources).configure {
     filesMatching(['META-INF/neoforge.mods.toml', 'pack.mcmeta']) {
         expand replaceProperties
     }
+}
+
+tasks.register('verifySelection', JavaExec) {
+    dependsOn tasks.named('testClasses')
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.jvn.kingdomsheritage.server.SelectionRegression'
+    javaLauncher = javaToolchains.launcherFor(java.toolchain)
+    workingDir = layout.buildDirectory.get().asFile
+}
+
+tasks.named('test', Test) {
+    dependsOn tasks.named('verifySelection')
+    failOnNoDiscoveredTests = false
 }
 
 tasks.withType(JavaCompile).configureEach {
