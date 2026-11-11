@@ -251,12 +251,6 @@ final class PartyPlayerList {
             graphics.fill(x + 4, y + 7, x + 6, y + 9, opacity | 0x55ff55);
             graphics.fill(x + 6, y + 5, x + 8, y + 7, opacity | 0x55ff55);
             graphics.fill(x + 8, y + 3, x + 10, y + 5, opacity | 0x55ff55);
-        } else if (player.stage() == 2) {
-            graphics.pose().pushPose();
-            graphics.pose().translate(x + 5.5F, y + 5.5F, 0);
-            graphics.pose().scale(0.4F, 0.4F, 1);
-            LoadingIndicator.render(graphics, 0, 0, Util.getMillis(), opacity >>> 24);
-            graphics.pose().popPose();
         } else {
             var font = Minecraft.getInstance().font;
             SelectionText.centered(graphics, font, Component.translatable("screen.kingdomsheritage.party_stage_short_" + player.stage()),
@@ -309,15 +303,15 @@ final class PartyPlayerList {
         for (var cell : cells) {
             int x = cell.x + 16;
             int y = cell.y;
-            graphics.fill(x - 1, y - 1, x + 33, y + 33, opacity);
+            boolean loading = cell.player.stage() == HeritageParty.Stage.LOADING.ordinal();
             boolean member = ClientParty.member(cell.player.id());
             if (member) graphics.renderOutline(x - 2, y - 2, 36, 36, opacity | 0xffff55);
             if (cell.player.id().equals(selected())) {
                 int border = member ? 3 : 2;
                 graphics.renderOutline(x - border, y - border, 32 + border * 2, 32 + border * 2, opacity | 0xffffff);
             }
-            ClientParty.face(graphics, cell.player, x, y, 32, visibility);
-            if (member) renderProgress(graphics, cell.player, x + 25, y + 25, opacity);
+            ClientParty.head(graphics, cell.player, x, y, 32, loading, visibility);
+            if (member && !loading) renderProgress(graphics, cell.player, x + 25, y + 25, opacity);
             SelectionText.centered(graphics, font, playerLabel(font, cell.player.name()), cell.x + 32, y + 38,
                     opacity | (member ? 0xffff55 : 0xffffff));
             if (member) SelectionText.centered(graphics, font, playerLabel(font, ClientParty.kitChoice(cell.player.id()).getString()),

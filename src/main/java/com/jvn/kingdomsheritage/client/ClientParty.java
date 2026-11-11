@@ -324,12 +324,13 @@ final class ClientParty {
         if (opacity <= 0) return;
         graphics.fill(x - 1, y - 1, x + size + 1, y + size + 1, Math.round(opacity * 255) << 24);
         face(graphics, player, x, y, size, opacity);
-        if (status && player.stage() != 0) graphics.fill(x, y, x + size, y + size, 0xaa343434);
-        if (status && player.stage() == 2) {
+        if (status && player.stage() != 0) graphics.fill(x, y, x + size, y + size, Math.round(opacity * 170) << 24 | 0x343434);
+        if (status && player.stage() == HeritageParty.Stage.LOADING.ordinal()) {
             graphics.pose().pushPose();
             graphics.pose().translate(x + size / 2F, y + size / 2F, 0);
-            graphics.pose().scale(0.5F, 0.5F, 1);
-            LoadingIndicator.render(graphics, 0, 0, Util.getMillis(), 255);
+            float scale = size / 32F;
+            graphics.pose().scale(scale, scale, 1);
+            LoadingIndicator.render(graphics, 0, 0, Util.getMillis(), Math.round(opacity * 255));
             graphics.pose().popPose();
         }
     }
