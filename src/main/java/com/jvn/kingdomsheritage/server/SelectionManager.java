@@ -431,16 +431,14 @@ public final class SelectionManager {
         BlockPos original = BlockPos.of(state.getLong("spawn"));
         BlockPos position = SpawnResolver.safe(level, original) ? original : SpawnResolver.nearby(level, original, 32, null)
                 .orElseThrow(() -> new HeritageException("original_ground", "No safe ground near the original position"));
-        teleport(player, new SpawnResolver.Destination(level, position), state.getFloat("yaw"));
+        SelectionFinalization.run(rollback -> {
+            rollback.accept(() -> hold(player));
+            teleport(player, new SpawnResolver.Destination(level, position), state.getFloat("yaw"));
+            SelectionFinalization.markComplete(state, rollback);
+            SelectionFinalization.restorePlayer(player, state);
+        });
         cancelPreparation(player);
         SelectionParty.remove(player);
-        state.putBoolean("pending", false);
-        state.putBoolean("complete", true);
-        state.remove("reset");
-        player.setGameMode(GameType.byId(state.getInt("mode")));
-        player.getAbilities().loadSaveData(state);
-        player.onUpdateAbilities();
-        player.setNoGravity(state.getBoolean("no_gravity"));
         player.fallDistance = 0;
         SelectionSteps.remove(player);
         SelectionLifecycle.cancel(player, com.jvn.kingdomsheritage.api.SelectionEvent.Reason.RECOVERED);

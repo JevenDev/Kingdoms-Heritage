@@ -2,9 +2,11 @@ package com.jvn.kingdomsheritage.server;
 
 import com.jvn.kingdomsheritage.client.ArrivalRegression;
 import com.jvn.kingdomsheritage.data.CatalogRegression;
+import com.jvn.kingdomsheritage.data.HeritageException;
 import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.core.BlockPos;
+import net.minecraft.nbt.CompoundTag;
 
 public final class SelectionRegression {
     private SelectionRegression() {}
@@ -13,6 +15,7 @@ public final class SelectionRegression {
         CatalogRegression.run();
         ArrivalRegression.run();
         rollsBackAfterSecondMemberFailure();
+        keepsRecoveryPendingWhenModeRestoreFails();
         spacesPartyArrivalsWhenTerrainAllows();
         keepsPartyArrivalsInTheStructureWhenPossible();
         System.out.println("Heritage selection regression checks passed");
@@ -44,6 +47,36 @@ public final class SelectionRegression {
         if (!SpawnResolver.partyPosition(anchor, assigned, pos -> pos.equals(inside) || pos.equals(outside), inside::equals).equals(inside)
                 || !SpawnResolver.partyPosition(anchor, assigned, outside::equals, inside::equals).equals(outside)) {
             throw new AssertionError("Party arrival should prefer safe interior space and fall back outside only when necessary");
+        }
+    }
+
+    private static void keepsRecoveryPendingWhenModeRestoreFails() {
+        var state = new CompoundTag();
+        state.putBoolean("pending", true);
+        state.putBoolean("reset", true);
+        state.putInt("mode", 1);
+        var original = state.copy();
+        var failure = new HeritageException("restore_mode", "The original game mode could not be restored");
+        boolean[] returnedToHold = {false};
+        try {
+            SelectionFinalization.run(rollback -> {
+                rollback.accept(() -> {
+                    if (!state.getBoolean("pending")) throw new AssertionError("Recovery resumed holding before restoring selection state");
+                    returnedToHold[0] = true;
+                });
+                SelectionFinalization.markComplete(state, rollback);
+                if (state.getBoolean("pending")) throw new AssertionError("Recovery still blocks the original game mode");
+                throw failure;
+            });
+            throw new AssertionError("Recovery reported success after its game mode change failed");
+        } catch (HeritageException error) {
+            if (error != failure || !state.equals(original) || !returnedToHold[0]) {
+                throw new AssertionError("Recovery did not leave the selection available to retry", error);
+            }
+        }
+        SelectionFinalization.run(rollback -> SelectionFinalization.markComplete(state, rollback));
+        if (state.getBoolean("pending") || !state.getBoolean("complete") || state.contains("reset")) {
+            throw new AssertionError("Successful recovery did not finish selection");
         }
     }
 
