@@ -851,16 +851,16 @@ function shopScreen(w,h,now){
       outline(x-1,y-1,18,'#ffe4a1');detail={status,name,refunding:false};
     }
   }
-  const refundable=new Map(session.purchases.map(pick=>[pick.slot,pick.offer]));
-  for(const [slot,offer] of refundable){
+  for(const [slot,purchase] of session.purchaseSlots()){
+    const {offer}=session.purchases[purchase];
     const position=inventory.layout.slots.find(position=>position.index===slot);
     const x=inv+position.x,y=top+position.y,status=session.shopStatus(offer),name=HeritageItemText.name(status.offer.item);
     const action=shopText('sell',name,status.offer.cost);
     const node=hit('shop-refund-'+slot,action,x-1,y-1,slotPitch,slotPitch,()=>{
-      const pick=session.purchases.findLast(pick=>pick.slot===slot);
+      const pick=session.purchases[session.purchaseSlots().get(slot)];
       if(!pick||!session.refund(slot))return;
       const refundedOffer=offers[pick.offer];
-      updateShop(shopText('sell',HeritageItemText.name(refundedOffer.item),refundedOffer.cost)+'.',pick);
+      updateShop(shopText('sell',HeritageItemText.name(refundedOffer.item),refundedOffer.cost)+'.',{...pick,slot});
       if(keyboard)(buttons.get('shop-offer-'+pick.offer)??buttons.get('next'))?.focus({preventScroll:true});
     });
     if(node.title!==name)node.title=name;

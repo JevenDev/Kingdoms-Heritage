@@ -5,6 +5,7 @@ const fs=require('node:fs'),path=require('node:path');
 const Pack=require('../pack/engine.js');
 require('./catalog.js');
 const Kit=require('./engine.js');
+const Flow=require('../pack/flow.js');
 const trail=require('../templates/trail-kit.json');
 
 test('the Trail Kit example keeps its budget and second page of offers',()=>{
@@ -93,6 +94,7 @@ test('dropping into an empty grid cell saves the slot and leaves other offers wh
   assert.equal(cells[0],undefined);
   assert.equal(cells[1],1);
   assert.equal(cells[11],0);
+  assert.equal(Flow.shopLayout(saved.shop).window(0)[11],0);
   assert.equal(kit.shop.offers[0].position,undefined);
 
   const swapped=Shop.edit(saved,{type:'place',index:0,slot:1});
@@ -110,6 +112,7 @@ test('grid drops use the selected section and retain columns on later pages',()=
   const saved=Kit.read(JSON.stringify(edited)).document;
   assert.deepEqual(saved.shop.offers[1].position,{row:2,column:7});
   assert.equal(Shop.paginate(Shop.layoutSlots(saved.shop,'light'),1).offers[6],1);
+  assert.equal(Flow.shopLayout(saved.shop,'light').window(3)[7],1);
   assert.equal(Shop.layoutSlots(saved.shop,'light')[0],2);
   assert.deepEqual(saved.shop.offers[0],kit.shop.offers[0]);
   assert.throws(()=>Shop.edit(kit,{type:'place',index:1,slot:6}),/Open the offer’s section/);

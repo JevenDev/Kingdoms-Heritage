@@ -3,9 +3,11 @@ package com.jvn.kingdomsheritage.data;
 import com.jvn.kingdomsheritage.HeritageConfig.InventoryPolicy;
 import com.jvn.kingdomsheritage.compat.EquipmentCompat;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.IntConsumer;
 import java.util.function.IntFunction;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
@@ -27,14 +29,20 @@ public final class KitLoadout {
         private final List<ItemStack> items;
         private final Map<EquipmentSlot, ItemStack> equipment;
         private final int selected;
+        private final int[] purchaseIndices;
 
-        private Snapshot(List<ItemStack> items, Map<EquipmentSlot, ItemStack> equipment, int selected) {
+        private Snapshot(List<ItemStack> items, Map<EquipmentSlot, ItemStack> equipment, int selected, int[] purchaseIndices) {
             this.items = items;
             this.equipment = equipment;
             this.selected = selected;
+            this.purchaseIndices = purchaseIndices;
         }
 
         public ItemStack item(int index) { return items.get(index).copy(); }
+
+        public int purchaseIndex(int slot) {
+            return purchaseIndices == null || slot < 0 || slot >= purchaseIndices.length ? -1 : purchaseIndices[slot];
+        }
 
         public boolean matches(Player player) {
             var inventory = player.getInventory();
@@ -88,7 +96,7 @@ public final class KitLoadout {
             var stack = slot.get().get();
             equipment.put(EquipmentSlot.of(slot), copy ? stack.copy() : stack);
         }
-        return new Snapshot(items, equipment, inventory.selected);
+        return new Snapshot(items, equipment, inventory.selected, null);
     }
 
     public static Snapshot plan(Snapshot original, int mainSize, KitDefinition kit,
@@ -99,10 +107,15 @@ public final class KitLoadout {
         original.items.forEach(stack -> items.add(replace ? ItemStack.EMPTY : stack.copy()));
         var equipment = new LinkedHashMap<EquipmentSlot, ItemStack>();
         original.equipment.forEach((slot, stack) -> equipment.put(slot, replace ? ItemStack.EMPTY : stack.copy()));
+        int[] purchaseIndices = new int[items.size()];
+        Arrays.fill(purchaseIndices, -1);
+        int purchases = 0;
         for (var entry : entries) {
             if (entry.inventory().equals("player")) {
-                if (entry.purchase()) placePurchase(items, mainSize, entry.index(), entry.stack().copy());
-                else if (replace || items.get(entry.index()).isEmpty()) items.set(entry.index(), entry.stack().copy());
+                if (entry.purchase()) {
+                    int purchaseIndex = purchases++;
+                    placePurchase(items, mainSize, entry.index(), entry.stack().copy(), slot -> purchaseIndices[slot] = purchaseIndex);
+                } else if (replace || items.get(entry.index()).isEmpty()) items.set(entry.index(), entry.stack().copy());
                 else merge(items, mainSize, entry.stack().copy());
             } else {
                 var slot = EquipmentSlot.of(entry);
@@ -115,7 +128,7 @@ public final class KitLoadout {
         }
         int selected = replace || original.items.subList(0, mainSize).stream().allMatch(ItemStack::isEmpty)
                 ? kit.selectedSlot() : original.selected;
-        return new Snapshot(items, equipment, selected);
+        return new Snapshot(items, equipment, selected, purchaseIndices);
     }
 
     static int purchaseSlot(IntFunction<ItemStack> items, int mainSize, int equipment, ItemStack stack) {
@@ -134,22 +147,27 @@ public final class KitLoadout {
         return empty;
     }
 
-    static void placePurchase(List<ItemStack> items, int mainSize, int slot, ItemStack stack) {
+    static void placePurchase(List<ItemStack> items, int mainSize, int slot, ItemStack stack, IntConsumer filled) {
         var target = items.get(slot);
         if (!target.isEmpty() && (slot >= mainSize || stackRoom(target, stack) == 0)) {
             throw new HeritageException("shop_occupied", "A starter kit slot is already occupied");
         }
         if (slot >= mainSize) {
             items.set(slot, stack);
+            filled.accept(slot);
             return;
         }
-        fillStack(target, stack);
+        if (fillStack(target, stack)) filled.accept(slot);
         for (int i = 0; i < mainSize && !stack.isEmpty(); i++) {
-            if (i != slot) fillStack(items.get(i), stack);
+            if (i != slot && fillStack(items.get(i), stack)) filled.accept(i);
         }
         if (stack.isEmpty()) return;
-        if (target.isEmpty()) items.set(slot, stack);
-        else putInEmptySlot(items, mainSize, stack);
+        if (target.isEmpty()) {
+            items.set(slot, stack);
+            filled.accept(slot);
+        } else {
+            filled.accept(putInEmptySlot(items, mainSize, stack));
+        }
     }
 
     private static int stackRoom(ItemStack current, ItemStack offered) {
@@ -157,12 +175,12 @@ public final class KitLoadout {
         return Math.max(0, current.getMaxStackSize() - current.getCount());
     }
 
-    private static void fillStack(ItemStack current, ItemStack incoming) {
+    private static boolean fillStack(ItemStack current, ItemStack incoming) {
         int count = Math.min(incoming.getCount(), stackRoom(current, incoming));
-        if (count > 0) {
-            current.grow(count);
-            incoming.shrink(count);
-        }
+        if (count == 0) return false;
+        current.grow(count);
+        incoming.shrink(count);
+        return true;
     }
 
     private static void merge(List<ItemStack> items, int mainSize, ItemStack stack) {
@@ -173,11 +191,11 @@ public final class KitLoadout {
         putInEmptySlot(items, mainSize, stack);
     }
 
-    private static void putInEmptySlot(List<ItemStack> items, int mainSize, ItemStack stack) {
+    private static int putInEmptySlot(List<ItemStack> items, int mainSize, ItemStack stack) {
         for (int slot = 0; slot < mainSize; slot++) {
             if (items.get(slot).isEmpty()) {
                 items.set(slot, stack);
-                return;
+                return slot;
             }
         }
         throw new HeritageException("full_inventory", "There is not enough inventory space for this kit. Choose a smaller kit or ask an administrator to recover your selection");

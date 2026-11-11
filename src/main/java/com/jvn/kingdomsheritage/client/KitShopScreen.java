@@ -217,11 +217,8 @@ final class KitShopScreen extends Screen {
     private boolean busy() { return selection.submitted() || SelectionTransition.active() || ClientParty.blocksInput(); }
 
     private KitShop.Pick purchaseInSlot(int slot) {
-        for (int i = picks.size() - 1; i >= 0; i--) {
-            var pick = picks.get(i);
-            if (pick.slot() == slot) return pick;
-        }
-        return null;
+        int index = preview.purchaseIndex(slot);
+        return index < 0 ? null : picks.get(index);
     }
 
     private boolean choose(List<KitShop.Pick> requested) {
@@ -264,16 +261,16 @@ final class KitShopScreen extends Screen {
         var pick = new KitShop.Pick(offer, slot);
         var requested = new ArrayList<>(picks);
         requested.add(pick);
-        trade(requested, pick, true);
+        trade(requested, pick, slot, true);
     }
 
     private void refund(int slot) {
         if (busy()) return;
-        var pick = purchaseInSlot(slot);
-        if (pick == null) return;
+        int index = preview.purchaseIndex(slot);
+        if (index < 0) return;
         var requested = new ArrayList<>(picks);
-        requested.remove(requested.lastIndexOf(pick));
-        trade(requested, pick, false);
+        var pick = requested.remove(index);
+        trade(requested, pick, slot, false);
     }
 
     private boolean reflowAfterRefund(List<KitShop.Pick> requested) {
@@ -297,9 +294,9 @@ final class KitShopScreen extends Screen {
         }
     }
 
-    private void trade(List<KitShop.Pick> requested, KitShop.Pick pick, boolean buying) {
+    private void trade(List<KitShop.Pick> requested, KitShop.Pick pick, int slot, boolean buying) {
         if (choose(requested) || !buying && reflowAfterRefund(requested)) {
-            trade = new Trade(pick.offer(), pick.slot(), buying, Util.getMillis());
+            trade = new Trade(pick.offer(), slot, buying, Util.getMillis());
             SelectionSounds.DISSOLVE.play(0.5F);
         } else SelectionSounds.ERROR.play();
         updateControls();

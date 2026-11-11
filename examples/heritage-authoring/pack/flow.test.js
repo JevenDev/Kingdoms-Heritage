@@ -113,6 +113,20 @@ test('shop purchases fill fixed stacks, spill, and refund without losing other i
   assert.equal(restored.resume(session.snapshot()),true);
   assert.deepEqual(restored.loadout(),session.loadout());
 });
+test('refunds from overflow slots remove the latest purchase that filled that slot',()=>{
+  const source=shopChoices({items:[{index:0,item:{id:'minecraft:torch',count:63}}]});
+  const session=enterShop(source);
+  assert.equal(session.buy(0),true);
+  assert.equal(session.buy(0),true);
+  assert.equal(session.purchaseSlots().get(0),0);
+  assert.equal(session.purchaseSlots().get(1),1);
+  assert.equal(session.refund(1),true);
+  assert.equal(session.purchaseSlots().get(1),0);
+  assert.equal(session.refund(1),true);
+  assert.equal(session.spent,0);
+  assert.equal(session.loadout().items[0].item.count,63);
+  assert.equal(session.loadout().items.length,1);
+});
 test('a full regular inventory still has room for compatible equipment',()=>{
   const items=Array.from({length:36},(_,index)=>({index,item:{id:'minecraft:apple'}}));
   const session=enterShop(shopChoices({items}));
@@ -163,10 +177,10 @@ test('shop windows slide a column at a time and preserve positioned gaps',()=>{
     {section:'tools'}
   ];
   const tools=Flow.shopLayout({offers},'tools');
-  assert.equal(tools.columns,5);
-  assert.equal(tools.pages,2);
-  assert.deepEqual(tools.window(0).slice(0,12),[1,2,-1,-1,-1,-1,-1,3,-1,-1,0,-1]);
-  assert.deepEqual(tools.window(1).slice(0,12),[2,-1,-1,4,-1,-1,3,-1,-1,0,-1,-1]);
+  assert.equal(tools.columns,8);
+  assert.equal(tools.pages,5);
+  assert.deepEqual(tools.window(0).slice(0,12),[1,4,2,-1,-1,-1,-1,-1,-1,-1,-1,-1]);
+  assert.deepEqual(tools.window(4).slice(0,12),[-1,-1,-1,-1,-1,-1,-1,3,0,-1,-1,-1]);
   assert.deepEqual(Flow.shopLayout({offers}).window(0).slice(0,4),[0,1,2,3]);
 });
 test('standalone shop tests restart with the same draft and a fresh inventory',()=>{

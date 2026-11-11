@@ -57,9 +57,10 @@ public final class CatalogRegression {
         var inventory = new ArrayList<>(List.of(new ItemStack(Items.BREAD, 62), namedBread, ItemStack.EMPTY));
         int slot = KitLoadout.purchaseSlot(inventory::get, inventory.size(), -1, bread);
         if (slot != 0) throw new AssertionError("Shop did not choose the matching stack first");
-        KitLoadout.placePurchase(inventory, inventory.size(), slot, bread.copy());
+        var filled = new ArrayList<Integer>();
+        KitLoadout.placePurchase(inventory, inventory.size(), slot, bread.copy(), filled::add);
         if (inventory.get(0).getCount() != 64 || inventory.get(1).getCount() != 63
-                || inventory.get(2).getCount() != 2 || bread.getCount() != 4) {
+                || inventory.get(2).getCount() != 2 || bread.getCount() != 4 || !filled.equals(List.of(0, 2))) {
             throw new AssertionError("Shop overflow changed stock, ignored components or overfilled a stack");
         }
 
@@ -67,9 +68,11 @@ public final class CatalogRegression {
         inventory.set(2, new ItemStack(Items.BREAD, 62));
         slot = KitLoadout.purchaseSlot(inventory::get, inventory.size(), -1, bread);
         if (slot != 1) throw new AssertionError("Shop rejected a purchase that fits across existing stacks");
-        KitLoadout.placePurchase(inventory, inventory.size(), slot, bread.copy());
+        filled.clear();
+        KitLoadout.placePurchase(inventory, inventory.size(), slot, bread.copy(), filled::add);
         if (inventory.stream().anyMatch(stack -> stack.getCount() != 64)
-                || KitLoadout.purchaseSlot(inventory::get, inventory.size(), -1, bread) != -1) {
+                || KitLoadout.purchaseSlot(inventory::get, inventory.size(), -1, bread) != -1
+                || !filled.equals(List.of(1, 2))) {
             throw new AssertionError("Shop capacity disagreed with the delivered stacks");
         }
     }
@@ -88,9 +91,9 @@ public final class CatalogRegression {
                 """).getAsJsonObject();
         var shop = KitShop.parse(KitShop.parse(definition).json());
         var tools = shop.layout("tools");
-        if (tools.columns() != 3 || tools.offerAt(0, 0) != 1 || tools.offerAt(1, 0) != -1
-                || tools.offerAt(2, 1) != 0 || tools.offerAt(0, 2) != 2 || tools.offerAt(0, 3) != -1) {
-            throw new AssertionError("Shop layout lost authored slots or scrolled into empty columns");
+        if (tools.columns() != 5 || tools.offerAt(0, 0) != 1 || tools.offerAt(1, 0) != -1
+                || tools.offerAt(2, 4) != 0 || tools.offerAt(0, 1) != 2 || tools.offerAt(0, 3) != -1) {
+            throw new AssertionError("Shop layout shifted authored slots or lost an automatic offer");
         }
         var all = shop.layout("");
         if (all.offerAt(0, 0) != 0 || all.offerAt(0, 1) != 1 || all.offerAt(0, 2) != 2) {
