@@ -321,16 +321,18 @@ public final class SelectionParty {
     }
 
     public static void cursor(ServerPlayer player, HeritageNetwork.Cursor cursor) {
+        var party = PARTIES.get(player.getUUID());
         var self = PLAYERS.get(player.getUUID());
-        if (self == null || self.stage != 0 || !player.isAlive() || !SelectionManager.pending(player)) return;
+        if (party == null || self == null || self.stage != 0 || !player.isAlive() || !SelectionManager.pending(player)) return;
         int pages = (HeritageCatalog.spawns().size() + 9) / 10;
         if (cursor.page() < 0 || cursor.page() >= pages) return;
         long tick = player.server.overworld().getGameTime();
         if (tick - self.lastCursor < 2) return;
         self.lastCursor = tick;
         self.cursor = new HeritageNetwork.Cursor(player.getUUID(), cursor.x(), cursor.y(), cursor.page());
-        for (var other : PLAYERS.values()) {
-            if (other != self && !SelectionDebug.isBot(other.player)
+        for (var member : party.members) {
+            var other = PLAYERS.get(member);
+            if (other != null && other != self && !SelectionDebug.isBot(other.player)
                     && other.stage == 0 && other.cursor != null && other.cursor.page() == cursor.page()) {
                 PacketDistributor.sendToPlayer(other.player, self.cursor);
             }
