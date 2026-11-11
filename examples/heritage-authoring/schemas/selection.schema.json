@@ -9,6 +9,12 @@
       "minimum": 0,
       "maximum": 16,
       "description": "0 or omitted uses the player GUI scale. A positive value overrides the GUI scale for selection screens and the entire arrival intro, including bars. Minecraft window and font limits apply. The saved player option stays unchanged."
+    },
+    "kit_preview": {
+      "type": "string",
+      "enum": ["inventory", "model"],
+      "default": "inventory",
+      "description": "Choose between the inventory panel and an enlarged equipped player model in the kit carousel and confirmation screen."
     }
   }
 }

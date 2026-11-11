@@ -522,6 +522,7 @@ public final class SelectionManager {
         json.addProperty("error_component", Component.Serializer.toJson(error, player.registryAccess()));
         json.addProperty("inventory_policy", inventoryPolicy(player).name());
         if (HeritageCatalog.guiScale() > 0) json.addProperty("gui_scale", HeritageCatalog.guiScale());
+        json.addProperty("kit_preview", HeritageCatalog.kitPreview().name().toLowerCase(java.util.Locale.ROOT));
         JsonArray spawns = new JsonArray();
         for (var spawn : HeritageCatalog.spawns().values()) {
             JsonObject choice = new JsonObject();

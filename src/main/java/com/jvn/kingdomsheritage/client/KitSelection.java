@@ -5,6 +5,7 @@ import com.jvn.kingdomsheritage.HeritageConfig;
 import com.jvn.kingdomsheritage.data.DefinitionJson;
 import com.jvn.kingdomsheritage.data.HeritageException;
 import com.jvn.kingdomsheritage.data.KitDefinition;
+import com.jvn.kingdomsheritage.data.SelectionSettings;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -22,6 +23,7 @@ public final class KitSelection {
     private final Player player;
     private final KitPreview inventoryPreview;
     private final Map<Integer, NeighborPreview> neighborPreviews = new HashMap<>();
+    private final boolean modelPreview;
     private final HeritageConfig.InventoryPolicy inventoryPolicy;
     private KitDefinition kit;
     private final boolean recipeBookOpen;
@@ -37,6 +39,7 @@ public final class KitSelection {
         this.spawn = spawn;
         choices = ClientSelection.allowedKits(catalog, spawn);
         player = Minecraft.getInstance().player;
+        modelPreview = SelectionSettings.parseKitPreview(catalog) == SelectionSettings.KitPreview.MODEL;
         inventoryPreview = new KitPreview(player);
         inventoryPolicy = catalog.has("inventory_policy") ? HeritageConfig.InventoryPolicy.valueOf(
                 catalog.get("inventory_policy").getAsString()) : HeritageConfig.InventoryPolicy.REPLACE;
@@ -151,6 +154,7 @@ public final class KitSelection {
     KitSelectionView view() { return view; }
     List<JsonObject> choices() { return choices; }
     int index() { return index; }
+    boolean modelPreview() { return modelPreview; }
     boolean submitted() { return submitted; }
     Component problem() { return problem; }
     Player player() { return player; }

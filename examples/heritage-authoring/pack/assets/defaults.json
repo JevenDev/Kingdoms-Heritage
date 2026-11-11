@@ -323,6 +323,7 @@
     "screen.kingdomsheritage.extension_retry": "Try again"
   },
   "selection": {
-    "gui_scale": 3
+    "gui_scale": 3,
+    "kit_preview": "inventory"
   }
 }

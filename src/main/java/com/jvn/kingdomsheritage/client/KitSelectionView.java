@@ -4,6 +4,7 @@ import com.google.gson.JsonObject;
 import com.jvn.kingdomsheritage.data.DefinitionJson;
 import java.util.List;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Tooltip;
@@ -151,11 +152,15 @@ final class KitSelectionView {
         if (view == null || !isInventory(event.getScreen())) return;
         Screen screen = event.getScreen();
         view.carousel.close();
-        if (net.neoforged.fml.ModList.get().isLoaded("accessories")) AccessoriesControls.hideCrafting(screen);
-        var container = (AbstractContainerScreen<?>) screen;
-        for (var child : List.copyOf(screen.children())) {
-            if (child instanceof net.minecraft.client.gui.components.ImageButton button
-                    && button.getX() == container.getGuiLeft() + 104) event.removeListener(child);
+        if (view.model.modelPreview()) {
+            for (var child : List.copyOf(screen.children())) event.removeListener(child);
+        } else {
+            if (net.neoforged.fml.ModList.get().isLoaded("accessories")) AccessoriesControls.hideCrafting(screen);
+            var container = (AbstractContainerScreen<?>) screen;
+            for (var child : List.copyOf(screen.children())) {
+                if (child instanceof net.minecraft.client.gui.components.ImageButton button
+                        && button.getX() == container.getGuiLeft() + 104) event.removeListener(child);
+            }
         }
         view.previous = SelectionControls.arrow(8, 8, false, Component.translatable("screen.kingdomsheritage.previous_kit"),
                 button -> view.model.select(view.model.index() - 1));
@@ -205,17 +210,20 @@ final class KitSelectionView {
         return carousel.last(net.minecraft.Util.getMillis(), model.choices().size());
     }
 
-    private void renderInventory(Screen screen, net.minecraft.client.gui.GuiGraphics graphics, int index,
-                                 int mouseX, int mouseY, float partialTick) {
-        List<Button> buttons = List.of(previous, next, back, confirm, disconnect);
-        var visible = buttons.stream().map(button -> button.visible).toList();
+    private void renderPreview(Screen screen, GuiGraphics graphics, int index,
+                               int mouseX, int mouseY, float partialTick, boolean tooltips) {
         capturingPreview = true;
         neighboringPreview = index != model.index();
         try {
-            for (Button button : buttons) button.visible = false;
             model.renderNeighbor(index, () -> {
                 try {
-                    screen.renderWithTooltip(graphics, mouseX, mouseY, partialTick);
+                    if (model.modelPreview()) {
+                        InventoryScreen.renderEntityInInventoryFollowsAngle(graphics, bounds.getX(), bounds.getY(),
+                                bounds.getX() + bounds.getWidth(), bounds.getY() + bounds.getHeight(),
+                                Math.max(1, bounds.getHeight() / 2), 0.0625F, 0, 0, model.player());
+                    } else {
+                        renderInventory(screen, graphics, mouseX, mouseY, partialTick, tooltips);
+                    }
                 } finally {
                     graphics.flush();
                 }
@@ -223,6 +231,17 @@ final class KitSelectionView {
         } finally {
             capturingPreview = false;
             neighboringPreview = false;
+        }
+    }
+
+    private void renderInventory(Screen screen, GuiGraphics graphics, int mouseX, int mouseY, float partialTick, boolean tooltips) {
+        List<Button> buttons = List.of(previous, next, back, confirm, disconnect);
+        var visible = buttons.stream().map(button -> button.visible).toList();
+        try {
+            for (Button button : buttons) button.visible = false;
+            if (tooltips) screen.renderWithTooltip(graphics, mouseX, mouseY, partialTick);
+            else screen.render(graphics, mouseX, mouseY, partialTick);
+        } finally {
             for (int i = 0; i < buttons.size(); i++) buttons.get(i).visible = visible.get(i);
         }
     }
@@ -245,9 +264,9 @@ final class KitSelectionView {
         long now = net.minecraft.Util.getMillis();
         boolean moving = carousel.moving(now);
         carousel.render(graphics, bounds, screen.width, model, event.getMouseX(), event.getMouseY(), now, 1, true,
-                index -> renderInventory(screen, graphics, index,
+                index -> renderPreview(screen, graphics, index,
                         index == model.index() && !moving ? event.getMouseX() : -10000,
-                        index == model.index() && !moving ? event.getMouseY() : -10000, event.getPartialTick()));
+                        index == model.index() && !moving ? event.getMouseY() : -10000, event.getPartialTick(), true));
         for (Button button : List.of(previous, next, back, confirm, disconnect)) {
             if (button.visible) renderControlWithoutTooltip(button, graphics, event.getMouseX(), event.getMouseY(), event.getPartialTick());
         }
@@ -342,7 +361,7 @@ final class KitSelectionView {
         long now = net.minecraft.Util.getMillis();
         SelectionBackground.render(graphics, screen.width, screen.height);
         carousel.render(graphics, bounds, screen.width, model, -10000, -10000, now, 1 - progress, false,
-                index -> renderInventory(screen, graphics, index, -10000, -10000, event.getPartialTick()));
+                index -> renderPreview(screen, graphics, index, -10000, -10000, event.getPartialTick(), true));
         float targetScale = confirmationScale(screen);
         float scale = Mth.lerp(progress, 1, targetScale);
         float phase = (now % 20000L) / 20000F * Mth.TWO_PI;
@@ -351,18 +370,8 @@ final class KitSelectionView {
         float y = Mth.lerp(progress, bounds.getY(), (screen.height - bounds.getHeight() * targetScale) / 2)
                 - Mth.sin(phase * 5) * 2.5F * progress * scale;
         float tilt = Mth.sin(phase * 4) * 0.35F * progress;
-        confirmationPreview.render(graphics, bounds, x, y, scale, tilt, () -> {
-            List<Button> buttons = List.of(previous, next, back, confirm, disconnect);
-            var visible = buttons.stream().map(button -> button.visible).toList();
-            capturingPreview = true;
-            try {
-                for (Button button : buttons) button.visible = false;
-                screen.render(graphics, bounds.getX() + 50, bounds.getY() + 43, event.getPartialTick());
-            } finally {
-                capturingPreview = false;
-                for (int i = 0; i < buttons.size(); i++) buttons.get(i).visible = visible.get(i);
-            }
-        });
+        confirmationPreview.render(graphics, bounds, x, y, scale, tilt,
+                () -> renderPreview(screen, graphics, model.index(), bounds.getX() + 50, bounds.getY() + 43, event.getPartialTick(), false));
         graphics.pose().pushPose();
         graphics.pose().translate(0, 0, 500);
         if (progress < 1) {
@@ -482,6 +491,10 @@ final class KitSelectionView {
             boolean overControl = controls.stream().anyMatch(button ->
                     button.active && button.visible && button.isMouseOver(event.getMouseX(), event.getMouseY()));
             if (!overControl || event.getButton() != 0) event.setCanceled(true);
+            return;
+        }
+        if (view.model.modelPreview()) {
+            if (!overNavigation || event.getButton() != 0) event.setCanceled(true);
             return;
         }
         boolean overControl = event.getScreen().children().stream().anyMatch(child ->

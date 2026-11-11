@@ -29,6 +29,7 @@ public final class HeritageCatalog {
     public static Map<ResourceLocation, IntroDefinition> cinematics() { return current.cinematics; }
     public static long revision() { return revision; }
     public static int guiScale() { return current.selection.guiScale(); }
+    public static SelectionSettings.KitPreview kitPreview() { return current.selection.kitPreview(); }
 
     public static void register(AddReloadListenerEvent event) {
         event.addListener(new Loader());
