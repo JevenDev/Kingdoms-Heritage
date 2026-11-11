@@ -58,9 +58,9 @@ public final class CatalogRegression {
         if (all.offerAt(0, 0) != 0 || all.offerAt(0, 1) != 1 || all.offerAt(0, 2) != 2) {
             throw new AssertionError("The All tab should keep named sections in offer order");
         }
-        var compact = new KitShop(10, java.util.Collections.nCopies(25, shop.offers().get(2))).layout("");
-        if (compact.columns() != 4 || compact.offerAt(0, 3) != 3 || compact.offerAt(1, 1) != 5
-                || compact.offerAt(6, 0) != 24 || compact.offerAt(6, 1) != -1) {
+        var compact = new KitShop(10, java.util.Collections.nCopies(33, shop.offers().get(2))).layout("");
+        if (compact.columns() != 5 || compact.offerAt(0, 3) != 3 || compact.offerAt(1, 1) != 6
+                || compact.offerAt(6, 2) != 32 || compact.offerAt(6, 3) != -1) {
             throw new AssertionError("Compact shop layout lost offers across columns");
         }
 

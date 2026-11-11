@@ -1,6 +1,6 @@
 (() => {
 'use strict';
-const K=HeritageKit,PAGE_SIZE=24,MAX_OFFERS=256,DEFAULT_BUDGET=12;
+const K=HeritageKit,PAGE_SIZE=32,MAX_OFFERS=256,DEFAULT_BUDGET=12;
 const pageOf=index=>Math.floor(index/PAGE_SIZE);
 function paginate(offers,page) {
   const count=Math.max(1,Math.ceil(offers.length/PAGE_SIZE));

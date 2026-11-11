@@ -828,7 +828,7 @@ function shopScreen(w,h,now){
 
   for(const [cell,index] of visibleOffers.entries()){
     if(index<0)continue;
-    const x=left+8+cell%3*slotPitch,y=top+12+Math.floor(cell/3)*slotPitch;
+    const x=left+8+cell%F.shopColumns*slotPitch,y=top+12+Math.floor(cell/F.shopColumns)*slotPitch;
     const status=session.shopStatus(index),{offer}=status,name=HeritageItemText.name(offer.item);
     const action=shopText('buy',name,offer.cost),feedback=shopStatusText(status);
     const limitReached=status.issue==='limit_reached',short=status.issue==='short'||status.issue==='short_one';

@@ -75,7 +75,7 @@ function browseLocation(count,index,offset,byPage=false){
   }else index+=offset;
   return Math.max(0,Math.min(last,index));
 }
-const shopColumns=3,shopRows=8,shopPageSize=shopColumns*shopRows;
+const shopColumns=4,shopRows=8,shopPageSize=shopColumns*shopRows;
 function shopOfferIndices(shop,section=''){
   const indices=[];
   for(const [index,offer] of shop.offers.entries())if(!section||offer.section===section)indices.push(index);
@@ -217,7 +217,7 @@ class Session {
     if(this.phase==='review')this.phase=this.kit.shop?'kit-shop':this.allowed().length===1?'location-confirm':'kit';
   }
 }
-const api={pageSize,shopPageSize,shopOfferIndices,shopLayout,browseLocation,companionNames,compare,catalog,label,place,destination,locations,context,narration,revealed,Session};
+const api={pageSize,shopColumns,shopPageSize,shopOfferIndices,shopLayout,browseLocation,companionNames,compare,catalog,label,place,destination,locations,context,narration,revealed,Session};
 if(typeof module!=='undefined')module.exports=api;
 else globalThis.HeritageFlow=api;
 })();

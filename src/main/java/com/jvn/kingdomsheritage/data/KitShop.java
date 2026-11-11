@@ -20,7 +20,7 @@ public record KitShop(int budget, List<Offer> offers, List<Section> sections) {
     public static final int MAX_OFFERS = 256;
     public static final int MAX_PICKS = 41;
     public static final int ROWS = 8;
-    private static final int VISIBLE_COLUMNS = 3;
+    public static final int VISIBLE_COLUMNS = 4;
     private static final int MAX_POINTS = 1_000_000;
 
     public record Section(String id, String name, ResourceLocation icon) {}

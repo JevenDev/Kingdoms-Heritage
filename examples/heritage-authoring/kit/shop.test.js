@@ -60,10 +60,12 @@ test('shop edits preserve item data and follow game paging when offers cross pag
   }
   const {document}=Kit.read(JSON.stringify(draft));
   assert.equal(document.shop.budget,16);
-  const pages=[Shop.paginate(document.shop.offers,0),Shop.paginate(document.shop.offers,2)];
-  assert.equal(pages[0].offers.length,24);
+  const offers=[...document.shop.offers,...Array(8).fill(document.shop.offers.at(-1))];
+  const pages=[Shop.paginate(offers,0),Shop.paginate(offers,2)];
+  assert.equal(pages[0].offers.length,32);
   assert.equal(pages[1].index,1);
-  assert.equal(pages[1].start,24);
+  assert.equal(pages[1].start,32);
+  assert.equal(pages[1].offers.length,1);
   assert.equal(pages[1].offers[0].item.id,'minecraft:compass');
   assert.deepEqual(pages[0].offers[23],{cost:3,limit:4,item:{id:'minecraft:torch',count:32,components:{'minecraft:custom_name':'"Camping Torches"'}}});
 });
