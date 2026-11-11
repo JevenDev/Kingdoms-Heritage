@@ -1,6 +1,7 @@
 package com.jvn.kingdomsheritage.client;
 
 import com.jvn.kingdomsheritage.network.HeritageNetwork;
+import com.jvn.toucanlib.client.ToucanTextRenderer;
 import com.mojang.blaze3d.systems.RenderSystem;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -12,7 +13,9 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.Style;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.util.Mth;
 
 final class PartyPlayerList {
@@ -27,11 +30,12 @@ final class PartyPlayerList {
     private static final ResourceLocation TAB = texture("tab_button");
     private static final ResourceLocation SELECTED = texture("tab_button_selected");
     private static final ResourceLocation EMPTY_SLOT = texture("empty_slot");
-    private static final ResourceLocation SEND_REQUEST = texture("send_request");
-    private static final ResourceLocation INVITED = texture("invited");
-    private static final ResourceLocation SEARCH = texture("search");
-    private static final ResourceLocation REVIEW = texture("review");
-    private static final ResourceLocation READY = texture("ready");
+    private static final Style BADGE_FONT = Style.EMPTY.withFont(ResourceLocation.fromNamespaceAndPath("kingdomsheritage", "party_badges"));
+    private static final Badge INVITED = new Badge(0xe000, 7, 7);
+    private static final Badge SEND_REQUEST = new Badge(0xe001, 15, 15);
+    private static final Badge SEARCH = new Badge(0xe002, 12, 12);
+    private static final Badge READY = new Badge(0xe003, 9, 8);
+    private static final Badge REVIEW = new Badge(0xe004, 9, 10);
     private final PartyListBlur blur = new PartyListBlur();
     private final List<Cell> cells = new ArrayList<>();
     private final List<EmptySlot> emptySlots = new ArrayList<>();
@@ -66,15 +70,19 @@ final class PartyPlayerList {
     private record EmptySlot(int x, int y) {}
     private record SlotKey(UUID player, int columnOffset, int rowOffset, boolean party) {}
 
+    private record Badge(FormattedCharSequence glyph, int width, int height) {
+        Badge(int codepoint, int width, int height) {
+            this(FormattedCharSequence.codepoint(codepoint, BADGE_FONT), width, height);
+        }
+    }
+
     private enum InviteBadge {
-        INCOMING(INVITED, 7), OUTGOING(SEND_REQUEST, 15);
+        INCOMING(INVITED), OUTGOING(SEND_REQUEST);
 
-        final ResourceLocation texture;
-        final int size;
+        final Badge icon;
 
-        InviteBadge(ResourceLocation texture, int size) {
-            this.texture = texture;
-            this.size = size;
+        InviteBadge(Badge icon) {
+            this.icon = icon;
         }
     }
 
@@ -370,20 +378,19 @@ final class PartyPlayerList {
             graphics.renderTooltip(font, hovered.getMessage(), mouseX, mouseY);
     }
 
-    private static void renderProgress(GuiGraphics graphics, ClientParty.Peer player, int right, int bottom,
-                                       float visibility, int opacity) {
+    private static void renderProgress(GuiGraphics graphics, ClientParty.Peer player, int right, int bottom, int opacity) {
         boolean choosingSpawn = player.stage() == HeritageParty.Stage.SPAWN.ordinal();
         boolean choosingKit = player.stage() == HeritageParty.Stage.KIT.ordinal();
         if (choosingSpawn || choosingKit) {
-            renderCornerBadge(graphics, SEARCH, 12, 12, right, bottom, visibility);
+            renderCornerBadge(graphics, SEARCH, right, bottom, opacity);
             var font = Minecraft.getInstance().font;
             var letter = Component.translatable("screen.kingdomsheritage.party_stage_short_" + player.stage());
             SelectionText.centered(graphics, font, letter, right + 3, bottom - 1,
                     opacity | (choosingKit ? 0x55ffff : 0xffff55));
         } else if (player.stage() == HeritageParty.Stage.REVIEW.ordinal()) {
-            renderCornerBadge(graphics, REVIEW, 9, 10, right, bottom, visibility);
+            renderCornerBadge(graphics, REVIEW, right, bottom, opacity);
         } else if (player.stage() == HeritageParty.Stage.READY.ordinal()) {
-            renderCornerBadge(graphics, READY, 9, 8, right, bottom, visibility);
+            renderCornerBadge(graphics, READY, right, bottom, opacity);
         }
     }
 
@@ -392,14 +399,9 @@ final class PartyPlayerList {
         return ClientParty.inviteSentTo(player) ? InviteBadge.OUTGOING : null;
     }
 
-    private static void renderCornerBadge(GuiGraphics graphics, ResourceLocation texture, int width, int height,
-                                          int right, int bottom, float visibility) {
-        graphics.setColor(1, 1, 1, visibility);
-        RenderSystem.enableBlend();
-        RenderSystem.defaultBlendFunc();
-        graphics.blit(texture, right - width / 2, bottom - height / 2, 0, 0, width, height, width, height);
-        RenderSystem.disableBlend();
-        graphics.setColor(1, 1, 1, 1);
+    private static void renderCornerBadge(GuiGraphics graphics, Badge badge, int right, int bottom, int opacity) {
+        ToucanTextRenderer.renderOutlinedLine(graphics, Minecraft.getInstance().font, badge.glyph(),
+                right - badge.width() / 2, bottom - badge.height() / 2, opacity | 0xffffff, 0);
     }
 
     private void renderCell(GuiGraphics graphics, Cell cell, int x, int y, float visibility, int opacity, boolean present) {
@@ -410,9 +412,9 @@ final class PartyPlayerList {
         if (present && cell.player.id().equals(selected()))
             graphics.renderOutline(x - 2, y - 2, PORTRAIT_SIZE + 4, PORTRAIT_SIZE + 4, opacity | 0xffffff);
         int right = x + PORTRAIT_SIZE, bottom = y + PORTRAIT_SIZE;
-        if (cell.party && !loading) renderProgress(graphics, cell.player, right, bottom, visibility, opacity);
+        if (cell.party && !loading) renderProgress(graphics, cell.player, right, bottom, opacity);
         if (cell.badge != null)
-            renderCornerBadge(graphics, cell.badge.texture, cell.badge.size, cell.badge.size, right, bottom, visibility);
+            renderCornerBadge(graphics, cell.badge.icon, right, bottom, opacity);
     }
 
     private SlotKey slotKey(Cell cell) {

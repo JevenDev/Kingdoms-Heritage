@@ -1,0 +1,9 @@
+{
+  "providers": [
+    {"type": "bitmap", "file": "kingdomsheritage:gui/selection/invited.png", "height": 7, "ascent": 7, "chars": ["\ue000"]},
+    {"type": "bitmap", "file": "kingdomsheritage:gui/selection/send_request.png", "height": 15, "ascent": 7, "chars": ["\ue001"]},
+    {"type": "bitmap", "file": "kingdomsheritage:gui/selection/search.png", "height": 12, "ascent": 7, "chars": ["\ue002"]},
+    {"type": "bitmap", "file": "kingdomsheritage:gui/selection/ready.png", "height": 8, "ascent": 7, "chars": ["\ue003"]},
+    {"type": "bitmap", "file": "kingdomsheritage:gui/selection/review.png", "height": 10, "ascent": 7, "chars": ["\ue004"]}
+  ]
+}
