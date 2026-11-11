@@ -35,6 +35,7 @@ final class ClientParty {
         float x(long now) { return Mth.lerp(Mth.clamp((now - received) / 100F, 0, 1), fromX, x); }
         float y(long now) { return Mth.lerp(Mth.clamp((now - received) / 100F, 0, 1), fromY, y); }
     }
+    private static final int INVITATION_NOTICE_HEIGHT = 32;
     private static final ResourceLocation CROSSHAIR = ResourceLocation.fromNamespaceAndPath("kingdomsheritage", "textures/gui/party_crosshair.png");
     private static final ToucanPlayerSkinResolver SKINS = new ToucanPlayerSkinResolver(128, 30000);
     private static final Map<UUID, Peer> PLAYERS = new LinkedHashMap<>();
@@ -458,18 +459,22 @@ final class ClientParty {
         noticeHovered = hover;
         graphics.pose().pushPose();
         graphics.pose().translate(noticeX, noticeY, 0);
-        SelectionToasts.background(graphics, noticeWidth, 32, now - invitation.getValue().received());
-        head(graphics, player, 7, 8, 16, false);
+        SelectionToasts.background(graphics, noticeWidth, INVITATION_NOTICE_HEIGHT, now - invitation.getValue().received());
+        int portraitSize = 16;
+        head(graphics, player, 7, (INVITATION_NOTICE_HEIGHT - portraitSize) / 2, portraitSize, false);
         var font = Minecraft.getInstance().font;
-        SelectionText.draw(graphics, font, fitLabel(font, player.name(), noticeWidth - 36), 29, 5, 0xffffff55);
-        SelectionText.draw(graphics, font, text("invite_toast", (invitation.getValue().expires() - now + 999) / 1000), 29, 17, 0xffbbbbbb);
+        int glyphHeight = font.lineHeight - 2;
+        int lineSpacing = font.lineHeight + 2;
+        int textY = (INVITATION_NOTICE_HEIGHT - glyphHeight - lineSpacing) / 2;
+        SelectionText.draw(graphics, font, fitLabel(font, player.name(), noticeWidth - 36), 29, textY, 0xffffff55);
+        SelectionText.draw(graphics, font, text("invite_toast", (invitation.getValue().expires() - now + 999) / 1000), 29, textY + lineSpacing, 0xffbbbbbb);
         graphics.flush();
         graphics.pose().popPose();
     }
 
     private static boolean overInvitation(double x, double y) {
         var invite = INVITES.get(noticePlayer);
-        return invite != null && invite.expires() > Util.getMillis() && PLAYERS.containsKey(noticePlayer) && x >= noticeX && x < noticeX + noticeWidth && y >= noticeY && y < noticeY + 32;
+        return invite != null && invite.expires() > Util.getMillis() && PLAYERS.containsKey(noticePlayer) && x >= noticeX && x < noticeX + noticeWidth && y >= noticeY && y < noticeY + INVITATION_NOTICE_HEIGHT;
     }
 
     static Component playerCount(int count) { return text(count == 1 ? "player_count_single" : "player_count", count); }
