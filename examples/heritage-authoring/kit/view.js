@@ -171,9 +171,9 @@ function drawModelFace(ctx,face) {
   ctx.transform(ax,ay,bx,by,a[0]-ax*u[0]-bx*u[1],a[1]-ay*u[0]-by*u[1]);
   ctx.drawImage(shadeTexture(face.texture,face.shade),0,0);ctx.restore();
 }
-function player(ctx,kit,aim) {
+function player(ctx,kit,aim,x=51,y=47,scale=1.75) {
   const P=HeritagePlayer,equipped=P.equipment(kit),lookYaw=-Math.atan(aim.x/40),lookPitch=-Math.atan(aim.y/40),yaw=lookYaw*.35,pitch=lookPitch*.12,faces=[];
-  const project=p=>{const q=rotate([p[0],p[1]-16,p[2]],yaw,pitch);return [51+q[0]*1.75,47+q[1]*1.75,q[2]];};
+  const project=p=>{const q=rotate([p[0],p[1]-16,p[2]],yaw,pitch);return [x+q[0]*scale,y+q[1]*scale,q[2]];};
   const head=p=>P.head(p,lookYaw,lookPitch),right=p=>P.arm(p,-1,!!equipped.main),left=p=>P.arm(p,1,!!equipped.off);
   function box(texture,cx,cy,cz,w,h,d,u,v,inflate=0,attach=p=>p) {
     if(!texture)return;
@@ -489,8 +489,14 @@ class Inventory {
   }
   draw() {
     if(!this.ready||!this.visible)return;
+    const {width,height,inventoryX,inventoryY,playerX}=this.layout,ctx=this.canvas.getContext('2d');ctx.setTransform(this.scale,0,0,this.scale,0,0);ctx.imageSmoothingEnabled=false;ctx.clearRect(0,0,width,height);
+    if(this.options.modelOnly){
+      const scale=Math.max(1,Math.floor(height/2))/16;
+      player(ctx,this.previewKit??this.kit,this.aim,width/2,height/2+scale,scale);
+      return;
+    }
     if(this.dirty)this.renderBase();
-    const {width,height,inventoryX,inventoryY,playerX}=this.layout,ctx=this.canvas.getContext('2d');ctx.setTransform(this.scale,0,0,this.scale,0,0);ctx.imageSmoothingEnabled=false;ctx.clearRect(0,0,width,height);ctx.drawImage(this.background,0,0,width,height);
+    ctx.drawImage(this.background,0,0,width,height);
     ctx.save();ctx.beginPath();ctx.rect(inventoryX+26,inventoryY+8,this.layout.mode==='accessories'?124:49,70);ctx.clip();ctx.translate(inventoryX+playerX-51,inventoryY);player(ctx,this.previewKit??this.kit,this.aim);ctx.restore();
     const hovered=this.layout.slots.find(slot=>slot.id===this.hover),selected=this.layout.slots.find(slot=>slot.id===this.selected);
     if(hovered){ctx.fillStyle='#ffffff80';ctx.fillRect(hovered.x,hovered.y,16,16);}

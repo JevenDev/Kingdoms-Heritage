@@ -104,6 +104,10 @@ async function read(bytes,name='Imported pack.zip',createId=()=>crypto.randomUUI
   if(data.has(Pack.selectionPath)){
     const selection=json(data,Pack.selectionPath);state.guiScale=selection.gui_scale??0;
     if(!Number.isInteger(state.guiScale)||state.guiScale<0||state.guiScale>16)throw new Error('Invalid selection GUI scale.');
+    if(Object.hasOwn(selection,'kit_preview')){
+      if(!['inventory','model'].includes(selection.kit_preview))throw new Error('Kit preview must be inventory or model.');
+      state.kitPreview=selection.kit_preview;
+    }
     state.selectionMetadata=selection;data.delete(Pack.selectionPath);
   }
   data.delete('pack.mcmeta');resources.delete('pack.mcmeta');

@@ -17,7 +17,8 @@ function catalog(output,bundled) {
     else entries[kind].set(id,{...document,id});
   }
   const settings=output.files.find(file=>file.path==='data/kingdomsheritage/heritage/selection.json');
-  const result={...Object.fromEntries(Object.entries(entries).map(([kind,values])=>[kind,[...values.values()].sort(compare)])),guiScale:settings?JSON.parse(settings.content).gui_scale??0:bundled.selection?.gui_scale??0};
+  const selection=settings?JSON.parse(settings.content):bundled.selection;
+  const result={...Object.fromEntries(Object.entries(entries).map(([kind,values])=>[kind,[...values.values()].sort(compare)])),guiScale:selection?.gui_scale??0,kitPreview:selection?.kit_preview??'inventory'};
   for(const spawn of result.spawns){const selectors=spawn.kits;spawn.kits=result.kits.filter(kit=>!selectors?.length||selectors.includes(kit.id)||(kit.tags??[]).some(tag=>selectors.includes('#'+tag))).map(kit=>kit.id);}
   return result;
 }

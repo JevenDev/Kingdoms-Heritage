@@ -226,11 +226,11 @@ async function monitorPreview(target){
       return {id:card.id,after,x:(after?right:pose.x)/view.guiWidth*box.width,y:pose.y/view.guiHeight*box.height,height:192*pose.scale/view.guiHeight*box.height};
     },
     needsResourcePack(spawn,data){return !!spawn?.image&&!uploaded.has(data)&&cover(spawn)===images.get('card_fallback');},
-    draw({spawns,selectedId,guiScale=3,width=1920,height=1080,phase='cards',expanded=false,page=null,intro,time=0,names={},pictureData,kit,kitIndex=0,kitCount=1,inventoryMode='player'}){
-      if(target.width!==width||target.height!==height){target.width=width;target.height=height;}target.dataset.guiScale=String(guiScale);
-      const view=P.guiViewport(width,height,guiScale),w=view.guiWidth,h=view.guiHeight,old={ctx,renderer,viewport,scroll};
+    draw({spawns,selectedId,guiScale=3,width:pixelWidth=1920,height:pixelHeight=1080,phase='cards',expanded=false,page=null,intro,time=0,names={},pictureData,kit,kitIndex=0,kitCount=1,inventoryMode='player',kitPreview='inventory'}){
+      if(target.width!==pixelWidth||target.height!==pixelHeight){target.width=pixelWidth;target.height=pixelHeight;}target.dataset.guiScale=String(guiScale);
+      const view=P.guiViewport(pixelWidth,pixelHeight,guiScale),w=view.guiWidth,h=view.guiHeight,old={ctx,renderer,viewport,scroll};
       try{
-        ctx=context;renderer=painter;viewport=view;scroll=0;ctx.setTransform(width/w,0,0,height/h,0,0);ctx.imageSmoothingEnabled=false;ctx.globalAlpha=1;
+        ctx=context;renderer=painter;viewport=view;scroll=0;ctx.setTransform(pixelWidth/w,0,0,pixelHeight/h,0,0);ctx.imageSmoothingEnabled=false;ctx.globalAlpha=1;
         rect(0,0,w,h,'#101319');if(shader)shader(w,h,clock()-backgroundStarted);
         if(phase==='intro'){
           const config=intro??P.packDefaults;drawWorld(w,h,time*50,config);if(intro)renderer.intro(config,names,time,w,h,P.sampleSlant('53e2f276-2174-4276-917d-56c0db8848bb'));
@@ -238,7 +238,9 @@ async function monitorPreview(target){
         }else if(phase==='kits'){
           if(!kit){text('Choose a kit to preview',w/2,h/2,{center:true});return view;}
           if(!inventory){inventorySource=document.createElement('div');inventorySource.hidden=true;inventorySource.inert=true;target.after(inventorySource);inventory=new HeritageInventory.Inventory(inventorySource);}
-          const key=JSON.stringify([kit,inventoryMode]);if(key!==kitSignature){kitSignature=key;inventory.set(kit,{mode:inventoryMode,hideCrafting:true,controlledAim:true});}
+          const modelOnly=kitPreview==='model';
+          const mode=modelOnly?'player':inventoryMode,key=JSON.stringify([kit,mode,modelOnly]);
+          if(key!==kitSignature){kitSignature=key;inventory.set(kit,{mode,modelOnly,hideCrafting:true,controlledAim:true});}
           inventory.visible=true;inventory.draw();const bw=inventory.layout.width,bh=inventory.layout.height,x=Math.trunc((w-bw)/2),y=Math.trunc((h-bh)/2);
           ctx.drawImage(inventory.canvas,x,y,bw,bh);const titleY=Math.max(2,y-13),center=x+Math.trunc(bw/2);let title=label(kit,'title')+' ('+(kitIndex+1)+'/'+kitCount+')';
           while(width(literal(title))>Math.min(w-24,bw+60))title=Array.from(title).slice(0,-1).join('');
@@ -520,7 +522,9 @@ function enter(focus=true){
       if(control.kind==='cosmetics')inventoryOptions.cosmetics=!inventoryOptions.cosmetics;
       kitFrames.clear();inventory.set(session.kit,inventoryOptions);
     }});
-    inventoryOptions.mode=$('flow-inventory-mode').value;inventoryOptions.hideCrafting=true;inventoryOptions.controlledAim=true;inventoryOptions.passiveWheel=true;inventory.set(session.kit,inventoryOptions);
+    inventoryOptions.modelOnly=session.choices.kitPreview==='model';
+    inventoryOptions.mode=inventoryOptions.modelOnly?'player':$('flow-inventory-mode').value;
+    inventoryOptions.hideCrafting=true;inventoryOptions.controlledAim=true;inventoryOptions.passiveWheel=true;inventory.set(session.kit,inventoryOptions);
   }
   if(session.phase==='review'){
     segments=F.narration(playerName(),sampleNames(),session.kit,bundled.translations);
@@ -650,11 +654,13 @@ function kitFrame(index,kits){
 function kitScreen(w,h,now){
   const progress=kitProgress(now),reviewing=kitConfirming||progress>0,layout=inventory.layout,bw=layout.width,bh=layout.height,normalX=Math.trunc((w-bw)/2),normalY=Math.trunc((h-bh)/2),center=normalX+Math.trunc(bw/2),pose=HeritagePresentation.kitPose(w,h,bw,bh,progress,now);
   const response=1-Math.exp(-Math.min(.05,Math.max(0,(now-kitRenderedAt)/1000))*12);kitRenderedAt=now;
-  const yaw=Math.atan((normalX+layout.inventoryX+layout.playerX-pointer.x)/40)*(reviewing?1-progress:1),pitch=Math.atan((normalY+layout.inventoryY+32-pointer.y)/40)*(reviewing?1-progress:1);
+  const modelOnly=inventoryOptions.modelOnly;
+  const aimX=modelOnly?bw/2:layout.inventoryX+layout.playerX,aimY=modelOnly?bh/2:layout.inventoryY+32;
+  const yaw=Math.atan((normalX+aimX-pointer.x)/40)*(reviewing?1-progress:1),pitch=Math.atan((normalY+aimY-pointer.y)/40)*(reviewing?1-progress:1);
   kitYaw=Number.isNaN(kitYaw)?yaw:kitYaw+(yaw-kitYaw)*response;kitPitch=Number.isNaN(kitPitch)?pitch:kitPitch+(pitch-kitPitch)*response;
   inventory.aim={x:-Math.tan(kitYaw)*40,y:-Math.tan(kitPitch)*40};inventory.visible=true;inventory.draw();
   const kits=session.allowed(),motion=carousel.motion(now),moving=motion.position!==session.kitIndex||motion.velocity!==0;
-  const host=$('flow-inventory');host.hidden=reviewing||moving;host.style.pointerEvents=transition.phase==='idle'?'':'none';
+  const host=$('flow-inventory');host.hidden=modelOnly||reviewing||moving;host.style.pointerEvents=transition.phase==='idle'?'':'none';
   if(inventory.ready){
     for(const index of kitFrames.keys())if(Math.abs(index-motion.position)>2)kitFrames.delete(index);
     for(const card of carousel.poses({x:normalX,y:normalY,width:bw,height:bh},w,kits.length,now)){
@@ -670,6 +676,7 @@ function kitScreen(w,h,now){
     }
   }
   if(reviewing){ctx.save();ctx.translate(pose.x+bw*pose.scale/2,pose.y+bh*pose.scale/2);ctx.rotate(pose.tilt*Math.PI/180);ctx.scale(pose.scale,pose.scale);ctx.drawImage(inventory.canvas,-bw/2,-bh/2,bw,bh);ctx.restore();}
+  else if(!moving&&modelOnly)ctx.drawImage(inventory.canvas,normalX,normalY,bw,bh);
   else if(!moving)Object.assign(host.style,{left:normalX/w*100+'%',top:normalY/h*100+'%',width:bw/w*100+'%',height:bh/h*100+'%'});
   const titleY=Math.max(2,normalY-13),title=label(session.kit,'title')+' ('+(session.kitIndex+1)+'/'+session.allowed().length+')';
   if(progress<1){const alpha=Math.max(4,Math.round((1-progress)*255));if(titleY>=16)text('Choose your starting kit',center,titleY-12,{center:true,alpha});let shown=title;while(width(literal(shown))>Math.min(w-24,bw+60))shown=Array.from(shown).slice(0,-1).join('');text(shown,center,titleY,{center:true,alpha});}
@@ -788,7 +795,7 @@ function progressSnapshot(){
   if(passedLocation&&(visited.has('location')||visited.has('location-confirm')))parts.push('location');
   if(passedKit&&(visited.has('kit')||visited.has('kit-confirm')||session.allowed().length===1&&visited.has('location-confirm')))parts.push('kit');
   if(passedStory&&visited.has('review'))parts.push('arrival');if(phase==='complete'&&(visited.has('intro')||!session.arrival.intro&&visited.has('review')))parts.push('intro');
-  return {...flowSnapshot(),parts,settings:{resolution:$('flow-resolution').value,guiScale:lockedScale||playerScale,playerGuiScale:playerScale,inventory:$('flow-inventory-mode').value}};
+  return {...flowSnapshot(),parts,settings:{resolution:$('flow-resolution').value,guiScale:lockedScale||playerScale,playerGuiScale:playerScale,inventory:session.choices.kitPreview==='model'?'Model only':$('flow-inventory-mode').value}};
 }
 function editChoices(){
   const snapshot=session?flowSnapshot():null,location=previewState?.locations.find(entry=>previewState.namespace+':'+entry.path===snapshot?.spawnId),kit=previewState?.kits.find(entry=>previewState.namespace+':'+entry.path===snapshot?.kitId);
@@ -810,7 +817,7 @@ async function open(output,state,options={}){
   flowReturnFocus=document.activeElement;const id=++openId;previewState=structuredClone(state);playerScale=Number($('flow-scale').value);session=null;notice='';plannedRoute=options.route??options.resume??null;$('flow-target').hidden=!plannedRoute;$('flow-target').textContent=options.resume?'Resuming your selected path from '+(options.resume.phase??'selection').replaceAll('-',' ')+'.':plannedRoute?'Choose the location shown in the test path. Its kit and pool destination are preselected.':'';dialog.showModal();$('flow-phase').textContent='Loading preview…';$('flow-status').textContent='Loading game assets…';
   try{
     HeritageDialogueAudio.prepare().catch(error=>{notice='Preview audio could not load: '+error.message;});
-    await load();if(!dialog.open||id!==openId)return;const choices=F.catalog(output,bundled);if(plannedRoute){const spawn=choices.spawns.find(entry=>entry.id===plannedRoute.spawnId),kit=choices.kits.find(entry=>entry.id===plannedRoute.kitId);$('flow-target').textContent=(options.resume?'Resuming: ':'Test path: ')+(spawn?label(spawn,'title'):'Unavailable location')+(kit?' / '+label(kit,'title'):'')+(Number.isInteger(plannedRoute.poolIndex)?' / Place '+(plannedRoute.poolIndex+1):'');}lockedScale=choices.guiScale;resize();pictures.clear();
+    await load();if(!dialog.open||id!==openId)return;const choices=F.catalog(output,bundled);if(plannedRoute){const spawn=choices.spawns.find(entry=>entry.id===plannedRoute.spawnId),kit=choices.kits.find(entry=>entry.id===plannedRoute.kitId);$('flow-target').textContent=(options.resume?'Resuming: ':'Test path: ')+(spawn?label(spawn,'title'):'Unavailable location')+(kit?' / '+label(kit,'title'):'')+(Number.isInteger(plannedRoute.poolIndex)?' / Place '+(plannedRoute.poolIndex+1):'');}lockedScale=choices.guiScale;$('flow-inventory-mode').closest('label').hidden=choices.kitPreview==='model';resize();pictures.clear();
     for(const entry of previewState.locations)if(HeritagePack.usesPicture(entry)){
       const image=new Image();image.src=entry.picture.data;await image.decode();pictures.set(HeritagePack.pictureId(previewState.namespace,entry.path),image);
     }

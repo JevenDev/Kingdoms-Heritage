@@ -24,7 +24,7 @@ function create({editLocation,editIntro,testFlow,selectContext,reorder,editText,
     });
     if(previewLocation!==entry?.id||!kits.some(kit=>kit.id===previewKit)){previewLocation=entry?.id;previewKit=kits[0]?.id??'';}
     const kitDraft=kits.find(kit=>kit.id===previewKit),kit=kitDraft?.document;
-    return {ordered,entry,spawn,id,kits,kitError:kitDraft?.error,kit:kitDraft?.error?null:kit};
+    return {ordered,entry,spawn,id,kits,kitError:kitDraft?.error,kit:kitDraft?.error?null:kit,kitPreview:choices.kitPreview};
   }
   function arrival(model){
     const index=poolIndex===''?null:Number(poolIndex),spawn=model.spawn?.type==='pool'&&Number.isInteger(index)?F.destination(model.spawn,index):model.spawn;
@@ -42,7 +42,7 @@ function create({editLocation,editIntro,testFlow,selectContext,reorder,editText,
       else if(speechRunning)stopSpeech();
       const resolution=$(scope==='pack'?'pack-preview-resolution':'location-preview-resolution').value.split('x').map(Number),guiScale=current.state.guiScale||Number($('flow-scale').value);
       nodes[scope].parentElement.style.setProperty('--monitor-ratio',resolution[0]/resolution[1]);
-      const view=monitors[scope].draw({spawns:tools.preview(model.ordered),page:tools.page(),selectedId:model.id,guiScale,width:resolution[0],height:resolution[1],phase,expanded:scope==='location'&&expanded,intro:config,time,names:story.names,pictureData:current.pictureData,kit:model.kit,kitIndex:model.kits.findIndex(kit=>kit.id===previewKit),kitCount:model.kits.length});
+      const view=monitors[scope].draw({spawns:tools.preview(model.ordered),page:tools.page(),selectedId:model.id,guiScale,width:resolution[0],height:resolution[1],phase,expanded:scope==='location'&&expanded,intro:config,time,names:story.names,pictureData:current.pictureData,kit:model.kit,kitIndex:model.kits.findIndex(kit=>kit.id===previewKit),kitCount:model.kits.length,kitPreview:model.kitPreview});
       $(scope==='pack'?'pack-visual-scale':'location-visual-scale').textContent=(current.state.guiScale?'Pack GUI scale '+current.state.guiScale:'Player GUI scale '+(guiScale||'Auto')+' for this preview')+' · effective '+view.scale;
       if(scope==='location'){
         $('arrival-play').textContent=playing?'Pause':'Play';$('arrival-scrub').value=String(time);$('arrival-time').textContent=seconds(time)+' / '+seconds(config?P.duration(config,currentStory.names):0);

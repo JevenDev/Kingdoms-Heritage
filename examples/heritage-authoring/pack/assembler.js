@@ -126,9 +126,9 @@ function fixIssue(issue){
     if(issue.field!=='path'&&catalog.kits.some(draft=>draft.id===issue.kitId))openEmbedded('kit',issue.kitId);else showKitLibrary(issue.kitId,issue.field==='path');return;
   }
   if(issue.locationId){state.active=issue.locationId;renderLocation();setStep('locations');}
-  else setStep(['name','namespace','description','guiScale'].includes(issue.field)?'pack':'locations');
+  else setStep(['name','namespace','description','guiScale','kitPreview'].includes(issue.field)?'pack':'locations');
   if(issue.locationId)setLocationPart(issue.field==='intro'?'intro':issue.field==='kits'?'kits':'details');returnToReview=returning;updateSteps();
-  const selector=issue.locationId?(issue.destination!==undefined?'[data-destination="'+issue.destination+'"][data-destination-field="'+issue.field+'"]':issue.field==='path'?'#location-id':issue.field==='intro'?'#location-intro':issue.field==='kits'?'#kit-mode':'[data-location-field="'+issue.field+'"]'):({'name':'#pack-name','namespace':'#namespace','description':'#pack-description','guiScale':'#pack-gui-scale'})[issue.field]??'#kit-mode';
+  const selector=issue.locationId?(issue.destination!==undefined?'[data-destination="'+issue.destination+'"][data-destination-field="'+issue.field+'"]':issue.field==='path'?'#location-id':issue.field==='intro'?'#location-intro':issue.field==='kits'?'#kit-mode':'[data-location-field="'+issue.field+'"]'):({'name':'#pack-name','namespace':'#namespace','description':'#pack-description','guiScale':'#pack-gui-scale','kitPreview':'#pack-kit-preview'})[issue.field]??'#kit-mode';
   const field=document.querySelector(selector)??$('kit-mode');for(let parent=field.parentElement;parent;parent=parent.parentElement)if(parent.tagName==='DETAILS')parent.open=true;field.focus();
 }
 function locationDescription(entry) {
@@ -576,8 +576,8 @@ function previewFile() {
 }
 function renderOutput() {
   output=P.build(state,catalog);if(active()){showType();document.querySelectorAll('#pool-destinations > .pool-destination').forEach((row,index)=>destinationType(row,index,active().destinations[index]?.type));}renderOverview();
-  for(const field of document.querySelectorAll('[data-location-field],[data-destination-field],#pack-gui-scale,[data-kit-path],#namespace,#pack-name,#pack-description,#location-id,#kit-mode,#location-intro')) {
-    const property=field.dataset.destinationField??field.dataset.locationField??({'pack-name':'name','pack-description':'description','namespace':'namespace','location-id':'path','kit-mode':'kits','location-intro':'intro','pack-gui-scale':'guiScale'})[field.id]??'path';
+  for(const field of document.querySelectorAll('[data-location-field],[data-destination-field],#pack-gui-scale,#pack-kit-preview,[data-kit-path],#namespace,#pack-name,#pack-description,#location-id,#kit-mode,#location-intro')) {
+    const property=field.dataset.destinationField??field.dataset.locationField??({'pack-name':'name','pack-description':'description','namespace':'namespace','location-id':'path','kit-mode':'kits','location-intro':'intro','pack-gui-scale':'guiScale','pack-kit-preview':'kitPreview'})[field.id]??'path';
     const location=field.hasAttribute('data-location-field')||field.hasAttribute('data-destination-field')||['location-id','kit-mode','location-intro'].includes(field.id);
     const issue=output.issues.find(issue=>issue.field===property&&(field.dataset.kitPath?issue.kitId===field.dataset.kitPath:location?issue.locationId===state.active&&(issue.destination===undefined?!field.hasAttribute('data-destination'):issue.destination===Number(field.dataset.destination)):!issue.locationId&&!issue.kitId));
     const showIssue=!!issue&&(revealValidation||touched.has(fieldKey(field)));
@@ -592,7 +592,7 @@ function renderOutput() {
     const suggestion=showIssue&&property==='dimension'&&state.allowCustomTargets!==true?P.dimensionSuggestion(field.value):'';
     if(suggestion)message.append(element('button',{type:'button',class:'dimension-correction','data-correct-dimension':suggestion,'aria-label':'Use '+suggestion},'Use this ID'));
     if(showIssue)for(let parent=field.parentElement;parent;parent=parent.parentElement){if(parent.tagName==='DETAILS')parent.open=true;if(parent.matches('[data-location-types],[data-pool-types]'))parent.hidden=false;}
-    const help=field.dataset.locationField==='target'?'target-help':field.id==='pack-gui-scale'?'gui-scale-help':field.id==='namespace'?'namespace-help':field.id==='location-id'?'location-id-help':'';
+    const help=field.dataset.locationField==='target'?'target-help':field.id==='pack-gui-scale'?'gui-scale-help':field.id==='pack-kit-preview'?'kit-preview-help':field.id==='namespace'?'namespace-help':field.id==='location-id'?'location-id-help':'';
     field.setAttribute('aria-describedby',(help?help+' ':'')+message.id);
   }
   const preparing=state.locations.some(entry=>pictureRequests.has(entry)),previewCurrent=!!previewed&&previewed===fingerprint();
@@ -624,6 +624,7 @@ function renderOutput() {
 function render() {
   for(const [id,key] of [['pack-name','name'],['namespace','namespace'],['pack-description','description']])$(id).value=state[key];
   $('pack-gui-scale').value=String(state.guiScale??0);
+  $('pack-kit-preview').value=P.kitPreview(state)??'inventory';
   $('allow-custom-targets').checked=state.allowCustomTargets===true;
   $('keep-locations').checked=state.keepLocations;$('keep-kits').checked=state.keepKits;
   projectOptions();renderKits();renderIntros();renderLocation({sync:false});renderOutput();packTools?.refresh();refreshShared();
@@ -647,6 +648,11 @@ for(const [id,key] of [['pack-name','name'],['namespace','namespace'],['pack-des
 for(const [id,key] of [['keep-locations','keepLocations'],['keep-kits','keepKits'],['allow-custom-targets','allowCustomTargets']])$(id).addEventListener('change',event=>{state[key]=event.target.checked;kitChoices();changed();});
 $('pack-gui-scale').addEventListener('change',event=>{
   const value=Number(event.target.value);if(value)state.guiScale=value;else delete state.guiScale;changed();
+});
+$('pack-kit-preview').addEventListener('change',event=>{
+  state.kitPreview=event.target.value;
+  changed();
+  document.querySelector('[data-workspace-view="kits"]').click();
 });
 $('kit-library').addEventListener('click',event=>{
   const button=event.target.closest('[data-remove-missing-kit]');if(!button)return;const id=button.dataset.removeMissingKit;loadCatalog();
@@ -860,7 +866,7 @@ for(const button of document.querySelectorAll('[data-pack-step],[data-go-step]')
 $('step-back').addEventListener('click',()=>advance('back'));$('step-next').addEventListener('click',()=>advance('next'));
 $('export-fix').addEventListener('click',()=>setStep('preview'));$('export-save-project').addEventListener('click',()=>$('save-project').click());
 window.addEventListener('popstate',()=>{if(!closeEmbedded())return;$('project-status').textContent='';const params=new URLSearchParams(location.search),id=params.get('pack');if(id&&id!==projects?.active&&projects?.projects.some(entry=>entry.id===id)){save();projects.active=id;state=projects.state();discoverKits();revealValidation=false;touched.clear();previewed='';render();save();}const selected=params.get('location');if(selected&&state.locations.some(entry=>entry.id===selected)){state.active=selected;renderLocation();save();}setStep(params.get('step'),{history:false});if(currentStep==='locations')setLocationPart(params.get('part')??locationPart,{route:false});});
-document.addEventListener('input',event=>{if(state&&event.target.matches('[data-location-field],[data-destination-field],#pack-gui-scale,[data-kit-path],#namespace,#pack-name,#pack-description,#location-id,#kit-mode,#location-intro')){touched.add(fieldKey(event.target));historyGroup=event.target.type==='checkbox'||event.target.tagName==='SELECT'?'':fieldKey(event.target);historyLabel='Edit '+(event.target.getAttribute('aria-label')||'pack');}},{capture:true});
+document.addEventListener('input',event=>{if(state&&event.target.matches('[data-location-field],[data-destination-field],#pack-gui-scale,#pack-kit-preview,[data-kit-path],#namespace,#pack-name,#pack-description,#location-id,#kit-mode,#location-intro')){touched.add(fieldKey(event.target));historyGroup=event.target.type==='checkbox'||event.target.tagName==='SELECT'?'':fieldKey(event.target);historyLabel='Edit '+(event.target.getAttribute('aria-label')||'pack');}},{capture:true});
 for(const kind of ['biome','structure','dimension']) {
   const ids=[...HeritageLocations[kind],...(HeritageLocations[kind+'Tags']??[]).map(id=>'#'+id)];
   $(kind+'-choices').replaceChildren(...ids.map(id=>option(id,placeName(id))));

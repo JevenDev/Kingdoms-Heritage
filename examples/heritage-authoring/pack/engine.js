@@ -9,6 +9,13 @@ const copy=value=>JSON.parse(JSON.stringify(value));
 const types=['default','random','biome','structure','fixed','pool'];
 const bundledSpawns=['default','random','plains','village'];
 const selectionPath='data/kingdomsheritage/heritage/selection.json';
+const kitPreview=state=>state.kitPreview===undefined?state.selectionMetadata?.kit_preview:state.kitPreview;
+function selectionDocument(state){
+  const document={...copy(state.selectionMetadata??{}),gui_scale:state.guiScale===undefined?0:state.guiScale};
+  const mode=kitPreview(state);
+  if(mode!==undefined)document.kit_preview=mode;
+  return document;
+}
 const emptyKit={id:'builtin-empty',name:'Empty-handed',document:{title:'Empty-handed',description:'Begin with an empty inventory.',items:[]},error:'',warnings:[]};
 const numericFields=['x','y','z','order','search_radius','random_radius'];
 const fields=['title','subtitle','description','outline','title_key','subtitle_key','description_key','type','dimension','target','piece','x','y','z','order','search_radius','random_radius','image'];
@@ -196,7 +203,7 @@ function previewFiles(state,catalog) {
     if(entry.kitMode!=='selected'&&state.keepKits)document.kits.push('kingdomsheritage:default');
     files.push({path:'data/'+namespace+'/heritage/spawns/'+entry.path+'.json',content:JSON.stringify(document,null,2)+'\n'});
   }
-  files.push({path:selectionPath,content:JSON.stringify({gui_scale:state.guiScale===undefined?0:state.guiScale},null,2)+'\n'});
+  files.push({path:selectionPath,content:JSON.stringify(selectionDocument(state),null,2)+'\n'});
   files.push({path:'pack.mcmeta',content:JSON.stringify({pack:{pack_format:48,description:state.description}},null,2)+'\n'});
   return files;
 }
@@ -232,11 +239,14 @@ function build(state,catalog) {
     if(paths.has(path))throw new Error('Duplicate export path: '+path);
     paths.add(path);files.push({path,content:JSON.stringify(document,null,2)+'\n'});
   };
+  const selection=selectionDocument(state);
   report('GUI scale',()=>{
-    const guiScale=state.guiScale===undefined?0:state.guiScale;
-    if(!Number.isInteger(guiScale)||guiScale<0||guiScale>16)throw Object.assign(fieldError('guiScale','Use a whole number from 0 to 16.'),{path:['gui_scale']});
-    add(selectionPath,{...copy(state.selectionMetadata??{}),gui_scale:guiScale});
+    if(!Number.isInteger(selection.gui_scale)||selection.gui_scale<0||selection.gui_scale>16)throw Object.assign(fieldError('guiScale','Use a whole number from 0 to 16.'),{path:['gui_scale']});
   },undefined,selectionPath);
+  report('Kit preview',()=>{
+    if(selection.kit_preview!==undefined&&!['inventory','model'].includes(selection.kit_preview))throw Object.assign(fieldError('kitPreview','Choose Inventory or Model only.'),{path:['kit_preview']});
+  },undefined,selectionPath);
+  add(selectionPath,selection);
   report('Kit order',()=>{if(state.kitOrder!==undefined&&(!Array.isArray(state.kitOrder)||state.kitOrder.some(id=>typeof id!=='string')||new Set(state.kitOrder).size!==state.kitOrder.length))throw fieldError('kitOrder','List each kit at most once.');});
   const selected=(Array.isArray(state.kits)?state.kits:[]).filter(entry=>entry.included);
   for(const selection of selected)report('Kit '+(selection.path||selection.id),()=>{
@@ -325,7 +335,7 @@ function build(state,catalog) {
   if(resourceFiles.length)resourceFiles.unshift({path:'pack.mcmeta',content:JSON.stringify(metadata(state.resourceMetadata,34),null,2)+'\n'});
   return {files:errors.length?[]:files,resourceFiles:errors.length?[]:resourceFiles,pictureCount,previewFiles:errors.length?previewFiles(state,catalog):files.filter(file=>typeof file.content==='string'),errors,issues,warnings:[...new Set(warnings)],kitCount:count,locationCount:spawnIds.size};
 }
-const api={copy,orderedKitIds,slug,fileId,resource,drafts,location,importSpawn,dimensionSuggestion,knownResource,validateSpawn,build,emptyKit,types,fields,destinationFields,usesPicture,pictureId,pictureBytes,selectionPath};
+const api={copy,orderedKitIds,slug,fileId,resource,drafts,location,importSpawn,dimensionSuggestion,knownResource,validateSpawn,build,emptyKit,types,fields,destinationFields,usesPicture,pictureId,pictureBytes,selectionPath,kitPreview};
 if(typeof module!=='undefined')module.exports=api;
 else globalThis.HeritagePack=api;
 })();

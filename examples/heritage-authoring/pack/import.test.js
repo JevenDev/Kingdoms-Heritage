@@ -115,6 +115,23 @@ test('imported pictures retain crop dimensions and renaming moves only managed f
   const original=Picture.source({data:'data:image/png;base64,'+larger.toString('base64'),keepResolution:true});assert.equal(original.width,256);assert.equal(original.height,384);
 });
 
+test('kit preview follows the exported selection settings through import and edits',async()=>{
+  const state={...initial(),kitPreview:'model'},output=Pack.build(state,{kits:[kit],intros:[]});
+  const selection=result=>JSON.parse(result.files.find(file=>file.path===Pack.selectionPath).content);
+  const preview=result=>Flow.catalog(result,{spawns:[],kits:[]}).kitPreview;
+  assert.equal(selection(output).kit_preview,'model');
+  assert.equal(preview(output),'model');
+
+  const project=await Import.read(Zip.zip(output.files),'story.zip',ids());
+  assert.equal(project.pack.kitPreview,'model');
+  delete project.pack.kitPreview;
+  assert.equal(Pack.kitPreview(project.pack),'model');
+  assert.equal(preview(rebuilt(project)),'model');
+  project.pack.kitPreview='inventory';
+  assert.equal(selection(rebuilt(project)).kit_preview,'inventory');
+  assert.equal(preview(rebuilt(project)),'inventory');
+});
+
 test('unrestricted kit selectors and metadata survive import and later edits',async()=>{
   const state=initial(),output=Pack.build(state,{kits:[kit],intros:[]});
   const spawn=output.files.find(file=>file.path.endsWith('/spawns/location_1.json')),document=JSON.parse(spawn.content);delete document.kits;spawn.content=JSON.stringify(document);

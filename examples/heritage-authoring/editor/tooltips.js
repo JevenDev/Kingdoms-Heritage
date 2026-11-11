@@ -48,6 +48,7 @@ globalThis.HeritageTooltips={setup({font,sprite,screen='intro'}) {
     'pack-try-flow':['Preview full flow','Play cards, kit selection and arrival in sequence.'],
     'location-try-flow':['Preview full flow','Play cards, kit selection and arrival in sequence.'],
     'preview-flow':['Preview full flow','Play cards, kit selection and arrival in sequence.'],
+    'pack-kit-preview':['Kit preview','Inventory shows the full kit. Model only enlarges the equipped player in kit selection and confirmation.'],
     'pack-preview-resolution':['Preview resolution','Match the game window. Preview only.'],
     'location-preview-resolution':['Preview resolution','Match the game window. Preview only.'],
     'crop-reset':['Reset framing','Reset position and zoom. Keep the resolution setting.'],

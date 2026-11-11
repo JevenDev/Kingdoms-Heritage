@@ -9,7 +9,9 @@ function scene(choices,images,spawnId,kitId,poolIndex=null){
   if(spawn.type!=='pool')poolIndex=null;else if(!Number.isInteger(poolIndex)||!spawn.pool[poolIndex])return null;
   const arrival=F.destination(spawn,poolIndex??0),{intro,...destination}=arrival,{pool,intro:defaultIntro,...card}=spawn;
   const image=spawn.image?.split(':'),picture=image?images['assets/'+image[0]+'/'+image[1]]??'external':null,scale=choices.guiScale??0;
-  const parts={location:hash([card,picture,choices.spawns.map(entry=>entry.id),scale]),kit:hash([kit,choices.kits.filter(entry=>!spawn.kits||spawn.kits.includes(entry.id)).map(entry=>entry.id),scale]),arrival:hash([destination,kit.title,kit.title_key,kit.items.length===0,scale]),intro:hash([intro??null,scale])};
+  const kitInputs=[kit,choices.kits.filter(entry=>!spawn.kits||spawn.kits.includes(entry.id)).map(entry=>entry.id),scale];
+  if(choices.kitPreview==='model')kitInputs.push('model');
+  const parts={location:hash([card,picture,choices.spawns.map(entry=>entry.id),scale]),kit:hash(kitInputs),arrival:hash([destination,kit.title,kit.title_key,kit.items.length===0,scale]),intro:hash([intro??null,scale])};
   return {key:JSON.stringify([spawnId,kitId,poolIndex]),spawnId,kitId,poolIndex,spawn,kit,arrival,parts,fingerprint:hash(parts)};
 }
 function count(choices,filter=''){
