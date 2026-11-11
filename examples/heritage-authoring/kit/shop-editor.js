@@ -230,8 +230,11 @@ function create(config) {
       row.hint.textContent=hint?.text??'';
       row.hint.dataset.field=hint?.field??'';
       for(const field of ['cost','limit']){
-        if(hint?.field===field)row[field].setAttribute('aria-describedby',row.hint.id);
-        else row[field].removeAttribute('aria-describedby');
+        const input=row[field];
+        const ids=(input.getAttribute('aria-describedby')??'').split(/\s+/).filter(id=>id&&id!==row.hint.id);
+        if(hint?.field===field)ids.push(row.hint.id);
+        if(ids.length)input.setAttribute('aria-describedby',ids.join(' '));
+        else input.removeAttribute('aria-describedby');
       }
     }
   }
@@ -244,8 +247,13 @@ function create(config) {
     hint.id='shop-budget-hint-'+rows.length;hint.hidden=true;
     const row={element,icon,name,position,hint};
     identity.addEventListener('pointerdown',event=>dragOffer(event,row.index));
-    for(const [field,title,min,max] of [['count','Count',1,99],['cost','Price',0,1000000],['limit','Limit',1,41]]){
+    for(const [field,title,min,max,help] of [
+      ['count','Count',1,99,'Items the player gets each time they buy this offer.'],
+      ['cost','Price',0,1000000,'Shop points charged for one purchase. Use 0 to make it free.'],
+      ['limit','Limit',1,41,'How many times each player can buy this offer during kit selection.']
+    ]){
       const fieldLabel=label('label','',title),input=label('input');
+      fieldLabel.dataset.tooltip=JSON.stringify([title,help]);
       input.type='number';input.min=min;input.max=max;input.step='1';input.required=true;
       input.addEventListener('change',()=>number(input,{type:field,index:row.index}));
       if(field!=='count')input.addEventListener('input',updateHints);
@@ -258,7 +266,9 @@ function create(config) {
     const sectionLabel=label('label','shop-offer-section','Section'),section=label('select');
     section.addEventListener('change',()=>apply({type:'section',index:row.index,value:section.value}));
     sectionLabel.append(section);
-    const slotLabel=label('label','shop-offer-slot','Slot (row, column)'),slot=label('input');
+    const slotTitle='Slot (row, column)';
+    const slotLabel=label('label','shop-offer-slot',slotTitle),slot=label('input');
+    slotLabel.dataset.tooltip=JSON.stringify([slotTitle,'Position in this section’s grid. The top left is 1, 1. Leave blank for automatic placement.']);
     slot.placeholder='Automatic';
     slot.addEventListener('change',()=>{
       const value=slot.value.trim(),match=/^(\d+)\s*,\s*(\d+)$/.exec(value);
