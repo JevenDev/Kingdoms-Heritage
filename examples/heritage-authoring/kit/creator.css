@@ -141,6 +141,7 @@
 .shop-heading, .shop-add-form, .shop-page-nav { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 8px 16px; }
 .shop-heading { justify-content: space-between; align-items: flex-start; margin-bottom: 16px; }
 .shop-heading h2 { margin: 0 0 6px; }
+.shop-heading-actions { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 8px 12px; }
 .shop-heading p, .shop-heading .stack, .shop-add-form .stack { margin: 0; }
 .shop-budget { width: 144px; }
 .shop-budget input, .shop-add-form input { width: 100%; }
@@ -159,6 +160,8 @@
 .shop-offer-fields { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; }
 .shop-offer-fields label { display: grid; min-width: 0; gap: 4px; color: var(--muted); font-size: calc(12px + var(--reading-increase)); }
 .shop-offer-fields input { width: 100%; min-width: 0; padding: 4px; }
+#author-workspace .shop-budget-hint { grid-column: 2 / -1; margin: 0; }
+#author-workspace .shop-budget-hint[data-field=cost] { color: var(--danger, #e6a3a3); }
 .shop-offer-actions { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; }
 .shop-offer-actions button, .shop-page-nav button { padding: 4px 8px; min-height: 28px; font-size: calc(12px + var(--reading-increase)); }
 .shop-preview { position: sticky; top: 0; }

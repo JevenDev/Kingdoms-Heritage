@@ -86,8 +86,13 @@ function equipmentSlot(stack){
   return -1;
 }
 class Session {
-  constructor(choices){this.choices=structuredClone(choices);this.restart();}
-  restart(){this.phase='location';this.spawn=null;this.kit=null;this.arrival=null;this.kitIndex=0;this.poolIndex=null;this.purchases=[];}
+  constructor(choices,{shopOnly=false}={}){
+    this.choices=structuredClone(choices);this.shopOnly=shopOnly;this.restart();
+  }
+  restart(){
+    this.phase=this.shopOnly?'kit-shop':'location';this.kit=this.shopOnly?this.choices.kits[0]:null;
+    this.spawn=null;this.arrival=null;this.kitIndex=0;this.poolIndex=null;this.purchases=[];
+  }
   snapshot(){
     const result={phase:this.phase,spawnId:this.spawn?.id??'',kitId:this.kit?.id??'',poolIndex:this.spawn?.type==='pool'?this.poolIndex:null};
     if(this.kit?.shop&&this.purchases.length)result.purchases=this.purchases.map(pick=>({...pick}));
@@ -160,6 +165,7 @@ class Session {
   }
   resetShop(){if(this.phase==='kit-shop')this.purchases=[];}
   next(poolIndex=0){
+    if(this.shopOnly)return;
     if(this.phase==='location-confirm'){
       if(!this.kit)throw new Error('This location has no allowed kits.');
       if(this.allowed().length>1||this.kit.shop){this.phase='kit';return;}
@@ -176,6 +182,7 @@ class Session {
     this.phase='loading';
   }
   back(){
+    if(this.shopOnly)return;
     if(this.phase==='location-confirm'){this.phase='location';return;}
     if(this.phase==='kit'){this.phase='location-confirm';return;}
     if(['kit-confirm','kit-shop'].includes(this.phase)){this.phase='kit';return;}

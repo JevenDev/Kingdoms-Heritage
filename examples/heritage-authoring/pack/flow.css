@@ -18,5 +18,6 @@
 #flow-inventory { position: absolute; }
 #flow-inventory .mc-inventory { margin: 0; }
 .flow-help { max-width: none; }
+#flow-dialog[data-shop-test] [data-flow-only] { display: none; }
 .flow-sample-actions button { margin-bottom: 8px; }
 @media (max-width: 600px) { #flow-dialog { padding: 10px; } .flow-toolbar { gap: 8px; } .flow-toolbar h2 { flex-basis: 100%; } }

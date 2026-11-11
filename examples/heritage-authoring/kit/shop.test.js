@@ -68,6 +68,14 @@ test('shop edits preserve item data and follow game paging when offers cross pag
   assert.deepEqual(pages[0].offers[23],{cost:3,limit:4,item:{id:'minecraft:torch',count:32,components:{'minecraft:custom_name':'"Camping Torches"'}}});
 });
 
+test('budget hints flag unaffordable offers and partially affordable purchase limits',()=>{
+  assert.deepEqual(Shop.budgetHint(6,8),{field:'cost',text:'Price exceeds the 6-point budget.'});
+  assert.deepEqual(Shop.budgetHint(6,3,3),{field:'limit',text:'Budget covers 2 of 3 stacks.'});
+  assert.deepEqual(Shop.budgetHint(0,1,3),{field:'cost',text:'Price exceeds the 0-point budget.'});
+  assert.equal(Shop.budgetHint(0,0,41),null);
+  assert.equal(Shop.budgetHint(6,6),null);
+  assert.equal(Shop.budgetHint(6,2,3),null);
+});
 test('pack export keeps edited shop offers and their limits',()=>{
   const edited=Shop.edit(trail,{type:'budget',value:18});
   const draft=Kit.read(JSON.stringify(edited));

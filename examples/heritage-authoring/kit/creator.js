@@ -31,6 +31,11 @@ const shopStage=()=>document.body.dataset.authorStage==='shop';
 const shopEditor=HeritageShopEditor.create({
   getKit:()=>documentState,
   commit,
+  test:()=>{
+    if(errorState)throw new Error('Fix the kit errors before testing the shop.');
+    if(drafts.size)throw new Error('Apply or revert the pending item edits before testing the shop.');
+    HeritageFlowPreview.openShop(documentState);
+  },
   lockedReason:()=>{
     if(rawInvalid||errorState?.validation&&errorState.path?.[0]==='shop')return {invalid:true,message:'Fix the shop JSON before editing offers.'};
     if(documentState.enabled===false)return {invalid:true,message:'Enable this kit in JSON to edit its shop.'};

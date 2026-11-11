@@ -118,6 +118,22 @@ test('shop purchases appear in arrival and survive back navigation and a resumed
   restored.back();restored.back();restored.back();restored.choose('pack:home');restored.next();restored.next();
   assert.deepEqual(restored.purchases,[]);
 });
+test('standalone shop tests restart with the same draft and a fresh inventory',()=>{
+  const kit=shopChoices().kits.at(-1);
+  const session=new Flow.Session({spawns:[],kits:[kit]},{shopOnly:true});
+  kit.shop.budget=1;
+  assert.equal(session.phase,'kit-shop');
+  assert.equal(session.buy(0),true);
+  assert.equal(session.loadout().items.length,1);
+  assert.deepEqual(kit.items,[]);
+  session.next();session.back();
+  assert.equal(session.phase,'kit-shop');
+  session.restart();
+  assert.equal(session.phase,'kit-shop');
+  assert.equal(session.spent,0);
+  assert.deepEqual(session.loadout().items,[]);
+  assert.equal(session.buy(0),true);
+});
 test('preview purchases from an exported shop never write back to the pack',()=>{
   const location=Pack.location('home');location.kits=['trail'];
   const document=JSON.parse(fs.readFileSync(path.join(__dirname,'../templates/trail-kit.json'),'utf8'));

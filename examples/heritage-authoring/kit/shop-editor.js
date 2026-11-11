@@ -7,6 +7,13 @@ function paginate(offers,page) {
   const index=Math.max(0,Math.min(page,count-1)),start=index*PAGE_SIZE;
   return {index,count,start,offers:offers.slice(start,start+PAGE_SIZE)};
 }
+function budgetHint(budget,cost,limit=1){
+  if(cost===0)return null;
+  if(cost>budget)return {field:'cost',text:'Price exceeds the '+budget+'-point budget.'};
+  const affordable=Math.floor(budget/cost);
+  if(affordable<limit)return {field:'limit',text:'Budget covers '+affordable+' of '+limit+' stacks.'};
+  return null;
+}
 function edit(kit,action) {
   const next=K.copy(kit);
   if(action.type==='add'){
@@ -38,7 +45,7 @@ function edit(kit,action) {
 function create(config) {
   const $=id=>document.getElementById(id),V=HeritageInventory,T=HeritageItemText;
   const budget=$('shop-budget'),form=$('shop-add-form'),itemId=$('shop-item-id'),list=$('shop-offers'),tray=$('shop-tray'),status=$('shop-status');
-  const addButton=form.querySelector('button'),previous=$('shop-prev'),next=$('shop-next');
+  const addButton=form.querySelector('button'),testShop=$('shop-test'),previous=$('shop-prev'),next=$('shop-next');
   const narrow=matchMedia('(max-width:550px)'),preview=$('shop-preview');
   const fitPreview=()=>{preview.open=!narrow.matches;};
   fitPreview();narrow.addEventListener('change',fitPreview);
@@ -92,22 +99,39 @@ function create(config) {
     }
     apply({...action,value:input.valueAsNumber});
   }
+  function updateHints(){
+    for(const row of rows){
+      const inputs=[budget,row.cost,row.limit],hint=inputs.every(input=>input.validity.valid)?
+        budgetHint(budget.valueAsNumber,row.cost.valueAsNumber,row.limit.valueAsNumber):null;
+      row.hint.hidden=!hint;
+      row.hint.textContent=hint?.text??'';
+      row.hint.dataset.field=hint?.field??'';
+      for(const field of ['cost','limit']){
+        if(hint?.field===field)row[field].setAttribute('aria-describedby',row.hint.id);
+        else row[field].removeAttribute('aria-describedby');
+      }
+    }
+  }
   function makeRow(){
     const element=label('li','shop-offer'),identity=label('div','shop-offer-item');
     const icon=label('span','shop-offer-icon'),name=label('span','shop-offer-name'),position=label('span','shop-offer-number');
     identity.append(position,icon,name);
     const fields=label('div','shop-offer-fields'),actions=label('div','shop-offer-actions');
-    const row={element,icon,name,position};
+    const hint=label('p','hint shop-budget-hint');
+    hint.id='shop-budget-hint-'+rows.length;hint.hidden=true;
+    const row={element,icon,name,position,hint};
     for(const [field,title,min,max] of [['count','Count',1,99],['cost','Price',0,1000000],['limit','Limit',1,41]]){
       const fieldLabel=label('label','',title),input=label('input');
       input.type='number';input.min=min;input.max=max;input.step='1';input.required=true;
       input.addEventListener('change',()=>number(input,{type:field,index:row.index}));
+      if(field!=='count')input.addEventListener('input',updateHints);
       input.addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();input.blur();}});
       fieldLabel.append(input);fields.append(fieldLabel);row[field]=input;
     }
     row.up=button('Earlier',()=>apply({type:'move',index:row.index,to:row.index-1},'up'));
     row.down=button('Later',()=>apply({type:'move',index:row.index,to:row.index+1},'down'));
     row.remove=button('Remove',()=>apply({type:'remove',index:row.index},'remove'));
+    fields.append(hint);
     actions.append(row.up,row.down,row.remove);
     element.append(identity,fields,actions);
     element.addEventListener('focusin',()=>highlight(row.index));
@@ -146,7 +170,7 @@ function create(config) {
     const view=paginate(offers,page);page=view.index;
     if(selection>=offers.length)selection=offers.length-1;
     budget.value=Number.isInteger(shop?.budget)?shop.budget:'';
-    budget.disabled=locked||!offers.length;
+    testShop.disabled=budget.disabled=locked||!offers.length;
     itemId.disabled=locked;
     addButton.disabled=locked||offers.length>=MAX_OFFERS;
     $('shop-count').textContent=offers.length?offers.length+' offer'+(offers.length===1?'':'s'):reason?.invalid?'':'Fixed kit';
@@ -171,12 +195,17 @@ function create(config) {
     }
     while(cells.length<PAGE_SIZE)cells.push(makeCell());
     for(const [offset,cell] of cells.entries())fillCell(cell,view.offers[offset],view.start+offset);
-    highlight(selection);
+    updateHints();highlight(selection);
   }
   function add(id){
     const name=K.items.get(K.normalize(id.trim()))?.name??id.trim();
     return apply({type:'add',id},undefined,name+' added.');
   }
+  testShop.addEventListener('click',()=>{
+    try{report();config.test();}
+    catch(error){report(error.message,true);}
+  });
+  budget.addEventListener('input',updateHints);
   budget.addEventListener('change',()=>number(budget,{type:'budget'}));
   budget.addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();budget.blur();}});
   form.addEventListener('submit',event=>{event.preventDefault();if(add(itemId.value)){itemId.value='';itemId.focus();}});
@@ -184,6 +213,6 @@ function create(config) {
   next.addEventListener('click',()=>{page++;render();});
   return {add,render,reset(){page=0;selection=-1;itemId.value='';report();render();}};
 }
-globalThis.HeritageShopEditor={create,edit,paginate};
+globalThis.HeritageShopEditor={create,edit,paginate,budgetHint};
 if(typeof module!=='undefined')module.exports=globalThis.HeritageShopEditor;
 })();
