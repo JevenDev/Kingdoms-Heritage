@@ -133,7 +133,7 @@ async function loadOverlayShader(source,toast=false){
 async function loadArt(){
   if(artLoading)return artLoading;
   artLoading=(async()=>{
-    const response=await fetch(new URL('defaults.json?v=3',base));if(!response.ok)throw new Error('Default locations could not load.');bundled=await response.json();
+    const response=await fetch(new URL('defaults.json?v=4',base));if(!response.ok)throw new Error('Default locations could not load.');bundled=await response.json();
     await Promise.all(['card','card_expanded','card_fallback','default','random','plains','village','disconnect','disconnect_highlighted','select','select_highlighted','unselect','unselect_highlighted','button','button_highlighted','button_disabled','tab_button','tab_button_selected','empty_slot','send_request','shop','tab_top_selected_1','tab_top_selected_2','tab_top_unselected_1','experience_bar_background','experience_bar_progress'].map(async name=>{
       const image=new Image();image.src=name.startsWith('button')?new URL('../../kit/assets/widget/'+name+'.png',base):new URL((name==='shop'?'../../kit/assets/':'')+name+'.png',base);await image.decode();images.set(name,image);
     }));
@@ -753,7 +753,6 @@ function shopName(value,x,y,maxLines,center=false){
     glyphs.push(...ellipsis);
   }
   lines.slice(0,maxLines).forEach((line,index)=>text(line.glyphs,x,y+index*9,{center,outline:false}));
-  return lines.length>maxLines;
 }
 function drawShopTrade(item,x,y,progress){
   if(progress>=1)return;
@@ -810,6 +809,7 @@ function shopScreen(w,h,now){
   const {budget,offers}=session.kit.shop,spent=session.spent,shop=images.get('shop');
   const left=Math.trunc((w-shop.width-inventory.layout.width)/2),top=Math.trunc((h-shop.height)/2),inv=left+shop.width,bottom=top+shop.height+4;
   const visibleOffers=currentShopOffers(),pages=Math.max(1,Math.ceil(visibleOffers.length/F.shopPageSize)),start=shopPage*F.shopPageSize;
+  const slotPitch=18;
   let detail=null;
   const showing=node=>!partyOpen&&node.matches(':hover,:focus-visible');
   const {hovered:hoveredTab,active:activeTab}=drawShopTabs(left,top,showing);
@@ -820,15 +820,16 @@ function shopScreen(w,h,now){
   ctx.drawImage(inventory.canvas,inv,top,inventory.layout.width,inventory.layout.height);
 
   for(const [cell,index] of visibleOffers.slice(start,start+F.shopPageSize).entries()){
-    const x=left+8+cell%3*18,y=top+12+Math.floor(cell/3)*18;
+    const x=left+8+cell%3*slotPitch,y=top+12+Math.floor(cell/3)*slotPitch;
     const status=session.shopStatus(index),{offer}=status,name=HeritageItemText.name(offer.item);
     const action=shopText('buy',name,offer.cost),feedback=shopStatusText(status);
     const limitReached=status.issue==='limit_reached',short=status.issue==='short'||status.issue==='short_one';
     const count=limitReached?'. '+shopText('bought',status.bought,status.limit):'';
-    const node=hit('shop-offer-'+index,action+'. '+feedback+count,x,y,16,16,()=>{
+    const node=hit('shop-offer-'+index,action+'. '+feedback+count,x-1,y-1,slotPitch,slotPitch,()=>{
       if(session.buy(index))updateShop(action+'.',session.purchases.at(-1),true);
       else $('flow-narration').textContent=shopStatusText(session.shopStatus(index))+'. '+shopBudget();
     });
+    if(node.title!==name)node.title=name;
     HeritageInventory.item(ctx,offer.item,x,y,inventory.requestIcon,shopTrade?.offer===index?-shake:0);
     if(short||limitReached)rect(x,y,16,16,short?'#0006':'#00000026');
     if(status.issue==='no_space'){
@@ -839,22 +840,23 @@ function shopScreen(w,h,now){
     const price=literal(String(offer.cost),short?0xff7777:0xffe4a1),scale=Math.min(.75,16/width(price));
     text(price,x,y,{scale,outline:false,shadow:true});
     if(showing(node)){
-      outline(x-1,y-1,18,'#ffe4a1');detail={node,status,name,refunding:false};
+      outline(x-1,y-1,18,'#ffe4a1');detail={status,name,refunding:false};
     }
   }
   for(const {offer,slot} of session.purchases){
     const position=inventory.layout.slots.find(position=>position.index===slot);
     const x=inv+position.x,y=top+position.y,status=session.shopStatus(offer),name=HeritageItemText.name(status.offer.item);
     const action=shopText('sell',name,status.offer.cost);
-    const node=hit('shop-refund-'+slot,action,x,y,16,16,()=>{
+    const node=hit('shop-refund-'+slot,action,x-1,y-1,slotPitch,slotPitch,()=>{
       const pick=session.purchases.find(pick=>pick.slot===slot);
       if(!pick||!session.refund(slot))return;
       const refundedOffer=offers[pick.offer];
       updateShop(shopText('sell',HeritageItemText.name(refundedOffer.item),refundedOffer.cost)+'.',pick);
       if(keyboard)(buttons.get('shop-offer-'+pick.offer)??buttons.get('next'))?.focus({preventScroll:true});
     });
+    if(node.title!==name)node.title=name;
     if(showing(node)){
-      outline(x-1,y-1,18,'#ffe4a1');detail={node,status,name,refunding:true};
+      outline(x-1,y-1,18,'#ffe4a1');detail={status,name,refunding:true};
     }
   }
 
@@ -890,10 +892,9 @@ function shopScreen(w,h,now){
     text(shopText('add_hint'),detailX,top+29,{color:0x505050,limit:68,maxLines:2,outline:false});
     text(shopText('refund_hint'),detailX,top+52,{color:0x505050,limit:68,maxLines:2,outline:false});
   }else{
-    const {node,status,name,refunding}=detail,{offer}=status;
+    const {status,name,refunding}=detail,{offer}=status;
     HeritageInventory.item(ctx,{...offer.item,count:1},inv+77,top+26,inventory.requestIcon);
-    const clipped=shopName(name,detailX,top+27,2);
-    if(clipped)node.title=name;else node.removeAttribute('title');
+    shopName(name,detailX,top+27,2);
     const ink={limit:68,outline:false},feedback=shopStatusText(status,refunding);
     text(shopText('stack_price',offer.item.count??1,shopPoints(offer.cost)),detailX,top+46,{...ink,color:0x505050,maxLines:1});
     const lines=text(feedback,detailX,top+56,{...ink,color:status.issue&&!refunding?0x812e2a:0x37632a,maxLines:2});

@@ -376,7 +376,7 @@ final class KitShopScreen extends Screen {
             var stack = stock.get(offer);
             var entry = shop.offers().get(offer);
             OfferStatus status = purchaseStatus(offer);
-            int x = button.getX(), y = button.getY();
+            int x = button.getX() + 1, y = button.getY() + 1;
             graphics.renderItem(stack, x + (trade != null && trade.offer() == offer ? -shake : 0), y);
             graphics.renderItemDecorations(font, stack, x, y);
             graphics.pose().pushPose();
@@ -539,19 +539,14 @@ final class KitShopScreen extends Screen {
 
     private void renderOfferTooltip(GuiGraphics graphics, int offer, int x, int y) {
         var stack = stock.get(offer);
-        var lines = getTooltipFromItem(minecraft, stack);
-        boolean shortened = itemNameLines(stack).size() > NAME_LINES;
-        if (shortened || lines.size() > 1 || stack.getTooltipImage().isPresent()) {
-            int tooltipY = shortened ? Math.max(y, top + 100) : y;
-            graphics.renderTooltip(font, lines, stack.getTooltipImage(), stack, x, tooltipY);
-        }
+        int tooltipY = itemNameLines(stack).size() > NAME_LINES ? Math.max(y, top + 100) : y;
+        graphics.renderTooltip(font, stack, x, tooltipY);
     }
 
     private boolean hovered(SlotButton button, int mouseX, int mouseY) {
         if (mouseX == -10000) return false;
         if (minecraft.getLastInputType().isKeyboard()) return button.isFocused() && button.visible;
-        return mouseX >= button.getX() && mouseX < button.getX() + 16
-                && mouseY >= button.getY() && mouseY < button.getY() + 16;
+        return button.getRectangle().containsPoint(mouseX, mouseY);
     }
 
     private static Component points(int value) {
@@ -564,7 +559,7 @@ final class KitShopScreen extends Screen {
 
     private static final class SlotButton extends Button {
         SlotButton(int x, int y, Runnable click) {
-            super(x, y, 16, 16, Component.empty(), button -> click.run(), DEFAULT_NARRATION);
+            super(x - 1, y - 1, SLOT_PITCH, SLOT_PITCH, Component.empty(), button -> click.run(), DEFAULT_NARRATION);
         }
 
         @Override
