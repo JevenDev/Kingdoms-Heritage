@@ -27,6 +27,7 @@ final class KitShopScreen extends Screen {
     private static final int COLUMNS = 3, PAGE_SIZE = 24, SLOT_PITCH = 18, BAR_WIDTH = 182;
     private static final int EFFECT_DURATION = 270;
     private static final int DETAIL_WIDTH = 68, NAME_LINES = 2;
+    private static final int CHEST_SLOT = 38, OFFHAND_SLOT = 40;
     private static final int DETAIL_INK = 0xff404040, DETAIL_MUTED = 0xff545454;
     private static final int DETAIL_GAIN = 0xff385023, DETAIL_BLOCKED = 0xff812c23;
     private static final ResourceLocation SHOP = ResourceLocation.fromNamespaceAndPath(
@@ -110,11 +111,11 @@ final class KitShopScreen extends Screen {
     }
 
     private int slotX(int slot) {
-        return left + SHOP_WIDTH + (slot == 40 ? 77 : slot >= 36 ? 8 : 8 + slot % 9 * SLOT_PITCH);
+        return left + SHOP_WIDTH + (slot == OFFHAND_SLOT ? 77 : slot >= 36 ? 8 : 8 + slot % 9 * SLOT_PITCH);
     }
 
     private int slotY(int slot) {
-        if (slot == 40) return top + 62;
+        if (slot == OFFHAND_SLOT) return top + 62;
         if (slot >= 36) return top + 8 + (39 - slot) * SLOT_PITCH;
         return top + (slot < 9 ? 142 : 84 + (slot / 9 - 1) * SLOT_PITCH);
     }
@@ -353,6 +354,7 @@ final class KitShopScreen extends Screen {
         int index = selling ? refund.offer() : hovered;
         var entry = shop.offers().get(index);
         var stack = stock.get(index);
+        graphics.renderItem(stack, slotX(OFFHAND_SLOT), slotY(CHEST_SLOT));
         renderItemName(graphics, stack, x);
         detailLines(graphics, text("stack_price", stack.getCount(), points(entry.cost())), x, top + 46, 1, DETAIL_MUTED);
         var status = selling ? text("refund_points", points(entry.cost())) : blocked != null ? blocked
