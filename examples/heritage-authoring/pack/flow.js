@@ -83,16 +83,25 @@ function shopOfferIndices(shop,section=''){
   return indices;
 }
 function shopLayout(shop,section=''){
-  const positioned=new Map(),automatic=[];
-  for(const index of shopOfferIndices(shop,section)){
-    const offer=shop.offers[index],position=(offer.section??'')===section?offer.position:null;
-    if(!position){automatic.push(index);continue;}
-    if(!positioned.has(position.column))positioned.set(position.column,Array(shopRows).fill(-1));
-    positioned.get(position.column)[position.row-1]=index;
+  const indices=shopOfferIndices(shop,section);
+  const positions=indices.map(index=>{
+    const offer=shop.offers[index];
+    return (offer.section??'')===section?offer.position:undefined;
+  });
+  const columns=Math.max(Math.min(shopColumns,indices.length),Math.ceil(indices.length/shopRows),
+    ...positions.map(position=>position?.column??0));
+  const slots=Array(columns*shopRows).fill(-1);
+  const automatic=[];
+  for(const [offset,index] of indices.entries()){
+    const position=positions[offset];
+    if(position)slots[(position.row-1)*columns+position.column-1]=index;
+    else automatic.push(index);
   }
-  const explicit=[...positioned.keys()].sort((a,b)=>a-b).map(column=>positioned.get(column));
-  const autoColumns=Math.max(Math.min(shopColumns,automatic.length),Math.ceil(automatic.length/shopRows));
-  const columns=explicit.length+autoColumns;
+  let slot=0;
+  for(const index of automatic){
+    while(slots[slot]!==-1)slot++;
+    slots[slot++]=index;
+  }
   return {
     columns,
     pages:Math.max(1,columns-shopColumns+1),
@@ -100,7 +109,7 @@ function shopLayout(shop,section=''){
       return Array.from({length:shopPageSize},(_,cell)=>{
         const row=Math.floor(cell/shopColumns),column=offset+cell%shopColumns;
         if(column>=columns)return -1;
-        return column<explicit.length?explicit[column][row]:automatic[row*autoColumns+column-explicit.length]??-1;
+        return slots[row*columns+column];
       });
     }
   };
@@ -118,9 +127,13 @@ const canonical=value=>Array.isArray(value)?value.map(canonical):value&&typeof v
 const stackRoom=(current,offered)=>current&&K.normalize(current.id)===K.normalize(offered.id)
   &&JSON.stringify(canonical(current.components??{}))===JSON.stringify(canonical(offered.components??{}))
   ?Math.max(0,K.maxCount(current)-(current.count??1)):0;
-function placePurchase(items,slot,stack){
+function placePurchase(items,slot,stack,filled){
   const target=items.get(slot);
-  if(slot>=36)return target?null:new Map(items).set(slot,{index:slot,item:stack});
+  if(slot>=36){
+    if(target)return null;
+    filled?.(slot);
+    return new Map(items).set(slot,{index:slot,item:stack});
+  }
   if(target&&!stackRoom(target.item,stack))return null;
   let remaining=stack.count??1;
   const next=new Map(items);
@@ -129,6 +142,7 @@ function placePurchase(items,slot,stack){
     if(!count)return;
     next.set(index,{...entry,item:{...entry.item,count:(entry.item.count??1)+count}});
     remaining-=count;
+    filled?.(index);
   };
   fill(slot);
   for(let i=0;i<36&&remaining;i++)if(i!==slot)fill(i);
@@ -137,6 +151,7 @@ function placePurchase(items,slot,stack){
   while(empty<36&&next.has(empty))empty++;
   if(empty===36)return null;
   next.set(empty,{index:empty,item:remaining===(stack.count??1)?stack:{...stack,count:remaining}});
+  filled?.(empty);
   return next;
 }
 function purchaseSlot(items,stack){
@@ -207,12 +222,17 @@ class Session {
   shopItems(picks=this.purchases){
     if(this.shopItemsCache?.picks===picks&&this.shopItemsCache.kit===this.kit)return this.shopItemsCache.items;
     let items=new Map((this.kit.items??[]).filter(entry=>(entry.inventory??'player')==='player').map(entry=>[entry.index,entry]));
-    for(const {offer,slot} of picks){
-      items=placePurchase(items,slot,this.kit.shop.offers[offer].item);
+    const purchaseSlots=new Map();
+    for(const [index,{offer,slot}] of picks.entries()){
+      items=placePurchase(items,slot,this.kit.shop.offers[offer].item,filled=>purchaseSlots.set(filled,index));
       if(!items)return null;
     }
-    this.shopItemsCache={kit:this.kit,picks,items};
+    this.shopItemsCache={kit:this.kit,picks,items,purchaseSlots};
     return items;
+  }
+  purchaseSlots(){
+    this.shopItems();
+    return this.shopItemsCache.purchaseSlots;
   }
   get spent(){return this.purchases.reduce((total,pick)=>total+this.kit.shop.offers[pick.offer].cost,0);}
   shopStatus(index){
@@ -231,8 +251,8 @@ class Session {
   }
   refund(slot){
     if(this.phase!=='kit-shop')return false;
-    const index=this.purchases.findLastIndex(pick=>pick.slot===slot);
-    if(index<0)return false;
+    const index=this.purchaseSlots().get(slot);
+    if(index===undefined)return false;
     let requested=this.purchases.filter((_,i)=>i!==index);
     if(!this.shopItems(requested)){
       const placed=[];

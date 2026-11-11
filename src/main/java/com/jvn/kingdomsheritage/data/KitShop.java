@@ -9,7 +9,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
-import java.util.TreeMap;
 import java.util.function.IntFunction;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.GsonHelper;
@@ -143,36 +142,30 @@ public record KitShop(int budget, List<Offer> offers, List<Section> sections) {
     }
 
     public Layout layout(String section) {
-        var positioned = new TreeMap<Integer, int[]>();
-        var automatic = new ArrayList<Integer>();
+        var visible = new ArrayList<Integer>();
+        int columns = 0;
         for (int index = 0; index < offers.size(); index++) {
             var offer = offers.get(index);
             boolean sameSection = section.equals(offer.section());
             if (!section.isEmpty() && !sameSection) continue;
-            var position = sameSection ? offer.position() : null;
-            if (position == null) {
-                automatic.add(index);
-            } else {
-                var column = positioned.computeIfAbsent(position.column(), ignored -> {
-                    var cells = new int[ROWS];
-                    Arrays.fill(cells, -1);
-                    return cells;
-                });
-                column[position.row() - 1] = index;
-            }
+            visible.add(index);
+            if (sameSection && offer.position() != null) columns = Math.max(columns, offer.position().column());
         }
 
-        int automaticColumns = Math.max(Math.min(VISIBLE_COLUMNS, automatic.size()), Math.ceilDiv(automatic.size(), ROWS));
-        int columns = positioned.size() + automaticColumns;
+        int automaticColumns = Math.max(Math.min(VISIBLE_COLUMNS, visible.size()), Math.ceilDiv(visible.size(), ROWS));
+        columns = Math.max(columns, automaticColumns);
         var slots = new ArrayList<Integer>(Collections.nCopies(columns * ROWS, -1));
-        int column = 0;
-        for (var cells : positioned.values()) {
-            for (int row = 0; row < ROWS; row++) slots.set(row * columns + column, cells[row]);
-            column++;
+        var automatic = new ArrayList<Integer>();
+        for (int index : visible) {
+            var offer = offers.get(index);
+            var position = section.equals(offer.section()) ? offer.position() : null;
+            if (position == null) automatic.add(index);
+            else slots.set((position.row() - 1) * columns + position.column() - 1, index);
         }
-        for (int index = 0; index < automatic.size(); index++) {
-            int row = index / automaticColumns;
-            slots.set(row * columns + column + index % automaticColumns, automatic.get(index));
+        int slot = 0;
+        for (int index : automatic) {
+            while (slots.get(slot) != -1) slot++;
+            slots.set(slot++, index);
         }
         return new Layout(columns, List.copyOf(slots));
     }

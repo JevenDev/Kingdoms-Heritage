@@ -8,24 +8,16 @@ function paginate(offers,page) {
   const index=Math.max(0,Math.min(page,count-1)),start=index*PAGE_SIZE;
   return {index,count,start,offers:offers.slice(start,start+PAGE_SIZE)};
 }
-function slotOf({row,column}){
-  const offset=column-1;
-  return Math.floor(offset/COLUMNS)*PAGE_SIZE+(row-1)*COLUMNS+offset%COLUMNS;
-}
 function positionOf(slot){
   return {row:Math.floor(slot%PAGE_SIZE/COLUMNS)+1,column:pageOf(slot)*COLUMNS+slot%COLUMNS+1};
 }
 function layoutSlots(shop,section=''){
-  const slots=[],automatic=[];
-  for(const index of F.shopOfferIndices(shop,section)){
-    const offer=shop.offers[index];
-    if((offer.section??'')===section&&offer.position)slots[slotOf(offer.position)]=index;
-    else automatic.push(index);
-  }
-  let slot=0;
-  for(const index of automatic){
-    while(slots[slot]!==undefined)slot++;
-    slots[slot++]=index;
+  const layout=F.shopLayout(shop,section);
+  const slots=[];
+  for(let column=0;column<layout.columns;column+=COLUMNS){
+    for(const [cell,index] of layout.window(column).entries()){
+      if(index>=0)slots[column/COLUMNS*PAGE_SIZE+cell]=index;
+    }
   }
   return slots;
 }

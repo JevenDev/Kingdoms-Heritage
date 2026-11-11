@@ -46,6 +46,10 @@ final class KitPreview {
         return expected == null ? player.getInventory().getItem(slot).copy() : expected.item(slot);
     }
 
+    int purchaseIndex(int slot) {
+        return expected == null ? -1 : expected.purchaseIndex(slot);
+    }
+
     void render(Runnable draw) {
         if (expected == null) {
             draw.run();
