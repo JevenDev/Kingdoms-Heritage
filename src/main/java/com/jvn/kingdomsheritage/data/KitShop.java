@@ -140,7 +140,7 @@ public record KitShop(int budget, List<Offer> offers, List<Section> sections) {
         if (policy == InventoryPolicy.PRESERVE) {
             throw new HeritageException("shop_preserve", "This start keeps your existing equipment");
         }
-        var occupied = occupiedSlots(player, policy, fixed);
+        long occupied = occupiedSlots(player, policy, fixed, List.of());
         var entries = new ArrayList<KitDefinition.StackEntry>(fixed.size() + picks.size());
         for (var pick : picks) {
             int slot = pick.slot();
@@ -148,8 +148,9 @@ public record KitShop(int budget, List<Offer> offers, List<Section> sections) {
             if (slot < 0 || slot >= MAX_PICKS || slot >= 36 && slot != equipmentSlot(player, stack)) {
                 throw new HeritageException("shop_slot", "This stack does not fit in the selected slot");
             }
-            if (occupied[slot]) throw new HeritageException("shop_occupied", "A starter kit slot is already occupied");
-            occupied[slot] = true;
+            long bit = 1L << slot;
+            if ((occupied & bit) != 0) throw new HeritageException("shop_occupied", "A starter kit slot is already occupied");
+            occupied |= bit;
             entries.add(new KitDefinition.StackEntry("player", "", slot, false, stack));
         }
         entries.addAll(fixed);
@@ -158,20 +159,26 @@ public record KitShop(int budget, List<Offer> offers, List<Section> sections) {
 
     public static int nextSlot(Player player, InventoryPolicy policy, List<KitDefinition.StackEntry> fixed,
                                List<Pick> picks, ItemStack stack) {
-        var occupied = occupiedSlots(player, policy, fixed);
-        for (var pick : picks) occupied[pick.slot()] = true;
-        int equipment = equipmentSlot(player, stack);
-        if (equipment >= 0 && !occupied[equipment]) return equipment;
-        for (int slot = 0; slot < 36; slot++) if (!occupied[slot]) return slot;
-        return -1;
+        return nextSlot(player, occupiedSlots(player, policy, fixed, picks), stack);
     }
 
-    private static boolean[] occupiedSlots(Player player, InventoryPolicy policy, List<KitDefinition.StackEntry> fixed) {
-        var occupied = new boolean[MAX_PICKS];
+    public static int nextSlot(Player player, long occupied, ItemStack stack) {
+        int equipment = equipmentSlot(player, stack);
+        if (equipment >= 0 && (occupied & (1L << equipment)) == 0) return equipment;
+        int slot = Long.numberOfTrailingZeros(~occupied);
+        return slot < 36 ? slot : -1;
+    }
+
+    public static long occupiedSlots(Player player, InventoryPolicy policy, List<KitDefinition.StackEntry> fixed,
+                                     List<Pick> picks) {
+        long occupied = 0;
         if (policy == InventoryPolicy.MERGE) {
-            for (int index = 0; index < occupied.length; index++) occupied[index] = !player.getInventory().getItem(index).isEmpty();
+            for (int index = 0; index < MAX_PICKS; index++) {
+                if (!player.getInventory().getItem(index).isEmpty()) occupied |= 1L << index;
+            }
         }
-        for (var entry : fixed) if (entry.inventory().equals("player")) occupied[entry.index()] = true;
+        for (var entry : fixed) if (entry.inventory().equals("player")) occupied |= 1L << entry.index();
+        for (var pick : picks) occupied |= 1L << pick.slot();
         return occupied;
     }
 

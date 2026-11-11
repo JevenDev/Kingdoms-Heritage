@@ -126,15 +126,20 @@ final class ClientParty {
     static String spawn() { return spawn; }
     private static UUID self() { return Minecraft.getInstance().player.getUUID(); }
 
+    static void receiveRoster(JsonObject changes) {
+        if (changes.has("full")) PLAYERS.clear();
+        for (var value : changes.getAsJsonArray("remove")) PLAYERS.remove(UUID.fromString(value.getAsString()));
+        for (var value : changes.getAsJsonArray("upsert")) {
+            var player = value.getAsJsonObject();
+            UUID id = UUID.fromString(player.get("id").getAsString());
+            PLAYERS.put(id, new Peer(id, player.get("name").getAsString(), player.get("stage").getAsInt(),
+                    player.get("available").getAsBoolean()));
+        }
+    }
+
     static void receive(JsonObject state) {
         long now = Util.getMillis();
         var previousMembers = Set.copyOf(MEMBERS);
-        PLAYERS.clear();
-        for (var value : state.getAsJsonArray("players")) {
-            var player = value.getAsJsonObject();
-            UUID id = UUID.fromString(player.get("id").getAsString());
-            PLAYERS.put(id, new Peer(id, player.get("name").getAsString(), player.get("stage").getAsInt(), !player.has("available") || player.get("available").getAsBoolean()));
-        }
         String leaderId = state.get("leader").getAsString();
         leader = leaderId.isEmpty() ? null : UUID.fromString(leaderId);
         MEMBERS.clear();

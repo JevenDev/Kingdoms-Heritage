@@ -68,6 +68,7 @@ public final class ClientSelection {
             SelectionTransition.endArrival();
         } else if (next.has("flow_update")) ClientSteps.receive(next.getAsJsonObject("flow_update"));
         else if (next.has("flow_reset")) ClientSteps.reset(next.getAsJsonObject("flow_reset"));
+        else if (next.has("roster")) ClientParty.receiveRoster(next.getAsJsonObject("roster"));
         else if (next.has("party")) ClientParty.receive(next.getAsJsonObject("party"));
         else if (next.has("suggestion")) {
             SelectionSounds.NOTICE.play();
@@ -250,8 +251,8 @@ public final class ClientSelection {
     }
 
     private static void requestReview(String spawn, String kit, List<KitShop.Pick> offers) {
-        var request = new HeritageNetwork.Choose(spawn, kit, catalog.get("revision").getAsLong(), offers);
-        net.neoforged.neoforge.network.PacketDistributor.sendToServer(new HeritageNetwork.Review(request));
+        net.neoforged.neoforge.network.PacketDistributor.sendToServer(
+                new HeritageNetwork.Review(spawn, kit, catalog.get("revision").getAsLong(), offers));
     }
 
     static void cancelReview(java.util.UUID token) {

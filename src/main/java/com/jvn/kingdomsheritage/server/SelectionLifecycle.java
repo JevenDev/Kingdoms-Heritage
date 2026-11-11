@@ -3,9 +3,6 @@ package com.jvn.kingdomsheritage.server;
 import com.jvn.kingdomsheritage.api.SelectionEvent;
 import com.jvn.kingdomsheritage.api.SelectionState;
 import com.jvn.kingdomsheritage.data.HeritageCatalog;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -14,18 +11,16 @@ import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.common.NeoForge;
 
 final class SelectionLifecycle {
-    private static final Map<UUID, SelectionState> STATES = new HashMap<>();
-    private static final Set<UUID> ENDED = new HashSet<>();
-
     private SelectionLifecycle() {}
 
     static SelectionState state(ServerPlayer player) {
         start(player);
-        return STATES.get(player.getUUID());
+        return SelectionSession.of(player).state;
     }
 
     static SelectionState snapshot(ServerPlayer player) {
-        var existing = STATES.get(player.getUUID());
+        var session = SelectionSession.find(player.getUUID());
+        var existing = session == null ? null : session.state;
         if (existing != null) return existing;
         var data = SelectionManager.inspect(player);
         return new SelectionState(UUID.randomUUID(), HeritageCatalog.revision(),
@@ -35,11 +30,12 @@ final class SelectionLifecycle {
     }
 
     static void start(ServerPlayer player) {
-        if (STATES.containsKey(player.getUUID())) return;
+        var session = SelectionSession.of(player);
+        if (session.state != null) return;
         var state = new SelectionState(UUID.randomUUID(), HeritageCatalog.revision(), Optional.empty(), Optional.empty(),
                 Optional.ofNullable(SelectionParty.leader(player)), SelectionParty.memberIds(player));
-        STATES.put(player.getUUID(), state);
-        ENDED.remove(player.getUUID());
+        session.state = state;
+        session.ended = false;
         NeoForge.EVENT_BUS.post(new SelectionEvent.Started(player, state));
     }
 
@@ -47,28 +43,34 @@ final class SelectionLifecycle {
         var previous = state(player);
         var next = previous.choices(HeritageCatalog.revision(), spawn, kit);
         if (next.equals(previous)) return;
-        STATES.put(player.getUUID(), next);
+        SelectionSession.of(player).state = next;
         SelectionParty.choices(player, spawn, kit);
         NeoForge.EVENT_BUS.post(new SelectionEvent.ChoicesChanged(player, previous, next));
     }
 
     static void party(ServerPlayer player) {
-        var previous = STATES.get(player.getUUID());
-        if (previous == null || ENDED.contains(player.getUUID())) return;
+        var session = SelectionSession.find(player.getUUID());
+        if (session == null || session.state == null || session.ended) return;
+        var previous = session.state;
         var next = previous.party(SelectionParty.leader(player), SelectionParty.memberIds(player));
         if (next.equals(previous)) return;
-        STATES.put(player.getUUID(), next);
+        SelectionSession.of(player).state = next;
         NeoForge.EVENT_BUS.post(new SelectionEvent.PartyChanged(player, previous, next));
     }
 
     static void complete(ServerPlayer player) {
-        var state = STATES.get(player.getUUID());
-        if (state != null && ENDED.add(player.getUUID())) NeoForge.EVENT_BUS.post(new SelectionEvent.Completed(player, state));
+        var session = SelectionSession.find(player.getUUID());
+        if (session != null && session.state != null && !session.ended) {
+            session.ended = true;
+            NeoForge.EVENT_BUS.post(new SelectionEvent.Completed(player, session.state));
+        }
     }
 
     static void reset(ServerPlayer player) {
-        var state = STATES.remove(player.getUUID());
-        ENDED.remove(player.getUUID());
+        var session = SelectionSession.of(player);
+        var state = session.state;
+        session.state = null;
+        session.ended = false;
         if (state == null) {
             var data = SelectionManager.inspect(player);
             state = new SelectionState(UUID.randomUUID(), HeritageCatalog.revision(),
@@ -79,10 +81,12 @@ final class SelectionLifecycle {
     }
 
     static void cancel(ServerPlayer player, SelectionEvent.Reason reason) {
-        var state = STATES.remove(player.getUUID());
-        boolean ended = ENDED.remove(player.getUUID());
+        var session = SelectionSession.find(player.getUUID());
+        if (session == null) return;
+        var state = session.state;
+        boolean ended = session.ended;
+        session.state = null;
+        session.ended = false;
         if (state != null && !ended) NeoForge.EVENT_BUS.post(new SelectionEvent.Cancelled(player, state, reason));
     }
-
-    static void clear() { STATES.clear(); ENDED.clear(); }
 }

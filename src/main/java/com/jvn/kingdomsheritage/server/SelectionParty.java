@@ -13,11 +13,22 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.network.PacketDistributor;
 
 public final class SelectionParty {
     private record Invite(UUID sender, UUID recipient, long expires) {}
+    private record RosterEntry(UUID id, String name, int stage, boolean available) {
+        JsonObject json() {
+            var entry = new JsonObject();
+            entry.addProperty("id", id.toString());
+            entry.addProperty("name", name);
+            entry.addProperty("stage", stage);
+            entry.addProperty("available", available);
+            return entry;
+        }
+    }
     private static final class Participant {
         final ServerPlayer player;
         int stage;
@@ -27,6 +38,7 @@ public final class SelectionParty {
         long lastKit = -100;
         String kit = "";
         HeritageNetwork.Cursor cursor;
+        boolean rosterSent;
         final JsonArray feedback = new JsonArray();
         Participant(ServerPlayer player) { this.player = player; }
     }
@@ -37,12 +49,13 @@ public final class SelectionParty {
         final Map<UUID, String> suggestions = new LinkedHashMap<>();
         long generation;
         String spawn = "";
-        SpawnResolver.Search search;
+        SelectionSession.Search search;
         Party(UUID leader) { this.leader = leader; members.add(leader); }
     }
     private static final Map<UUID, Participant> PLAYERS = new LinkedHashMap<>();
     private static final Map<UUID, Party> PARTIES = new HashMap<>();
     private static final List<Invite> INVITES = new ArrayList<>();
+    private static Map<UUID, RosterEntry> roster = Map.of();
     private static boolean dirty;
     private static long revision = -1;
 
@@ -115,18 +128,15 @@ public final class SelectionParty {
         return party == null || !party.spawn.isEmpty() && party.spawn.equals(spawn);
     }
 
-    static SpawnResolver.Search search(ServerPlayer player, SpawnDefinition spawn) {
+    static SelectionSession.Search search(ServerPlayer player, SpawnDefinition spawn) {
         var party = PARTIES.get(player.getUUID());
-        if (party == null) return new SpawnResolver.Search(player, spawn, SelectionManager.defaultSpawn(player));
-        if (party.search == null) {
-            var leader = PLAYERS.get(party.leader).player;
-            party.search = new SpawnResolver.Search(leader, spawn, SelectionManager.defaultSpawn(leader));
-        }
+        if (party == null) return searchFor(player, spawn);
+        if (party.search == null || party.search.idle()) party.search = searchFor(PLAYERS.get(party.leader).player, spawn);
         return party.search;
     }
 
-    static void release(SpawnResolver.Search search) {
-        if (PARTIES.values().stream().noneMatch(party -> party.search == search)) search.close();
+    private static SelectionSession.Search searchFor(ServerPlayer player, SpawnDefinition spawn) {
+        return new SelectionSession.Search(new SpawnResolver.Search(player, spawn, SelectionManager.defaultSpawn(player)));
     }
 
     static List<ServerPlayer> members(ServerPlayer player) {
@@ -175,24 +185,24 @@ public final class SelectionParty {
     }
 
     static void refresh(ServerPlayer player) {
-        refresh(player, com.jvn.kingdomsheritage.api.ScreenStep.Placement.BEFORE_SPAWN);
+        refresh(player, Component.empty());
     }
 
-    static void refresh(ServerPlayer player, com.jvn.kingdomsheritage.api.ScreenStep.Placement from) {
+    static void refresh(ServerPlayer player, Component error) {
+        refresh(player, com.jvn.kingdomsheritage.api.ScreenStep.Placement.BEFORE_SPAWN, error);
+    }
+
+    private static void refresh(ServerPlayer player, com.jvn.kingdomsheritage.api.ScreenStep.Placement from, Component error) {
         var party = PARTIES.get(player.getUUID());
         var members = members(player);
         if (party != null) {
             party.generation++;
-            party.ready.clear();
             for (var member : members) {
                 if (from.compareTo(com.jvn.kingdomsheritage.api.ScreenStep.Placement.BEFORE_KIT) <= 0) PLAYERS.get(member.getUUID()).kit = "";
-                SelectionManager.cancelPreparation(member.getUUID());
             }
-            if (party.search != null) party.search.close();
-            party.search = null;
         }
         SelectionSteps.invalidate(members, from, null, false);
-        for (var member : members) SelectionManager.refresh(member);
+        for (var member : members) SelectionManager.refresh(member, error);
         dirty = true;
     }
 
@@ -260,7 +270,7 @@ public final class SelectionParty {
                 party.suggestions.clear();
                 removeInvites(invite -> party.members.contains(invite.sender()));
                 for (var member : members(player)) SelectionLifecycle.choices(member, id, null);
-                refresh(player, com.jvn.kingdomsheritage.api.ScreenStep.Placement.AFTER_SPAWN);
+                refresh(player, com.jvn.kingdomsheritage.api.ScreenStep.Placement.AFTER_SPAWN, Component.empty());
             }
             return;
         }
@@ -343,12 +353,7 @@ public final class SelectionParty {
             participant.feedback.add(feedback);
         }
         removeInvites(invite -> invite.sender().equals(party.leader));
-        for (var member : members) {
-            PLAYERS.get(member.getUUID()).kit = "";
-            SelectionManager.cancelPreparation(member.getUUID());
-        }
-        if (party.search != null) party.search.close();
-        party.search = null;
+        for (var member : members) PLAYERS.get(member.getUUID()).kit = "";
         party.ready.clear();
         party.suggestions.remove(player.getUUID());
         party.generation++;
@@ -358,7 +363,7 @@ public final class SelectionParty {
             for (var id : party.members) PARTIES.remove(id);
         }
         SelectionSteps.invalidate(members, com.jvn.kingdomsheritage.api.ScreenStep.Placement.BEFORE_SPAWN, null, false);
-        for (var member : members) SelectionManager.refresh(member);
+        for (var member : members) SelectionManager.refresh(member, Component.empty());
         dirty = true;
     }
 
@@ -379,7 +384,6 @@ public final class SelectionParty {
         var party = PARTIES.get(player.getUUID());
         if (party == null) return;
         for (var member : party.members) PARTIES.remove(member);
-        if (party.search != null) party.search.close();
         dirty = true;
     }
 
@@ -388,10 +392,13 @@ public final class SelectionParty {
     static void disconnect(ServerPlayer player) { remove(player, true); }
 
     private static void remove(ServerPlayer player, boolean disconnected) {
-        leave(player, disconnected);
-        removeInvites(invite -> invite.sender().equals(player.getUUID()) || invite.recipient().equals(player.getUUID()));
-        PLAYERS.remove(player.getUUID());
-        dirty = true;
+        try {
+            leave(player, disconnected);
+        } finally {
+            removeInvites(invite -> invite.sender().equals(player.getUUID()) || invite.recipient().equals(player.getUUID()));
+            PLAYERS.remove(player.getUUID());
+            dirty = true;
+        }
     }
 
     private static void removeInvites(java.util.function.Predicate<Invite> predicate) {
@@ -427,22 +434,25 @@ public final class SelectionParty {
             for (var party : Set.copyOf(PARTIES.values())) {
                 party.spawn = "";
                 party.suggestions.values().removeIf(id -> !HeritageCatalog.spawns().containsKey(net.minecraft.resources.ResourceLocation.parse(id)));
-                refresh(PLAYERS.get(party.leader).player);
+                refresh(PLAYERS.get(party.leader).player, Component.translatable("error.kingdomsheritage.reloaded"));
             }
             dirty = true;
         }
         if (!dirty) return;
         dirty = false;
-        var roster = new JsonArray();
+        var nextRoster = new LinkedHashMap<UUID, RosterEntry>();
         for (var participant : PLAYERS.values()) {
-            var entry = new JsonObject();
-            entry.addProperty("id", participant.player.getUUID().toString());
-            entry.addProperty("name", participant.player.getGameProfile().getName());
-            entry.addProperty("stage", participant.stage);
-            entry.addProperty("available", participant.stage == 0 && !PARTIES.containsKey(participant.player.getUUID())
-                    && !SelectionManager.busy(participant.player));
-            roster.add(entry);
+            UUID id = participant.player.getUUID();
+            nextRoster.put(id, new RosterEntry(id, participant.player.getGameProfile().getName(), participant.stage,
+                    participant.stage == 0 && !PARTIES.containsKey(id) && !SelectionManager.busy(participant.player)));
         }
+        var upsert = new JsonArray();
+        for (var entry : nextRoster.values()) if (!entry.equals(roster.get(entry.id()))) upsert.add(entry.json());
+        var removed = new JsonArray();
+        for (var id : roster.keySet()) if (!nextRoster.containsKey(id)) removed.add(id.toString());
+        var delta = upsert.isEmpty() && removed.isEmpty() ? null : rosterPacket(false, upsert, removed);
+        roster = nextRoster;
+        HeritageNetwork.Catalog fullRoster = null;
         for (var participant : PLAYERS.values()) {
             var player = participant.player;
             SelectionLifecycle.party(player);
@@ -450,9 +460,17 @@ public final class SelectionParty {
                 participant.feedback.asList().clear();
                 continue;
             }
+            if (!participant.rosterSent) {
+                if (fullRoster == null) {
+                    var entries = new JsonArray();
+                    roster.values().forEach(entry -> entries.add(entry.json()));
+                    fullRoster = rosterPacket(true, entries, new JsonArray());
+                }
+                PacketDistributor.sendToPlayer(player, fullRoster);
+                participant.rosterSent = true;
+            } else if (delta != null) PacketDistributor.sendToPlayer(player, delta);
             var party = PARTIES.get(player.getUUID());
             var state = new JsonObject();
-            state.add("players", roster);
             state.addProperty("generation", party == null ? -1 : party.generation);
             state.addProperty("leader", party == null ? "" : party.leader.toString());
             state.addProperty("spawn", party == null ? "" : party.spawn);
@@ -503,8 +521,18 @@ public final class SelectionParty {
         }
     }
 
+    private static HeritageNetwork.Catalog rosterPacket(boolean full, JsonArray upsert, JsonArray removed) {
+        var changes = new JsonObject();
+        if (full) changes.addProperty("full", true);
+        changes.add("upsert", upsert);
+        changes.add("remove", removed);
+        var message = new JsonObject();
+        message.add("roster", changes);
+        return new HeritageNetwork.Catalog(message.toString());
+    }
+
     static void clear() {
-        for (var party : Set.copyOf(PARTIES.values())) if (party.search != null) party.search.close();
+        roster = Map.of();
         PLAYERS.clear();
         PARTIES.clear();
         INVITES.clear();
