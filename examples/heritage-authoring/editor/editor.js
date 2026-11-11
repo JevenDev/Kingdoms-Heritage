@@ -256,7 +256,7 @@ function validation(error=null,fromJson=false) {
   $('json').setAttribute('aria-invalid',String(!!error&&fromJson));author?.refresh();
   $('restore-json').hidden=valid;
   $('copy-status').textContent='';
-  $('download-intro').disabled=!valid;$('use-in-pack').setAttribute('aria-disabled',String(!valid||saveBlocked||saveUnavailable));
+  $('download-intro').disabled=$('download-cinematic').disabled=!valid;$('use-in-pack').setAttribute('aria-disabled',String(!valid||saveBlocked||saveUnavailable));
   $('copy').disabled=false;$('format-json').disabled=!!error&&fromJson&&error.message.startsWith('Invalid JSON:');
   for(const id of ['play','restart'])$(id).disabled=!font.size;
   for(const control of [...fields,$('title-custom'),$('subtitle-custom'),...document.querySelectorAll('.text-editor button, .text-editor select')]) control.disabled=false;
@@ -612,6 +612,12 @@ $('import-intro').addEventListener('change',async()=>{
 $('download-intro').addEventListener('click',()=>{
   if(!valid)return;
   HeritageSession.download(jsonState.document,($('intro-name').value.replace(/[^a-z0-9_-]+/gi,'_')||'intro')+'.json');
+});
+$('download-cinematic').addEventListener('click',()=>{
+  if(!valid)return;
+  const pack=P.cinematicPack(jsonState,$('intro-name').value);
+  HeritageSession.download(new Blob([HeritageZip.zip(pack.files)],{type:'application/zip'}),pack.filename);
+  $('copy-status').textContent='Install the datapack, then run /heritage cinematic play @s '+pack.id+'.';
 });
 if(requested&&workspace.entries.has(requested))activateIntro(requested);
 if(editorRoute.get('create')==='1'){if(restoredLibrary&&!saveBlocked)openIntro();if(editorRoute.has('name')&&!saveBlocked){$('intro-name').value=editorRoute.get('name');$('intro-name').dispatchEvent(new Event('input',{bubbles:true}));}editorRoute.delete('name');editorRoute.delete('create');editorRoute.set('draft',workspace.active);window.history.replaceState(null,'',location.pathname+(editorRoute.size?'?'+editorRoute:'')+location.hash);}

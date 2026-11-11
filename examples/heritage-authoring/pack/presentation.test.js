@@ -29,6 +29,43 @@ test('screen fades wait for black, block reentry and reveal over the native 300 
   const transition=new Motion.Transition();let calls=0;assert.equal(transition.fade(100,()=>{calls++;transition.reveal(400);}),true);assert.equal(transition.fade(101,()=>calls++),false);
   near(transition.opacity(250),.5,'fade midpoint');transition.tick(399);assert.equal(calls,0);transition.tick(400);assert.equal(calls,1);near(transition.opacity(400),1,'black');near(transition.opacity(550),.5,'reveal midpoint');transition.tick(700);assert.equal(transition.phase,'idle');
 });
+test('location page animations slide and fade from the native offsets',()=>{
+  const cards=new Motion.Cards(['a','b'],480,270,0);
+  const {x:initial,scale}=cards.cards[0].layout,outgoing=cards.turn(['c','d'],1,100);
+  near(cards.cards[0].layout.x,initial+24*scale,'entering position');assert.equal(cards.cards[0].layout.opacity,0);
+  outgoing[0].sample(280);near(outgoing[0].layout.x,initial-24*scale,'leaving position');assert.equal(outgoing[0].layout.opacity,0);
+  cards.frame(350);near(cards.cards[0].layout.x,initial,'settled position');assert.equal(cards.cards[1].layout.opacity,1);
+});
+test('kit carousel matches native sizing and retains velocity when retargeted',()=>{
+  const carousel=new Motion.KitCarousel(1,100),bounds={x:152,y:52,width:176,height:166};
+  const poses=carousel.poses(bounds,480,3,100);
+  assert.deepEqual(poses.at(-1),{index:1,distance:0,scale:1,opacity:1,x:152,y:52});
+  near(poses[0].scale,.68,'neighbor scale');near(poses[0].opacity,.32,'neighbor opacity');
+  near(poses[0].x,12.96,'left position');
+  carousel.select(2,100);const moving=carousel.motion(180);assert.ok(moving.position>1&&moving.position<2);
+  carousel.select(0,180);near(carousel.motion(180).position,moving.position,'retarget position');near(carousel.motion(180).velocity,moving.velocity,'retarget speed');
+  assert.deepEqual(carousel.motion(1180),{position:0,velocity:0});
+});
+test('player list uses eight native portrait slots and centers the roster with its summary',()=>{
+  const measure=value=>value.length*6;
+  const solo=Motion.partyLayout(480,270,97,80,90,1,0,0,measure),party=Motion.partyLayout(480,270,97,80,90,0,30,0,measure);
+  assert.equal(solo.top,94);assert.equal(solo.otherCenter-solo.partyCenter,193);
+  assert.deepEqual(solo.slots.map(slot=>slot.y),[114,114,114,114,150,150,150,150]);
+  assert.equal(solo.slots[3].x-solo.slots[0].x,108);
+  assert.equal(party.top,75);assert.equal(party.summaryY,165);
+  const paged=Motion.partyLayout(480,270,97,80,90,20,30,1,measure);
+  assert.equal(paged.pageCount,2);assert.equal(paged.first,12);assert.equal(paged.others.length,8);
+});
+test('portrait arrow navigation follows rows and stays on the same roster when vertical',()=>{
+  const cells=[
+    {id:'self',x:10,y:10,party:true},{id:'member',x:40,y:10,party:true},
+    {id:'other',x:100,y:10,party:false},{id:'below',x:110,y:46,party:false}
+  ];
+  assert.equal(Motion.portraitNeighbor(cells,'self',1,false),'member');
+  assert.equal(Motion.portraitNeighbor(cells,'member',1,false),'other');
+  assert.equal(Motion.portraitNeighbor(cells,'member',1,true),undefined);
+  assert.equal(Motion.portraitNeighbor(cells,'other',1,true),'below');
+});
 test('cinematic bar seed and visibility match native RandomSource and float calculations',()=>{
   for(const {token,slant} of native.bars){near(Preview.sampleSlant(token),slant,token,.000001);assert.equal(Preview.sampleSlant(token,'straight'),0);}
   for(const {ticks,visibility} of native.visibility)near(Preview.barVisibility(ticks,100,12),visibility,'visibility at '+ticks,.000001);

@@ -35,6 +35,21 @@ class Card {
 class Cards {
   constructor(ids,width,height,now){this.selected=null;this.expanded=null;this.confirming=false;this.confirmationFrom=0;this.confirmationStarted=now;this.reset(ids,width,height,now);}
   reset(ids,width,height,now){this.width=width;this.height=height;this.cards=ids.map(id=>new Card(id));this.preview=this.expanded??(ids.includes(this.selected)?this.selected:ids[0]);this.renderedAt=now;this.layout(now,false);}
+  turn(ids,direction,now){
+    const outgoing=this.cards;
+    for(const card of outgoing){
+      card.sample(now);
+      card.move({...card.layout,x:card.layout.x-direction*24*card.layout.scale,opacity:0},now,true,0,false);
+      card.duration=180;
+    }
+    this.reset(ids,this.width,this.height,now);
+    this.cards.forEach((card,index)=>{
+      const target=card.layout;
+      card.layout=card.from=card.target={...target,x:target.x+direction*24*target.scale,opacity:0};
+      card.move(target,now,true,index*10,false);
+    });
+    return outgoing;
+  }
   progress(now){return lerp(ease(f((now-this.confirmationStarted)/550)),this.confirmationFrom,this.confirming?1:0);}
   confirm(id,value,now){this.confirmationFrom=this.progress(now);this.confirmationStarted=now;this.confirming=value;if(value){this.selected=this.preview=id;this.expanded=null;}this.layout(now,true);}
   expand(id,now){this.selected=this.preview=id;this.expanded=this.expanded===null?id:null;this.layout(now,true);}
@@ -94,11 +109,75 @@ class Transition {
   tick(now){if(this.phase==='idle'||now-this.started<300)return;if(this.phase==='revealing'){this.phase='idle';this.from=0;}else if(this.phase==='fading'){this.phase='waiting';const action=this.action;this.action=null;action();}}
   clear(){this.phase='idle';this.from=0;this.action=null;}
 }
+class Spring {
+  constructor(value,now,positionEpsilon=.003,velocityEpsilon=.04){
+    this.selected=this.from=value;this.velocity=0;this.started=now;
+    this.positionEpsilon=positionEpsilon;this.velocityEpsilon=velocityEpsilon;
+  }
+  select(index,now){
+    if(index===this.selected)return;
+    const {position,velocity}=this.motion(now);
+    this.from=position;this.velocity=velocity;this.selected=index;this.started=now;
+  }
+  motion(now){
+    const elapsed=Math.max(0,(now-this.started)/1000),offset=this.from-this.selected;
+    const coefficient=this.velocity+14*offset,decay=Math.exp(-14*elapsed);
+    const position=this.selected+(offset+coefficient*elapsed)*decay,velocity=(this.velocity-14*coefficient*elapsed)*decay;
+    if(Math.abs(position-this.selected)<this.positionEpsilon&&Math.abs(velocity)<this.velocityEpsilon)return {position:this.selected,velocity:0};
+    return {position,velocity};
+  }
+  shiftTime(elapsed){this.started+=elapsed;}
+}
+class KitCarousel extends Spring {
+  poses(bounds,width,count,now){
+    const {position}=this.motion(now),poses=[];
+    const step=Math.max(bounds.width*.58,Math.min(bounds.width*.95,(width-bounds.width*.32)/2));
+    for(let index=Math.max(0,Math.floor(position)-1);index<=Math.min(count-1,Math.ceil(position)+1);index++){
+      const distance=index-position,depth=Math.min(1,Math.abs(distance)),scale=1-.32*depth;
+      poses.push({index,distance,scale,opacity:(1-.68*depth)*clamp(2-Math.abs(distance)),
+        x:bounds.x+bounds.width/2+distance*step-bounds.width*scale/2,y:bounds.y+bounds.height*(1-scale)/2});
+    }
+    return poses.sort((a,b)=>Math.abs(b.distance)-Math.abs(a.distance));
+  }
+}
+function partyLayout(width,height,partyTitle,otherTitle,emptyTitle,otherCount,summaryHeight,page,labelWidth){
+  const size=24,step=36,section=Math.max(1,Math.trunc((Math.min(width-24,372)-14)/2));
+  const columns=clamp(Math.trunc((section+step-size-4)/step),1,4),pageGap=summaryHeight?20:15;
+  const rows=clamp(Math.trunc((height-28-20-20-2-pageGap-summaryHeight)/step),1,3);
+  const capacity=columns*rows,pageCount=Math.max(1,Math.ceil(otherCount/capacity));
+  page=clamp(page,0,pageCount-1);
+  const first=page*capacity,last=Math.min(otherCount,first+capacity),pageY=20+rows*step+2;
+  const span=count=>26+(count-1)*step,partySpan=Math.max(partyTitle,span(columns));
+  const pageWidth=pageCount>1?labelWidth(pageCount+' / '+pageCount):0;
+  const otherSpan=Math.max(otherTitle,otherCount?span(Math.min(columns,otherCount)):emptyTitle,pageCount>1?pageWidth+56:0);
+  const gap=section+14,partyCenter=Math.trunc((width-gap+Math.trunc((partySpan-otherSpan)/2))/2),otherCenter=partyCenter+gap;
+  const gridBottom=20+Math.floor((Math.max(8,Math.min(otherCount,capacity))-1)/columns)*step+size+1;
+  const groupHeight=Math.max(gridBottom+(summaryHeight?9+summaryHeight:0),pageCount>1?pageY+pageGap+summaryHeight:0);
+  const top=Math.max(28,Math.trunc((height-groupHeight)/2));
+  const slots=(count,center)=>Array.from({length:count},(_,index)=>{
+    const row=Math.floor(index/columns),rowSize=Math.min(columns,count-row*columns);
+    return {x:center-(size+(rowSize-1)*step)/2+index%columns*step,y:top+20+row*step};
+  });
+  return {top,partyCenter,otherCenter,summaryY:top+groupHeight-summaryHeight,slots:slots(8,partyCenter),
+    others:slots(last-first,otherCenter),first,page,pageCount,pageY:top+pageY,pageWidth};
+}
+function portraitNeighbor(cells,id,direction,vertical){
+  const origin=cells.find(cell=>cell.id===id);
+  if(!origin)return (direction<0?cells.at(-1):cells[0])?.id;
+  let next,bestRow=Infinity,bestColumn=Infinity;
+  for(const cell of cells){
+    const dx=cell.x-origin.x,dy=cell.y-origin.y;
+    if(vertical?(cell.party!==origin.party||dy*direction<=0):dx*direction<=0)continue;
+    const row=Math.abs(dy),column=Math.abs(dx);
+    if(row<bestRow||row===bestRow&&column<bestColumn){next=cell.id;bestRow=row;bestColumn=column;}
+  }
+  return next;
+}
 function kitPose(width,height,bw,bh,progress,now){
   const targetScale=f(Math.max(.1,Math.min(1,f((width-32)/(bw+216)),f((height-96)/bh)))),scale=lerp(progress,1,targetScale),p=phase(now);
   return {x:lerp(progress,Math.trunc((width-bw)/2),f((width-f((bw+216)*targetScale))/2)),y:f(lerp(progress,Math.trunc((height-bh)/2),f((height-f(bh*targetScale))/2))-f(f(f(sine(f(p*5))*2.5)*progress)*scale)),scale,tilt:f(f(sine(f(p*4))*.35)*progress)};
 }
-function loadingCells(centerX,centerY,now,opacity){return [0,1,2,5,8,7,6,3].map((cell,index)=>{const head=f((now%960)/120),trail=f(.5+.5*Math.cos(f(index-head)*Math.PI*2/8));return {x:centerX+(cell%3-1)*7-2,y:centerY+(Math.floor(cell/3)-1)*7-2,alpha:Math.round(f(opacity*f(.2+f(.8*f(f(trail*trail)*trail)))))};});}
-const api={Cards,Reorder,Transition,ease,kitPose,loadingCells};
+function loadingCells(centerX,centerY,now,opacity,size=5,gap=2){return [0,1,2,5,8,7,6,3].map((cell,index)=>{const head=f((now%960)/120),trail=f(.5+.5*Math.cos(f(index-head)*Math.PI*2/8));return {x:centerX+(cell%3-1)*(size+gap)-Math.floor(size/2),y:centerY+(Math.floor(cell/3)-1)*(size+gap)-Math.floor(size/2),alpha:Math.round(f(opacity*f(.2+f(.8*f(f(trail*trail)*trail)))))};});}
+const api={Cards,Spring,KitCarousel,Reorder,Transition,ease,kitPose,partyLayout,portraitNeighbor,loadingCells};
 if(typeof module!=='undefined')module.exports=api;else globalThis.HeritagePresentation=api;
 })();

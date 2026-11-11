@@ -105,7 +105,7 @@ function drag(document,held,from,slots,button=0) {
   return distribute(started.document,started.cursor,targets,button);
 }
 function fromLibrary(document,held,id,slot,{shift=false,button=0,fill=false}={}) {
-  E.address(slot);const item={id:K.normalize(id)},maximum=K.maxCount(item);
+  E.address(slot);const item={id:K.normalize(id)},maximum=K.items.get(item.id)?.loadIcon?1:K.maxCount(item);
   if(shift){
     if(E.entryAt(document,slot))return result(document,held);
     const limit=typeof slot==='number'&&slot>=36&&slot<=39?Math.min(1,maximum):maximum;
@@ -117,9 +117,9 @@ function fromLibrary(document,held,id,slot,{shift=false,button=0,fill=false}={})
   return result(document,cursor({entry:{index:0,item},origin:slot,source:'library'}));
 }
 function confirmDelete(entry,draft=null) {
-  if(entry&&(!K.items.has(K.normalize(entry.item.id))||Object.keys(entry.item.components??{}).length>0))return true;
+  if(entry&&(K.items.get(K.normalize(entry.item.id))?.max===undefined||Object.keys(entry.item.components??{}).length>0))return true;
   if(!draft)return false;
-  if(draft.id?.trim()&&!K.items.has(K.normalize(draft.id.trim())))return true;
+  if(draft.id?.trim()&&K.items.get(K.normalize(draft.id.trim()))?.max===undefined)return true;
   try{return JSON.stringify(canonical(JSON.parse(draft.components)))!==JSON.stringify(canonical(entry?.item.components??{}));}catch(failure){return true;}
 }
 const api={click,distribute,collect,quickMove,returnCursor,drag,confirmDelete,cursor,compatible,fromLibrary};

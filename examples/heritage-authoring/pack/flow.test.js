@@ -73,6 +73,7 @@ test('bundled definitions, translations and presentation assets match the curren
   assert.deepEqual(bundled.translations,JSON.parse(fs.readFileSync(path.join(native,'assets/kingdomsheritage/lang/en_us.json'),'utf8')));
   for(const kind of ['spawns','kits'])for(const {id,...entry} of bundled[kind])assert.deepEqual(entry,JSON.parse(fs.readFileSync(path.join(native,'data/kingdomsheritage/heritage',kind,id.split(':')[1]+'.json'),'utf8')));
   const assets=[...['card','card_expanded','card_fallback'].map(name=>[name+'.png','textures/gui/campaign_select_screen/campaign_select_screen_'+name+'.png']),...['default','random','plains','village'].map(name=>[name+'.png','textures/gui/locations/'+name+'.png']),...['click','hover','confirmation','dissolve'].map(name=>[name+'.ogg','sounds/ui/'+name+'.ogg']),...['disconnect','disconnect_highlighted'].map(name=>[name+'.png','textures/gui/sprites/selection/'+name+'.png']),['selection.ogg','sounds/music/selection.ogg'],['selection_background.fsh','shaders/core/selection_background.fsh']];
+  for(const name of ['tab_button','tab_button_selected','empty_slot','send_request'])assets.push([name+'.png','textures/gui/selection/'+name+'.png']);
   for(const [copy,original] of assets){
     const actual=fs.readFileSync(path.join(__dirname,'assets',copy)),expected=fs.readFileSync(path.join(native,'assets/kingdomsheritage',original));
     if(copy.endsWith('.fsh'))assert.equal(actual.toString().replaceAll('\r\n','\n'),expected.toString().replaceAll('\r\n','\n'));
@@ -87,6 +88,29 @@ test('a chosen pool destination stays fixed through story review and uses its ow
   assert.equal(session.phase,'intro');assert.deepEqual(session.arrival.intro,{text:'Chosen destination'});
 });
 
+test('location browsing crosses pages and clamps to the last card on a short page',()=>{
+  assert.equal(Flow.browseLocation(23,9,1),10);
+  assert.equal(Flow.browseLocation(23,10,-1),9);
+  assert.equal(Flow.browseLocation(23,17,1,true),22);
+  assert.equal(Flow.browseLocation(23,22,-1,true),12);
+  assert.equal(Flow.browseLocation(23,22,1),22);
+});
+test('a rejected pool destination leaves kit confirmation available for retry',()=>{
+  const source=choices();source.spawns[0]={...source.spawns[0],type:'pool',pool:[{type:'fixed',x:0,y:64,z:0}]};
+  const session=new Flow.Session(source);session.choose('pack:home');session.next();session.next();
+  assert.throws(()=>session.next(4),/available pool destination/);
+  assert.equal(session.phase,'kit-confirm');assert.equal(session.arrival,null);
+  session.next(0);assert.equal(session.phase,'loading');assert.equal(session.arrival.y,64);
+});
+test('simulated parties expose the companion and party size to the review and intro',()=>{
+  const {spawns:[spawn],kits:[kit]}=choices();
+  const names=Flow.context(spawn,kit,'Player',Flow.locations(spawn),{},['Alex']);
+  assert.equal(names.party_size,'2');assert.equal(names.party_leader,'Player');
+  assert.equal(Flow.companionNames(['Alex','Ari','Efe']),'Alex, Ari, and Efe');
+  const segments=Flow.narration('Player',names,kit);
+  assert.equal(segments.at(-2).text,' You will arrive with Alex...');
+  assert.deepEqual(segments.at(-2).highlight,[22,4]);
+});
 test('flow previews read their global GUI scale from the exported settings',()=>{
   assert.equal(Flow.catalog(build(),bundled).guiScale,0);
   for(const guiScale of [0,1,3,16])assert.equal(Flow.catalog(build({guiScale}),bundled).guiScale,guiScale);

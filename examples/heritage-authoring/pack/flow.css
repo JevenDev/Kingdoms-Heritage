@@ -11,11 +11,12 @@
 .flow-stage:fullscreen { display: grid; place-items: center; width: 100vw; height: 100vh; background: #000; }
 .flow-stage:fullscreen #flow-screen { position: relative; inset: auto; width: min(100vw,calc(100vh * var(--flow-ratio))); height: min(100vh,calc(100vw / var(--flow-ratio))); }
 #flow-canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; border: 0; border-radius: 0; }
-#flow-controls { position: absolute; inset: 0; pointer-events: none; }
-#flow-controls .flow-hit { position: absolute; pointer-events: auto; min-height: 0; min-width: 0; padding: 0; border: 0; margin: 0; border-radius: 0; background: transparent; color: transparent; box-shadow: none; }
-#flow-controls .flow-hit:focus-visible { outline: none; }
-#flow-controls .flow-hit:disabled { cursor: default; }
+#flow-controls, #flow-party-controls { position: absolute; inset: 0; pointer-events: none; }
+.flow-stage .flow-hit { position: absolute; pointer-events: auto; min-height: 0; min-width: 0; padding: 0; border: 0; margin: 0; border-radius: 0; background: transparent; color: transparent; box-shadow: none; }
+.flow-stage .flow-hit:focus-visible { outline: 1px solid #f2cd83; outline-offset: -1px; }
+.flow-stage .flow-hit:disabled { cursor: default; }
 #flow-inventory { position: absolute; }
 #flow-inventory .mc-inventory { margin: 0; }
 .flow-help { max-width: none; }
+.flow-sample-actions button { margin-bottom: 8px; }
 @media (max-width: 600px) { #flow-dialog { padding: 10px; } .flow-toolbar { gap: 8px; } .flow-toolbar h2 { flex-basis: 100%; } }

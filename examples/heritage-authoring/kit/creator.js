@@ -3,7 +3,8 @@
 const K=HeritageKit,E=HeritageEquipment,M=HeritageKitMouse,V=HeritageInventory,T=HeritageItemText,$=id=>document.getElementById(id),storageKey='heritage.kitCreator.v1';
 if(!await HeritageSession.acquire(storageKey))return;
 const editorRoute=new URLSearchParams(location.search),requested=editorRoute.get('draft');
-const searchIndex=HeritageItems.items.map(item=>({item,search:(item.name+' '+item.id).toLowerCase()})),itemButtons=new Map();
+const indexItem=item=>({item,search:(item.name+' '+item.id).toLowerCase()});
+const searchIndex=HeritageItems.items.map(indexItem),itemButtons=new Map(),library=document.querySelector('.kit-library');
 let documentState={title:'My kit',items:[]},validDocument={title:'My kit',items:[]},selected=0,page=0,rawInvalid=false,errorState=null,drafts=new Map(),loreSources=new Map(),slotClipboard=null;
 let activeItemButton,carried=null,pendingDelete=null,selectedSlots=new Set(),selectionMode=false,selectionAnchor=null;
 let pageSize=90,pageCount=1,wheelPageTime=-Infinity;
@@ -141,7 +142,7 @@ function feedback() {
   const locked=rawInvalid||documentState.enabled===false;
   for(const id of ['title','description','order','tags','selected-slot','add-equipment','item-id','apply-id','components','apply-components','count','fill-stack','clear-slot','set-start','paste-slot'])$(id).disabled=locked;
   $('count').disabled=locked||!view.entry(selected);
-  $('fill-stack').disabled=locked||!view.entry(selected)||view.entry(selected).ignore_stack_limit===true||(view.entry(selected).item.count??1)>=K.maxCount(view.entry(selected))||(!K.items.has(K.normalize(view.entry(selected).item.id))&&view.entry(selected).item.components?.['minecraft:max_stack_size']===undefined&&!view.entry(selected).ignore_stack_limit);
+  $('fill-stack').disabled=locked||!view.entry(selected)||view.entry(selected).ignore_stack_limit===true||(view.entry(selected).item.count??1)>=K.maxCount(view.entry(selected))||(K.items.get(K.normalize(view.entry(selected).item.id))?.max===undefined&&view.entry(selected).item.components?.['minecraft:max_stack_size']===undefined&&!view.entry(selected).ignore_stack_limit);
   $('set-start').disabled=locked||typeof selected!=='number'||selected>8;
   $('copy-slot').disabled=!view.entry(selected);
   $('paste-slot').disabled=locked||!slotClipboard;
@@ -479,26 +480,28 @@ function markSelectedItem() {
 function browser() {
   V.hideTooltip();
   const terms=$('search-items').value.toLowerCase().trim().split(/\s+/).filter(Boolean),category=$('item-category').value;
-  const used=new Set((Array.isArray(documentState.items)?documentState.items:[]).filter(entry=>entry?.item?.id).map(entry=>K.normalize(entry.item.id)));
-  const filtered=searchIndex.filter(({item,search})=>terms.every(term=>search.includes(term))&&(category==='all'||category==='blocks'&&item.block||category==='items'&&!item.block||category==='armor'&&item.armor||category==='used'&&used.has(item.id))).map(entry=>entry.item);
+  const used=category==='used'&&new Set((Array.isArray(documentState.items)?documentState.items:[]).filter(entry=>entry?.item?.id).map(entry=>K.normalize(entry.item.id)));
+  const filtered=!terms.length&&category==='all'?searchIndex:searchIndex.filter(({item,search})=>terms.every(term=>search.includes(term))&&(category==='all'||category==='blocks'&&item.block||category==='items'&&!item.block||category==='armor'&&item.armor||category==='modded'&&item.loadIcon||used&&used.has(item.id)));
   const size=pageSize,total=Math.max(1,Math.ceil(filtered.length/size));pageCount=total;page=Math.max(0,Math.min(page,total-1));
   $('item-count').textContent=filtered.length.toLocaleString()+' item'+(filtered.length===1?'':'s');
   $('page-count').textContent=filtered.length?'Page '+(page+1)+' of '+total:'No matches';
   $('previous').disabled=page===0;$('next').disabled=page===total-1;$('clear-search').hidden=!$('search-items').value;
   const nodes=[];
-  for(const item of filtered.slice(page*size,(page+1)*size)) {
+  for(const {item} of filtered.slice(page*size,(page+1)*size)) {
     let button=itemButtons.get(item.id);
     if(!button) {
       button=document.createElement('button');button.type='button';button.className='item-choice';button.dataset.item=item.id;
       button.setAttribute('aria-pressed','false');button.setAttribute('aria-label',item.name+' ('+item.id+')');button.append(V.icon(item.id));
-      V.bindTooltip(button,[item.name,item.id,'Maximum stack: '+item.max]);itemButtons.set(item.id,button);
+      V.bindTooltip(button,item.max===undefined?[item.name,item.id]:[item.name,item.id,'Maximum stack: '+item.max]);itemButtons.set(item.id,button);
     }
     nodes.push(button);
   }
-  $('item-browser').replaceChildren(...nodes);$('item-browser').scrollTop=0;
+  const host=$('item-browser'),visible=new Set(nodes);
+  for(const button of host.children)if(!visible.has(button)&&K.items.get(button.dataset.item)?.loadIcon)itemButtons.delete(button.dataset.item);
+  host.replaceChildren(...nodes);host.scrollTop=0;
   if(!nodes.length) {
     const empty=document.createElement('div');empty.className='item-empty';
-    const text=document.createElement('p');text.textContent=category==='used'?'No vanilla items in this kit match your search.':'No matching vanilla items. Add a modded item by its ID.';
+    const text=document.createElement('p');text.textContent=category==='used'?'No items in this kit match your search.':'No matching items.';
     const button=document.createElement('button');button.type='button';button.textContent='Enter an item ID';button.addEventListener('click',()=>{$('item-id').focus();$('item-id').select();});empty.append(text,button);$('item-browser').append(empty);
   }
   markSelectedItem();
@@ -520,7 +523,48 @@ $('item-browser').addEventListener('wheel',event=>{
 $('item-browser').addEventListener('click',event=>{
   const button=event.target.closest('[data-item]');if(button&&!event.detail)libraryClick(button.dataset.item,event);
 });
-document.querySelector('.kit-library').addEventListener('click',event=>{
+let importingMods=false;
+async function importMods(files) {
+  if(importingMods||!files.length)return;
+  const status=$('mod-import-status'),button=$('import-mods');
+  importingMods=button.disabled=true;status.textContent='Importing mod JARs…';
+  V.hideTooltip();library.classList.add('mod-importing');
+  try{
+    const {items,failures}=await HeritageModItems.read(files);
+    let count=0;
+    for(const item of items){
+      if(K.items.has(item.id))continue;
+      K.items.set(item.id,item);searchIndex.push(indexItem(item));count++;
+    }
+    if(count){
+      if(!$('search-items').value&&$('item-category').value==='all')$('item-category').value='modded';
+      page=0;renderInventory();slotFields();browser();
+    }
+    const result=count?'Added '+count.toLocaleString()+' modded item'+(count===1?'':'s')+'.':items.length?'These items are already imported.':'No items imported.';
+    status.textContent=[result,...failures].join(' ');
+  }finally{
+    importingMods=button.disabled=false;library.classList.remove('mod-importing');
+  }
+}
+$('import-mods').addEventListener('click',()=>$('mod-files').click());
+$('mod-files').addEventListener('change',event=>{
+  const files=[...event.target.files];event.target.value='';importMods(files);
+});
+for(const type of ['dragenter','dragover'])library.addEventListener(type,event=>{
+  if(!event.dataTransfer.types.includes('Files'))return;
+  event.preventDefault();event.dataTransfer.dropEffect=importingMods?'none':'copy';
+  if(!importingMods&&!library.classList.contains('mod-drag-over')){
+    V.hideTooltip();library.classList.add('mod-drag-over');
+  }
+});
+library.addEventListener('dragleave',event=>{
+  if(!library.contains(event.relatedTarget))library.classList.remove('mod-drag-over');
+});
+library.addEventListener('drop',event=>{
+  if(!event.dataTransfer.types.includes('Files'))return;
+  event.preventDefault();library.classList.remove('mod-drag-over');importMods([...event.dataTransfer.files]);
+});
+library.addEventListener('click',event=>{
   if(!carried||event.shiftKey||event.target.closest('[data-item],input,select,textarea,button,a,summary,details'))return;
   clearSlot(selected,true);
 });

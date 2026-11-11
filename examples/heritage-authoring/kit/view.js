@@ -42,14 +42,23 @@ function text(ctx,value,x,y,color='#fff',shadow=false) {
 function icon(id) {
   const node=document.createElement('span'),item=K.items.get(K.normalize(id));
   node.className='mc-item';node.setAttribute('aria-hidden','true');
-  if(item) {node.style.backgroundImage='url("'+atlasUrls[item.page]+'")';node.style.backgroundPosition=-item.x+'px '+(-item.y)+'px';}
-  else node.classList.add('mc-missing');
+  if(item?.page!==undefined) {node.style.backgroundImage='url("'+atlasUrls[item.page]+'")';node.style.backgroundPosition=-item.x+'px '+(-item.y)+'px';}
+  else {
+    node.classList.add('mc-missing');
+    const show=sprite=>{
+      if(!sprite)return;
+      node.classList.replace('mc-missing','mc-mod-icon');node.style.backgroundImage='url("'+sprite.url+'")';
+    };
+    if(item?.sprite===undefined)item?.loadIcon?.().then(show);else show(item.sprite);
+  }
   return node;
 }
-function item(ctx,stack,x,y) {
+function item(ctx,stack,x,y,onMissing) {
   const data=K.items.get(K.normalize(stack.id));
-  if(data)ctx.drawImage(image('items-'+data.page+'.png'),data.x,data.y,32,32,x,y,16,16);
+  if(data?.page!==undefined)ctx.drawImage(image('items-'+data.page+'.png'),data.x,data.y,32,32,x,y,16,16);
+  else if(data?.sprite)ctx.drawImage(data.sprite.canvas,x,y,16,16);
   else {
+    if(data?.loadIcon&&data.sprite===undefined)onMissing?.(data);
     ctx.fillStyle='#000';ctx.fillRect(x,y,16,16);ctx.fillStyle='#f0f';ctx.fillRect(x,y,8,8);ctx.fillRect(x+8,y+8,8,8);
   }
   if((stack.count??1)>1) {const count=String(stack.count);text(ctx,count,x+17-textWidth(count),y+9,'#fff',true);}
@@ -228,7 +237,7 @@ let carriedGhost,carriedKey='',carriedPointer={x:20,y:20};
 function moveCursor(event) {carriedPointer={x:event.clientX,y:event.clientY};if(carriedGhost){carriedGhost.style.left=event.clientX+10+'px';carriedGhost.style.top=event.clientY-16+'px';}}
 function setCursor(stack) {
   document.addEventListener('pointermove',moveCursor,{passive:true});
-  const key=JSON.stringify(stack??null);if(key===carriedKey)return;carriedKey=key;carriedGhost?.remove();carriedGhost=null;
+  const key=JSON.stringify(stack?[stack,!!K.items.get(K.normalize(stack.id))?.loadIcon]:null);if(key===carriedKey)return;carriedKey=key;carriedGhost?.remove();carriedGhost=null;
   document.body.classList.toggle('mc-carrying',!!stack);
   if(!stack)return;
   carriedGhost=document.createElement('div');carriedGhost.className='mc-drag-stack mc-carried-stack';carriedGhost.setAttribute('aria-hidden','true');carriedGhost.append(icon(stack.id));
@@ -294,11 +303,23 @@ function dragStart(event,payload,onDrop,options={}) {
   return cleanup;
 }
 class Inventory {
-  constructor(host,{editable=false,onSelect,onMove,onDrop,onClick,onCollect,onClone,getCursor,getWarnings,onControl,isSelecting,getSelection,onToggleSelection,onMovePreview,onMovePreviewEnd,scaleWidth=0,scaleHeight=0}={}) {
-    this.host=host;this.callbacks={onSelect,onMove,onDrop,onClick,onCollect,onClone,getCursor,getWarnings,onControl,isSelecting,getSelection,onToggleSelection,onMovePreview,onMovePreviewEnd};this.kit={items:[]};this.options={mode:'player'};this.selected=0;this.hover=null;this.aim={x:-12,y:0};this.scaleWidth=scaleWidth;this.scaleHeight=scaleHeight;this.editable=editable;this.ready=false;this.visible=true;this.dirty=true;this.bounds=null;
+  constructor(host,{editable=false,onSelect,onMove,onDrop,onClick,onCollect,onClone,getCursor,getWarnings,onControl,isSelecting,getSelection,onToggleSelection,onMovePreview,onMovePreviewEnd,scaleWidth=0,scaleHeight=0,fillHost=false}={}) {
+    this.host=host;this.callbacks={onSelect,onMove,onDrop,onClick,onCollect,onClone,getCursor,getWarnings,onControl,isSelecting,getSelection,onToggleSelection,onMovePreview,onMovePreviewEnd};this.kit={items:[]};this.options={mode:'player'};this.selected=0;this.hover=null;this.aim={x:-12,y:0};this.scaleWidth=scaleWidth;this.scaleHeight=scaleHeight;this.fillHost=fillHost;this.editable=editable;this.ready=false;this.visible=true;this.dirty=true;this.bounds=null;
     this.frame=document.createElement('div');this.frame.className='mc-inventory';this.frame.dataset.editable=String(editable);this.frame.setAttribute('aria-busy','true');
     this.canvas=document.createElement('canvas');this.canvas.setAttribute('aria-hidden','true');this.background=document.createElement('canvas');
-    this.frame.append(this.canvas);host.replaceChildren(this.frame);this.buttons=new Map();this.controls=new Map();this.entries=new Map();this.stacks=new Map();this.set(this.kit);
+    this.frame.append(this.canvas);host.replaceChildren(this.frame);this.buttons=new Map();this.controls=new Map();this.entries=new Map();this.stacks=new Map();
+    const pendingIcons=new Set();
+    let iconFrame=0;
+    this.requestIcon=data=>{
+      if(pendingIcons.has(data))return;
+      pendingIcons.add(data);
+      data.loadIcon().then(sprite=>{
+        pendingIcons.delete(data);
+        if(!sprite||iconFrame||!this.frame.isConnected)return;
+        iconFrame=requestAnimationFrame(()=>{iconFrame=0;this.dirty=true;this.draw();});
+      });
+    };
+    this.set(this.kit);
     this.invalidate=()=>{this.bounds=null;hideTooltip();};
     this.refit=()=>{this.invalidate();this.fit();};
     this.pointer=event=>{
@@ -309,7 +330,7 @@ class Inventory {
       if(!this.frameRequest)this.frameRequest=requestAnimationFrame(()=>{this.frameRequest=0;if(this.frame.isConnected&&this.visible)this.draw();});
     };
     this.frame.addEventListener('wheel',event=>{
-      if(this.layout.mode==='player'||!this.layout.maxOffset||!event.deltaY)return;
+      if(this.options.passiveWheel||this.layout.mode==='player'||!this.layout.maxOffset||!event.deltaY)return;
       const r=this.frame.getBoundingClientRect(),x=(event.clientX-r.left)*this.layout.width/r.width;
       if(x>=this.layout.inventoryX)return;
       event.preventDefault();this.callbacks.onControl?.({kind:'page',value:Math.max(0,Math.min(this.layout.maxOffset,this.layout.offset+Math.sign(event.deltaY)))});
@@ -320,12 +341,19 @@ class Inventory {
     assets().then(()=>{if(!this.frame.isConnected)return;this.ready=true;this.frame.setAttribute('aria-busy','false');this.labels();this.draw();}).catch(error=>{host.textContent='Inventory assets could not load: '+error.message;});
   }
   fit() {
-    let ratio=devicePixelRatio||1;
-    for(let node=this.host;node;node=node.parentElement)ratio*=Number.parseFloat(getComputedStyle(node).zoom)||1;
-    const maximum=Number.parseFloat(getComputedStyle(this.host).maxHeight),available=this.editable&&Number.isFinite(maximum)?Math.min(this.host.clientWidth,maximum*Math.max(this.layout.width,this.scaleWidth)/Math.max(this.layout.height,this.scaleHeight)):this.host.clientWidth;
-    const scale=HeritagePlayer.guiScale(Math.max(this.layout.width,this.scaleWidth),available,ratio),width=this.layout.width*scale,height=this.layout.height*scale;
-    this.scale=scale;this.frame.style.width=width/ratio+'px';this.frame.style.height=height/ratio+'px';
-    this.host.style.overflowX=this.host.clientWidth<width/ratio?'auto':'';
+    let scale=1;
+    if(this.fillHost){
+      this.frame.style.width=this.frame.style.height='100%';
+    }else{
+      let ratio=devicePixelRatio||1;
+      for(let node=this.host;node;node=node.parentElement)ratio*=Number.parseFloat(getComputedStyle(node).zoom)||1;
+      const maximum=Number.parseFloat(getComputedStyle(this.host).maxHeight),available=this.editable&&Number.isFinite(maximum)?Math.min(this.host.clientWidth,maximum*Math.max(this.layout.width,this.scaleWidth)/Math.max(this.layout.height,this.scaleHeight)):this.host.clientWidth;
+      scale=HeritagePlayer.guiScale(Math.max(this.layout.width,this.scaleWidth),available,ratio);
+      this.frame.style.width=this.layout.width*scale/ratio+'px';this.frame.style.height=this.layout.height*scale/ratio+'px';
+      this.host.style.overflowX=this.host.clientWidth<this.layout.width*scale/ratio?'auto':'';
+    }
+    const width=this.layout.width*scale,height=this.layout.height*scale;
+    this.scale=scale;
     if(this.canvas.width!==width||this.canvas.height!==height){
       this.canvas.width=this.background.width=width;this.canvas.height=this.background.height=height;this.scale=scale;this.dirty=true;this.bounds=null;this.draw();
     }
@@ -451,7 +479,7 @@ class Inventory {
     else if(mode!=='accessories')text(ctx,'Crafting',inventoryX+97,inventoryY+6,'#404040');
     for(const position of this.layout.slots) {
       const entry=this.entry(position.id);
-      if(entry)item(ctx,entry.item,position.x,position.y);
+      if(entry)item(ctx,entry.item,position.x,position.y,this.requestIcon);
       else if(position.inventory==='player'&&position.index>=36){const name=({36:'boots',37:'leggings',38:'chestplate',39:'helmet',40:'shield'})[position.index];ctx.drawImage(image('empty_armor_slot_'+name+'.png'),position.x,position.y,16,16);}
       else if(position.icon)ctx.drawImage(image(position.icon),position.x,position.y,16,16);
       else if(position.inventory!=='player')text(ctx,'?',position.x+Math.floor((17-textWidth('?'))/2),position.y+4,'#555555');

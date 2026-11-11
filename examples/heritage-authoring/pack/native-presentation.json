@@ -1,6 +1,6 @@
 {
   "nativeSources": {
-    "client/SpawnSelectScreen.java": "15ce34663dbe77ee774fb1308c7b1b2adad917299ddc9ca39a11da566d3b246f",
+    "client/SpawnSelectScreen.java": "d7673a9149b08661a01f10f3c54ccb3c4b82575865d5965f27dd4e88e685b35a",
     "client/IntroCinematicBars.java": "85d74a08136b66b35d9efdf2440e3d6421380fdaa007f617ce43045138b17741"
   },
   "actions": [

@@ -10,7 +10,7 @@ function create(config){
   function refresh(){
     resumeState();const request=++revision,value=config.get();if(!config.visible())return;
     if(value.id!==lastPack){lastPack=value.id;filter='';offset=0;}
-    if(value.output.errors.length){$('coverage-summary').textContent='Resolve the pack issues to inspect preview paths.';config.summary?.('Unavailable until file issues are resolved.');$('coverage-rows').replaceChildren();$('coverage-pagination').hidden=true;return;}
+    if(value.output.errors.length){$('coverage-summary').textContent='Resolve the pack issues to inspect preview paths.';config.summary?.('Unavailable');$('coverage-rows').replaceChildren();$('coverage-pagination').hidden=true;return;}
     HeritageFlowPreview.catalog(value.output).then(data=>{
       if(request!==revision||value.id!==config.get().id)return;const choices=data.choices,images=C.pictures(value.output),summary=ledger.summary(value.id,choices,images),select=$('coverage-location');
       select.replaceChildren(new Option('All locations',''),...choices.spawns.map(spawn=>new Option(name(spawn,'title',data.translations),spawn.id)));if(!choices.spawns.some(spawn=>spawn.id===filter))filter='';select.value=filter;

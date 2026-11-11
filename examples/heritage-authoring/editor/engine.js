@@ -46,6 +46,16 @@ function updateJson(state,changes,options) {
   const intro={...(state.wrapped?state.document.intro:state.document),...changes};
   return readJson(JSON.stringify(state.wrapped?{...state.document,intro}:intro),options);
 }
+function cinematicPack(state,name) {
+  const path=String(name).toLowerCase().replace(/[^a-z0-9_-]+/g,'_').replace(/^_+|_+$/g,'')||'cinematic';
+  const intro=state.wrapped?state.document.intro:state.document;
+  const content=JSON.stringify(intro,null,2)+'\n';
+  readJson(content);
+  return {id:'heritage_cinematics:'+path,filename:path+'-cinematic.zip',files:[
+    {path:'pack.mcmeta',content:JSON.stringify({pack:{pack_format:48,description:String(name).trim()||'Heritage cinematic'}},null,2)+'\n'},
+    {path:'data/heritage_cinematics/heritage/cinematics/'+path+'.json',content}
+  ]};
+}
 const clamp = (v, a=0, b=1) => Math.max(a, Math.min(b,v));
 const canonical = tag => Object.hasOwn(aliases,tag)?aliases[tag]:tag;
 const active = e => !!(e.wave || e.shake || e.pulse || e.jump || e.rainbow);
@@ -544,7 +554,7 @@ function validate(cfg) {
   for(const variant of cfg.variants??[])playback({...cfg,...variant,variants:[]});
   return cfg;
 }
-const api={validateSamples,pacingCue,schedule,playback,revealDuration,factDefaults,keyDefaults,condition,validateCondition,dialogue,diagnostics,contextDefaults,token,effects,canonical,barHeight,barVisibility,sampleSlant,componentText,validateComponent,colors,positions,defaults,packDefaults,readJson,updateJson,parse,wrap,padding,bounds,guiViewport,layout,presentation,trackTiming,textStart,textDuration,barProgress,duration,wordEnds,visible,revealCues,blipCues,glyphFrame,validate,clamp,active};
+const api={validateSamples,pacingCue,schedule,playback,revealDuration,factDefaults,keyDefaults,condition,validateCondition,dialogue,diagnostics,contextDefaults,token,effects,canonical,barHeight,barVisibility,sampleSlant,componentText,validateComponent,colors,positions,defaults,packDefaults,readJson,updateJson,cinematicPack,parse,wrap,padding,bounds,guiViewport,layout,presentation,trackTiming,textStart,textDuration,barProgress,duration,wordEnds,visible,revealCues,blipCues,glyphFrame,validate,clamp,active};
 if(typeof module!=='undefined') module.exports=api;
 else globalThis.HeritagePreview=api;
 })();

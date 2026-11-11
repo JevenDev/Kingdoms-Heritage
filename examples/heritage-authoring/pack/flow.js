@@ -35,10 +35,14 @@ function locations(spawn,sample={}) {
   if(['biome','structure'].includes(spawn.type)&&!spawn.target?.startsWith('#'))names[spawn.type]=place(spawn.target);
   return names;
 }
-function context(spawn,kit,player,names,translations={}) {
+function companionNames(names){
+  if(names.length<3)return names.join(' and ');
+  return names.slice(0,-1).join(', ')+', and '+names.at(-1);
+}
+function context(spawn,kit,player,names,translations={},companions=[]) {
   let placeName=(names.structure!=='Wilderness'?names.structure:names.biome).replace(/^Village .+$/,'Village').replace(/^Ruined Portal.*$/,'Ruined Portal').replace(/^Ocean Ruin .+$/,'Ocean Ruins').toLowerCase();
   if(!/^(the |a |an )/.test(placeName))placeName='the '+placeName;
-  return {...names,player,party_leader:player,party_size:'1',companions:'',spawn:label(spawn,'title',translations),kit:label(kit,'title',translations),equipment:kit.items?.length?label(kit,'title',translations):'nothing but your own two hands',place:placeName,
+  return {...names,player,party_leader:player,party_size:String(companions.length+1),companions:companionNames(companions),spawn:label(spawn,'title',translations),kit:label(kit,'title',translations),equipment:kit.items?.length?label(kit,'title',translations):'nothing but your own two hands',place:placeName,
     facts:{kit:kit.id??'',spawn:spawn.id??'',dimension:spawn.dimension??'minecraft:overworld',biome:spawn.type==='biome'&&!spawn.target?.startsWith('#')?spawn.target:'minecraft:plains',structure:spawn.type==='structure'&&!spawn.target?.startsWith('#')?spawn.target:'',inventory_policy:'merge',keeps_belongings:'false',receives_kit:String(!!kit.items?.length)}};
 }
 function narration(player,names,kit,translations={}) {
@@ -47,7 +51,8 @@ function narration(player,names,kit,translations={}) {
   const segment=(prefix,value,suffix,pause)=>({text:prefix+value+suffix,pause,highlight:[Array.from(prefix).length,Array.from(value).length]});
   const placeName=(/^(the |a |an )/.test(location)?'':'the ')+location;
   const equipment=kit.items.length?segment(' with equipment from the "',label(kit,'title',translations),'" kit...',1000):segment(' with ','nothing but your own two hands','...',1000);
-  return [segment('',player,'...',500),segment(' you woke up in ',placeName,'...',1000),equipment,{text:' is that correct?',pause:0}];
+  const party=names.companions?[segment(' You will arrive with ',names.companions,'...',1000)]:[];
+  return [segment('',player,'...',500),segment(' you woke up in ',placeName,'...',1000),equipment,...party,{text:' is that correct?',pause:0}];
 }
 function revealed(segments,elapsed) {
   let count=0;
@@ -59,6 +64,15 @@ function revealed(segments,elapsed) {
     elapsed-=segment.pause;
   }
   return count;
+}
+const pageSize=10;
+function browseLocation(count,index,offset,byPage=false){
+  const last=count-1;
+  if(byPage){
+    const page=Math.floor(index/pageSize),next=Math.max(0,Math.min(Math.floor(last/pageSize),page+offset));
+    index=next*pageSize+index%pageSize;
+  }else index+=offset;
+  return Math.max(0,Math.min(last,index));
 }
 class Session {
   constructor(choices){this.choices=structuredClone(choices);this.restart();}
@@ -88,13 +102,18 @@ class Session {
   next(poolIndex=0){
     if(this.phase==='location-confirm'){
       if(!this.kit)throw new Error('This location has no allowed kits.');
-      this.phase=this.allowed().length===1?'loading':'kit';
+      if(this.allowed().length>1){this.phase='kit';return;}
+      this.prepareArrival(poolIndex);
     }else if(this.phase==='kit')this.phase='kit-confirm';
-    else if(this.phase==='kit-confirm')this.phase='loading';
+    else if(this.phase==='kit-confirm')this.prepareArrival(poolIndex);
     else if(this.phase==='loading')this.phase='review';
     else if(this.phase==='review')this.phase=this.arrival.intro?'intro':'complete';
     else if(this.phase==='intro')this.phase='complete';
-    if(this.phase==='loading'){this.poolIndex=poolIndex;this.arrival=destination(this.spawn,poolIndex);}
+  }
+  prepareArrival(index){
+    this.arrival=destination(this.spawn,index);
+    this.poolIndex=this.spawn.type==='pool'?index:null;
+    this.phase='loading';
   }
   back(){
     if(this.phase==='location-confirm'){this.phase='location';return;}
@@ -103,7 +122,7 @@ class Session {
     if(this.phase==='review')this.phase=this.allowed().length===1?'location-confirm':'kit';
   }
 }
-const api={compare,catalog,label,place,destination,locations,context,narration,revealed,Session};
+const api={pageSize,browseLocation,companionNames,compare,catalog,label,place,destination,locations,context,narration,revealed,Session};
 if(typeof module!=='undefined')module.exports=api;
 else globalThis.HeritageFlow=api;
 })();

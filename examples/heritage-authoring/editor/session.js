@@ -75,7 +75,8 @@ async function acquire(key) {
   return false;
 }
 function download(value,name) {
-  const url=URL.createObjectURL(new Blob([JSON.stringify(value,null,2)+'\n'],{type:'application/json'})),link=document.createElement('a');
+  const blob=value instanceof Blob?value:new Blob([JSON.stringify(value,null,2)+'\n'],{type:'application/json'});
+  const url=URL.createObjectURL(blob),link=document.createElement('a');
   link.href=url;link.download=name;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
 function library({workspace,snapshot,activate,blank,kind,status,persist}) {

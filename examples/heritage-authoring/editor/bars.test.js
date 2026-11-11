@@ -1,5 +1,17 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict'),P=require('./engine.js');
+test('cinematic downloads unwrap spawn intros and round-trip as a standalone 1.21.1 datapack',async()=>{
+  const Zip=require('../pack/zip.js'),intro={text:'Chapter {player}',timeline:{text_start_ticks:20,bar_start_ticks:0,bar_enter_ticks:20,bar_hold_ticks:100,bar_exit_ticks:20}};
+  const state=P.readJson(JSON.stringify({type:'fixed',x:10,y:64,z:20,intro}));
+  const pack=P.cinematicPack(state,'Chapter Two');
+  assert.equal(pack.id,'heritage_cinematics:chapter_two');
+  assert.equal(pack.filename,'chapter_two-cinematic.zip');
+  const files=await Zip.unzip(Zip.zip(pack.files));
+  assert.deepEqual(files.map(file=>file.path),['pack.mcmeta','data/heritage_cinematics/heritage/cinematics/chapter_two.json']);
+  const decode=file=>JSON.parse(new TextDecoder().decode(file.content));
+  assert.equal(decode(files[0]).pack.pack_format,48);
+  assert.deepEqual(decode(files[1]),intro);
+});
 test('bar thickness defaults without rewriting existing intro documents',()=>{
   const source={text:'Arrival',cinematic_bars:true,extra:{keep:true}},parsed=P.readJson(JSON.stringify(source));
   assert.equal(parsed.config.bar_height,26);assert.deepEqual(parsed.document,source);

@@ -9,7 +9,7 @@ const issue=(message,path=[])=>Object.assign(new Error(message),{path});
 const integer=(value,min,max,name,path=[])=>{if(!Number.isInteger(value)||value<min||value>max)throw issue(name+' must be a whole number from '+min+' to '+max+'.',path);};
 function itemWarnings(entry) {
   const stack=entry.item,id=normalize(stack.id),warnings=[];
-  if(!items.has(id)&&!id.startsWith('minecraft:'))warnings.push('Check this modded item in Minecraft.');
+  if(items.get(id)?.max===undefined&&!id.startsWith('minecraft:'))warnings.push('Check this modded item in Minecraft.');
   if(entry.ignore_stack_limit===true)warnings.push('Check this stack size in Minecraft.');
   return warnings;
 }

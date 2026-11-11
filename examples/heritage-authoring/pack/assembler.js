@@ -90,7 +90,7 @@ function updateSteps(){
   const navigation=W.navigation(currentStep,locationPart,embeddedSession?.kind,returnToReview);$('toggle-content-browser').hidden=currentStep!=='locations';updateContentBrowser();
   $('step-back').hidden=currentStep==='pack'||!!embeddedSession;$('step-next').hidden=currentStep==='export'||!!embeddedSession;
   const blocked=currentStep==='preview'&&output?.errors.length;
-  $('step-back').textContent=navigation.backLabel;$('step-back').setAttribute('aria-label',navigation.backLabel);$('step-next').textContent=currentStep==='locations'&&!active()?(state.keepLocations?'Review and preview':'Add a location'):navigation.nextLabel;
+  $('step-back').textContent='Back';$('step-back').setAttribute('aria-label',navigation.backLabel);$('step-next').textContent=currentStep==='locations'&&!active()?(state.keepLocations?'Review and preview':'Add a location'):navigation.nextLabel;
   if(blocked)$('step-next').textContent='Fix '+output.errors.length+' issue'+(output.errors.length===1?'':'s');$('step-next').disabled=currentStep==='preview'&&state.locations.some(entry=>pictureRequests.has(entry));
   $('close-embedded-editor').hidden=!embeddedSession;$('close-embedded-editor').disabled=!!embeddedSession&&$('embedded-editor').dataset.ready!=='true';$('editor-new-entry').hidden=!embeddedSession;$('editor-new-entry').disabled=$('close-embedded-editor').disabled;
   $('editor-new-entry').textContent='New '+(embeddedSession?.kind??'entry');document.querySelector('.pack-history-actions').hidden=!!embeddedSession;
@@ -485,7 +485,7 @@ function renderPool() {
     if(value&&typeof value==='object')intro.append(option(':imported','Imported intro'));
     else if(value&&!catalog.intros.some(draft=>draft.id===value))intro.append(option(value,'Missing saved intro'));
     intro.value=value===null?':none':typeof value==='object'?':imported':value??'';
-    introLabel.append(intro);const introControls=element('div',{class:'pool-intro-controls'});introControls.append(introLabel);const create=element('button',{type:'button','data-create-destination-intro':String(index),'aria-label':'Create intro for place '+(index+1)},'Create intro');introControls.append(create);const introId=typeof value==='string'&&value?value:entry.intro;if(value!==null&&catalog.intros.some(draft=>draft.id===introId))introControls.append(element('button',{type:'button','data-edit-destination-intro':String(index),'data-intro-id':introId,'aria-label':'Edit intro for place '+(index+1)},'Edit intro'));introRow.append(introControls);
+    introLabel.append(intro);const introControls=element('div',{class:'pool-intro-controls'});introControls.append(introLabel);const create=element('button',{type:'button','data-create-destination-intro':String(index),'aria-label':'New intro for place '+(index+1)},'New intro');introControls.append(create);const introId=typeof value==='string'&&value?value:entry.intro;if(value!==null&&catalog.intros.some(draft=>draft.id===introId))introControls.append(element('button',{type:'button','data-edit-destination-intro':String(index),'data-intro-id':introId,'aria-label':'Edit intro for place '+(index+1)},'Edit intro'));introRow.append(introControls);
     const draft=catalog.intros.find(draft=>draft.id===(value||entry.intro));
     const text=value===null?'Players will start here without an intro.':value&&typeof value==='object'?plainText(value.text??''):draft?.error||plainText(draft?.document?.text??'');
     const status=element('p',{class:'intro-excerpt hint'},text||(value?'This intro is missing. Choose another intro.':entry.intro?'The pool’s default intro is missing.':'The pool has no default intro.'));
@@ -565,7 +565,7 @@ function fileLabel(path){
 }
 function renderDownloadDetails(){
   const base=P.slug(state.name),resources=!!output.resourceFiles.length,data=base+(resources?'-data':'')+'.zip',resource=base+'-resources.zip',host=$('export-contents');host.replaceChildren();
-  for(const [name,description] of [[data,'Datapack · locations, kits and presentation settings'],...(resources?[[resource,'Resource pack · '+output.pictureCount+' card image'+(output.pictureCount===1?'':'s')]]:[])]){const row=element('li');row.append(element('strong',{},name),element('span',{class:'hint'},description));host.append(row);}
+  for(const [name,description] of [[data,'Datapack'],...(resources?[[resource,output.pictureCount?'Resource pack · '+output.pictureCount+' card image'+(output.pictureCount===1?'':'s'):'Resource pack']]:[])]){const row=element('li');row.append(element('strong',{},name),element('span',{class:'hint'},description));host.append(row);}
   $('install-data-name').textContent=data;$('install-resource-name').textContent=resource;$('install-bundle-name').textContent=base+'-packs.zip';$('install-extract-step').hidden=$('install-resource-step').hidden=!resources;
 }
 function previewFile() {
@@ -599,15 +599,14 @@ function renderOutput() {
   $('export-pack').disabled=!!output.errors.length||preparing;
   $('preview-flow').disabled=$('export-pack').disabled;
   $('flow-readiness').textContent=preparing?'Your picture is being prepared.':output.errors.length?output.errors.length+' issue'+(output.errors.length===1?' blocks':'s block')+' the preview.':previewCurrent?'Preview completed for one path in this version.':previewed?'This pack has changed since your last preview.':'Preview is ready.';
-  $('export-file-check').textContent=preparing?'Waiting for pictures to finish processing.':output.errors.length?output.errors.length+' issue'+(output.errors.length===1?' needs':'s need')+' fixing in Preview.':'Passed the builder’s file and reference checks.';
-  $('export-preview-status').textContent=output.errors.length?'Unavailable until file issues are resolved.':'Checking saved browser preview coverage…';$('export-preview-again').disabled=$('preview-flow').disabled;$('export-preview-again').textContent=previewed?'Preview again':'Preview selection flow';
+  $('export-file-check').textContent=preparing?'Processing images…':output.errors.length?output.errors.length+' issue'+(output.errors.length===1?'':'s'):'Passed';
+  $('export-preview-status').textContent=output.errors.length?'Unavailable':'Checking coverage…';$('export-preview-again').disabled=$('preview-flow').disabled;
   $('export-pack').textContent=output.resourceFiles.length?'Download datapack & resource pack':'Download datapack';
   $('export-file').disabled=!output.previewFiles.length;
   $('preview-state').textContent=output.errors.length?'Draft preview. Fix the highlighted issues before downloading.':'Read-only preview';
   const kitCount=state.kits.filter(kit=>kit.included).length+(state.keepKits?1:0),locationCount=state.locations.length+(state.keepLocations?4:0);
   $('pack-summary').textContent=locationCount+' starting location'+(locationCount===1?'':'s')+' · '+kitCount+' included kit'+(kitCount===1?'':'s');
-  $('export-name').textContent=output.resourceFiles.length?'Datapack and resource pack':'Datapack';$('export-blocked').hidden=!output.errors.length;$('export-fix').hidden=!output.errors.length;
-  $('export-readiness').textContent=preparing?'Wait for your picture to finish processing.':output.errors.length?'A few things need fixing before you download.':output.resourceFiles.length?'Includes a datapack ZIP and a resource-pack ZIP '+(output.pictureCount?'for '+output.pictureCount+' card picture'+(output.pictureCount===1?'':'s'):'with imported resources')+'. Extract both ZIPs from the download before installing.':'Datapack ZIP for Minecraft 1.21.1. Check the installed pack in Minecraft before distributing it.';
+  $('export-fix').hidden=!output.errors.length;
   const errors=$('export-errors');errors.replaceChildren();
   if(output.errors.length){errors.append(element('p',{},output.errors.length+' issue'+(output.errors.length===1?' needs':'s need')+' fixing before preview or download:'));const list=element('ul');
     for(const issue of output.issues){const row=element('li'),entry=state.locations.find(entry=>entry.id===issue.locationId),button=element('button',{type:'button'},(issue.label||entry?.fields.title||entry?.path||'Pack')+': '+issue.message);button.addEventListener('click',()=>fixIssue(issue));row.append(button);list.append(row);}
