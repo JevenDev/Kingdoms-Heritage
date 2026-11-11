@@ -31,7 +31,7 @@ final class KitShopScreen extends Screen {
     private static final int SHOP_WIDTH = 68, INVENTORY_WIDTH = 176, PANEL_HEIGHT = 166;
     private static final int COLUMNS = 3, PAGE_SIZE = 24, SLOT_PITCH = 18, BAR_WIDTH = 182;
     private static final int EFFECT_DURATION = 270;
-    private static final int TAB_HEIGHT = 26, TAB_PITCH = 27, TAB_WIDTH = 28, TAB_ROWS = 6;
+    private static final int TAB_HEIGHT = 26, TAB_PITCH = 27, TAB_WIDTH = 28, TAB_SPRITE_WIDTH = 32, TAB_ROWS = 6;
     private static final int DETAIL_WIDTH = 68, NAME_LINES = 2;
     private static final int CHEST_SLOT = 38, OFFHAND_SLOT = 40;
     private static final int DETAIL_INK = 0xff404040, DETAIL_MUTED = 0xff545454;
@@ -584,12 +584,14 @@ final class KitShopScreen extends Screen {
             graphics.pose().translate(getX(), getY() + TAB_HEIGHT, 0);
             graphics.pose().mulPose(Axis.ZP.rotationDegrees(-90));
             var sprite = index != section ? TAB_UNSELECTED : index % tabRows() == 0 ? TAB_SELECTED : TAB_SELECTED_MIDDLE;
-            graphics.blit(sprite, 0, 0, TAB_HEIGHT, 32, TAB_HEIGHT, 0, -TAB_HEIGHT, 32, TAB_HEIGHT, 32);
+            graphics.blit(sprite, 0, 0, TAB_HEIGHT, TAB_SPRITE_WIDTH, TAB_HEIGHT, 0,
+                    -TAB_HEIGHT, TAB_SPRITE_WIDTH, TAB_HEIGHT, TAB_SPRITE_WIDTH);
             graphics.pose().popPose();
             if (index != section && isFocused() && minecraft.getLastInputType().isKeyboard()) {
                 graphics.renderOutline(getX() + 1, getY() + 1, TAB_WIDTH - 1, TAB_HEIGHT - 2, 0xffffe4a1);
             }
-            graphics.renderItem(index == 0 ? Items.CHEST.getDefaultInstance() : sectionIcons.get(index - 1), getX() + 9, getY() + 5);
+            var icon = index == 0 ? Items.CHEST.getDefaultInstance() : sectionIcons.get(index - 1);
+            graphics.renderItem(icon, getX() + (TAB_SPRITE_WIDTH - 16) / 2, getY() + (TAB_HEIGHT - 16) / 2);
         }
     }
 

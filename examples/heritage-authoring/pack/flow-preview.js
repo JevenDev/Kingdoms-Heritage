@@ -770,10 +770,11 @@ function drawShopTrade(item,x,y,progress){
 }
 const currentShopOffers=()=>F.shopOfferIndices(session.kit.shop,shopSection);
 function paintShopTab({x,y,icon,sprite}){
+  const texture=images.get(sprite);
   ctx.save();ctx.translate(x,y);ctx.rotate(-Math.PI/2);ctx.scale(-1,1);
-  ctx.drawImage(images.get(sprite),0,0);ctx.restore();
+  ctx.drawImage(texture,0,0);ctx.restore();
   const id=HeritageKit.items.has(HeritageKit.normalize(icon))?icon:'minecraft:paper';
-  HeritageInventory.item(ctx,{id},x+9,y+5,inventory.requestIcon);
+  HeritageInventory.item(ctx,{id},x+(texture.height-16)/2,y+(texture.width-16)/2,inventory.requestIcon);
 }
 function drawShopTabs(left,top,showing){
   const sections=session.kit.shop.sections??[];
