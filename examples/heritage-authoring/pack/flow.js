@@ -75,11 +75,34 @@ function browseLocation(count,index,offset,byPage=false){
   }else index+=offset;
   return Math.max(0,Math.min(last,index));
 }
-const shopPageSize=24;
+const shopColumns=3,shopRows=8,shopPageSize=shopColumns*shopRows;
 function shopOfferIndices(shop,section=''){
   const indices=[];
   for(const [index,offer] of shop.offers.entries())if(!section||offer.section===section)indices.push(index);
   return indices;
+}
+function shopLayout(shop,section=''){
+  const positioned=new Map(),automatic=[];
+  for(const index of shopOfferIndices(shop,section)){
+    const offer=shop.offers[index],position=(offer.section??'')===section?offer.position:null;
+    if(!position){automatic.push(index);continue;}
+    if(!positioned.has(position.column))positioned.set(position.column,Array(shopRows).fill(-1));
+    positioned.get(position.column)[position.row-1]=index;
+  }
+  const explicit=[...positioned.keys()].sort((a,b)=>a-b).map(column=>positioned.get(column));
+  const autoColumns=Math.max(Math.min(shopColumns,automatic.length),Math.ceil(automatic.length/shopRows));
+  const columns=explicit.length+autoColumns;
+  return {
+    columns,
+    pages:Math.max(1,columns-shopColumns+1),
+    window(offset){
+      return Array.from({length:shopPageSize},(_,cell)=>{
+        const row=Math.floor(cell/shopColumns),column=offset+cell%shopColumns;
+        if(column>=columns)return -1;
+        return column<explicit.length?explicit[column][row]:automatic[row*autoColumns+column-explicit.length]??-1;
+      });
+    }
+  };
 }
 function equipmentSlot(stack){
   const id=stack.id.includes(':')?stack.id:'minecraft:'+stack.id;
@@ -194,7 +217,7 @@ class Session {
     if(this.phase==='review')this.phase=this.kit.shop?'kit-shop':this.allowed().length===1?'location-confirm':'kit';
   }
 }
-const api={pageSize,shopPageSize,shopOfferIndices,browseLocation,companionNames,compare,catalog,label,place,destination,locations,context,narration,revealed,Session};
+const api={pageSize,shopPageSize,shopOfferIndices,shopLayout,browseLocation,companionNames,compare,catalog,label,place,destination,locations,context,narration,revealed,Session};
 if(typeof module!=='undefined')module.exports=api;
 else globalThis.HeritageFlow=api;
 })();

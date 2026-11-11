@@ -151,7 +151,7 @@
 .shop-section-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 12px; }
 .shop-section-row .stack { flex: 1 1 140px; margin: 0; min-width: 0; }
 .shop-section-row input { width: 100%; }
-.shop-offer-section { grid-column: 1 / -1; }
+.shop-offer-section, .shop-offer-slot { grid-column: 1 / -1; }
 .shop-offer-section select { width: 100%; min-width: 0; }
 .shop-add-form .stack { flex: 1 1 180px; min-width: 0; max-width: 360px; }
 #shop-status[data-error=true] { color: var(--danger, #e6a3a3); }

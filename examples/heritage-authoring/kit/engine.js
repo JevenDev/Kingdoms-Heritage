@@ -80,12 +80,23 @@ function validateShop(shop,warnings) {
     }
   }
   if(!Array.isArray(shop.offers)||!shop.offers.length||shop.offers.length>256)throw issue('Enter 1 to 256 shop offers.',['shop','offers']);
+  const positions=new Set();
   for(const [index,offer] of shop.offers.entries()) {
     const path=['shop','offers',index],label='Offer '+(index+1);
     if(!object(offer))throw issue(label+' must be an object.',path);
     integer(offer.cost,0,1000000,label+' cost',[...path,'cost']);
     if(offer.limit!==undefined)integer(offer.limit,1,41,label+' purchase limit',[...path,'limit']);
     if(offer.section!==undefined&&!sections.has(offer.section))throw issue(label+' refers to an unknown shop section.',[...path,'section']);
+    if(offer.position!==undefined){
+      const positionPath=[...path,'position'];
+      if(!object(offer.position))throw issue(label+' position must be an object.',positionPath);
+      const {row,column}=offer.position;
+      integer(row,1,8,label+' row',[...positionPath,'row']);
+      integer(column,1,256,label+' column',[...positionPath,'column']);
+      const slot=(offer.section??'')+':'+row+':'+column;
+      if(positions.has(slot))throw issue(label+' shares a position with another offer in this section.',positionPath);
+      positions.add(slot);
+    }
     validateStack({item:offer.item},label,path,warnings);
   }
 }

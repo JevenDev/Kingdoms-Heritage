@@ -18,7 +18,7 @@ let musicTick=0,musicFade=0,musicDuck=1,hoverReady=false;
 const backgroundStarted=clock();
 const veil=document.createElement('canvas'),veilContext=veil.getContext('2d'),veilRenderer=new HeritageCanvas(veilContext);veil.setAttribute('aria-hidden','true');Object.assign(veil.style,{position:'absolute',inset:'0',width:'100%',height:'100%',pointerEvents:'none',imageRendering:'pixelated',background:'transparent',border:'0',borderRadius:'0',boxShadow:'none'});$('flow-screen').append(veil);
 let carousel,outgoingCards=[],browseFocus=null,kitFrames=new Map();
-let shopPage=0,shopKit=null,shopTrade=null,shopSection='',shopSectionPage=0;
+let shopPage=0,shopKit=null,shopTrade=null,shopSection='',shopSectionPage=0,shopLayout,shopBounds;
 const shopTabRows=6,shopTabHeight=26,shopTabPitch=27,shopTabWidth=28;
 const shopTradeDuration=270,tradeSprite=document.createElement('canvas');
 tradeSprite.width=tradeSprite.height=16;
@@ -551,7 +551,7 @@ function enter(focus=true){
       kitFrames.clear();inventory.set(session.kit,inventoryOptions);
     }});
     if(phase==='kit-shop'){
-      if(shopKit!==session.kit){shopKit=session.kit;shopPage=shopSectionPage=0;shopSection='';}
+      if(shopKit!==session.kit){shopKit=session.kit;shopPage=shopSectionPage=0;shopSection='';shopLayout=undefined;}
       HeritageInventory.hideTooltip();
       inventory.set(session.loadout(),shopInventoryOptions);
       $('flow-narration').textContent=shopBudget();
@@ -773,7 +773,7 @@ function drawShopTrade(item,x,y,progress){
     ctx.restore();
   }
 }
-const currentShopOffers=()=>F.shopOfferIndices(session.kit.shop,shopSection);
+const currentShopLayout=()=>shopLayout??=F.shopLayout(session.kit.shop,shopSection);
 function paintShopTab({x,y,icon,sprite}){
   const texture=images.get(sprite);
   ctx.save();ctx.translate(x,y);ctx.rotate(-Math.PI/2);ctx.scale(-1,1);
@@ -796,7 +796,7 @@ function drawShopTabs(left,top,showing){
     const y=top+(overflow?16:4)+row*shopTabPitch,selected=tab.id===shopSection;
     const node=hit((tab.id?'shop-section-'+tab.id:'shop-all-offers'),tab.name,x,y,shopTabWidth,shopTabHeight,()=>{
       if(tab.id===shopSection)return;
-      shopSection=tab.id;shopPage=0;
+      shopSection=tab.id;shopPage=0;shopLayout=undefined;
       $('flow-narration').textContent=tab.name+'. '+shopBudget();
     });
     node.classList.add('shop-tab-hit');
@@ -814,7 +814,8 @@ function shopScreen(w,h,now){
   const shake=shopTrade?Math.round(Math.sin(progress*19)*2.5*(1-progress)):0;
   const {budget,offers}=session.kit.shop,spent=session.spent,shop=images.get('shop');
   const left=Math.trunc((w-shop.width-inventory.layout.width)/2),top=Math.trunc((h-shop.height)/2),inv=left+shop.width,bottom=top+shop.height+4;
-  const visibleOffers=currentShopOffers(),pages=Math.max(1,Math.ceil(visibleOffers.length/F.shopPageSize)),start=shopPage*F.shopPageSize;
+  shopBounds={left,top,right:inv,bottom:top+shop.height};
+  const layout=currentShopLayout(),pages=layout.pages,visibleOffers=layout.window(shopPage);
   const slotPitch=18;
   let detail=null;
   const showing=node=>!partyOpen&&node.matches(':hover,:focus-visible');
@@ -825,7 +826,8 @@ function shopScreen(w,h,now){
   inventory.visible=true;inventory.draw(shopTrade?.buying?shopTrade.slot:null);
   ctx.drawImage(inventory.canvas,inv,top,inventory.layout.width,inventory.layout.height);
 
-  for(const [cell,index] of visibleOffers.slice(start,start+F.shopPageSize).entries()){
+  for(const [cell,index] of visibleOffers.entries()){
+    if(index<0)continue;
     const x=left+8+cell%3*slotPitch,y=top+12+Math.floor(cell/3)*slotPitch;
     const status=session.shopStatus(index),{offer}=status,name=HeritageItemText.name(offer.item);
     const action=shopText('buy',name,offer.cost),feedback=shopStatusText(status);
@@ -907,7 +909,7 @@ function shopScreen(w,h,now){
     if(lines===9&&(status.limit>1||status.bought>=status.limit))text(shopText('bought',status.bought,status.limit),detailX,top+67,{...ink,color:0x505050,maxLines:1});
   }
 
-  if(!visibleOffers.length)text(shopText('empty_section'),left+shop.width/2,top+18,{center:true,limit:shop.width-12});
+  if(!layout.columns)text(shopText('empty_section'),left+shop.width/2,top+18,{center:true,limit:shop.width-12});
   if(pages>1){
     arrow('shop-previous',shopText('previous_page'),left+3,bottom,()=>changeShopPage(-1),shopPage===0,{scale:.67,compact:true,forward:false});
     text(shopText('page',shopPage+1,pages),left+shop.width/2,bottom+6,{center:true});
@@ -928,10 +930,11 @@ function shopScreen(w,h,now){
   }
 }
 function changeShopPage(offset){
-  const pages=Math.max(1,Math.ceil(currentShopOffers().length/F.shopPageSize)),page=P.clamp(shopPage+offset,0,pages-1);
-  if(page===shopPage)return;
+  const page=P.clamp(shopPage+offset,0,currentShopLayout().pages-1);
+  if(page===shopPage)return false;
   shopPage=page;
   if(keyboard)needsFocus=true;
+  return true;
 }
 function reviewScreen(w,h,elapsed){
   if(waitingForParty)return;
@@ -1026,7 +1029,7 @@ function render(now){
   drawToast(w,h,now);
   for(const [id,node] of buttons)if(!activeButtons.has(id)){node.remove();buttons.delete(id);}
   if(needsFocus&&session.phase==='complete'){$('flow-close').focus({preventScroll:true});needsFocus=false;}
-  if(needsFocus&&!partyOpen){const target=(waitingForParty?buttons.get('party-trigger'):null)??(session.phase==='kit-shop'?buttons.get('shop-offer-'+currentShopOffers()[shopPage*F.shopPageSize]):null)??buttons.get('next')??buttons.get('reveal')??[...buttons].find(([id])=>id!=='disconnect')?.[1];if(target&&!target.disabled){needsFocus=false;target.focus({preventScroll:true});}}
+  if(needsFocus&&!partyOpen){const target=(waitingForParty?buttons.get('party-trigger'):null)??(session.phase==='kit-shop'?buttons.get('shop-offer-'+currentShopLayout().window(shopPage).find(index=>index>=0)):null)??buttons.get('next')??buttons.get('reveal')??[...buttons].find(([id])=>id!=='disconnect')?.[1];if(target&&!target.disabled){needsFocus=false;target.focus({preventScroll:true});}}
   frame=requestAnimationFrame(render);
 }
 function flowSnapshot(){
@@ -1080,9 +1083,20 @@ $('flow-scale').addEventListener('change',()=>{playerScale=Number($('flow-scale'
 $('flow-pool').addEventListener('change',()=>{if(session)updateEditChoices();});
 for(const id of ['flow-player','flow-biome','flow-structure','flow-inventory-mode'])$(id).addEventListener('change',()=>{if(session)enter(false);});
 $('flow-stage').addEventListener('wheel',event=>{
-  if(!session||!event.deltaY)return;
-  if(partyOpen){event.preventDefault();if(!partyMenu)changePartyPage(Math.sign(event.deltaY));return;}
-  if(!['location','kit'].includes(session.phase))return;
+  if(!session)return;
+  if(partyOpen){if(event.deltaY){event.preventDefault();if(!partyMenu)changePartyPage(Math.sign(event.deltaY));}return;}
+  if(session.phase==='kit-shop'&&shopBounds&&viewport){
+    const delta=event.deltaX||event.deltaY;
+    if(!delta)return;
+    const bounds=canvas.getBoundingClientRect();
+    const x=(event.clientX-bounds.left)*viewport.guiWidth/bounds.width;
+    const y=(event.clientY-bounds.top)*viewport.guiHeight/bounds.height;
+    if(x<shopBounds.left||x>=shopBounds.right||y<shopBounds.top||y>=shopBounds.bottom)return;
+    event.preventDefault();
+    if(transition.phase==='idle'&&changeShopPage(Math.sign(delta)))sound('hover');
+    return;
+  }
+  if(!event.deltaY||!['location','kit'].includes(session.phase))return;
   event.preventDefault();if(transition.phase!=='idle')return;
   const direction=Math.sign(event.deltaY);
   if(expanded)scroll=Math.max(0,scroll+direction*16);

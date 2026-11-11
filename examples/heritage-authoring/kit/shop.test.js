@@ -93,6 +93,7 @@ test('section names, icons and offer assignments survive validation and export',
   draft=Shop.edit(draft,{type:'section-name',id,value:'Food'});
   draft=Shop.edit(draft,{type:'section-icon',id,value:'bread'});
   draft=Shop.edit(draft,{type:'section',index:1,value:id});
+  draft=Shop.edit(draft,{type:'position',index:1,value:{row:6,column:2}});
   const saved=Kit.read(JSON.stringify(draft));
   const pack={name:'Shop pack',namespace:'test_shop',description:'A starting kit shop',keepKits:false,keepLocations:false,
     kits:[{id:'trail',included:true,path:'trail'}],locations:[Pack.location('start')]};
@@ -101,6 +102,9 @@ test('section names, icons and offer assignments survive validation and export',
   const exported=JSON.parse(output.files.find(file=>file.path==='data/test_shop/heritage/kits/trail.json').content);
   assert.deepEqual(exported.shop.sections,[{id,name:'Food',icon:'minecraft:bread'}]);
   assert.equal(exported.shop.offers[1].section,id);
+  assert.deepEqual(exported.shop.offers[1].position,{row:6,column:2});
+  const overlap=Shop.edit(draft,{type:'section',index:0,value:id});
+  assert.throws(()=>Kit.read(JSON.stringify(Shop.edit(overlap,{type:'position',index:0,value:{row:6,column:2}}))),/shares a position/);
   assert.throws(()=>Kit.read(JSON.stringify(Shop.edit(draft,{type:'section',index:1,value:'unknown'}))),/unknown shop section/);
   const duplicate=structuredClone(draft);duplicate.shop.sections.push(duplicate.shop.sections[0]);
   assert.throws(()=>Kit.read(JSON.stringify(duplicate)),/unique ID/);
