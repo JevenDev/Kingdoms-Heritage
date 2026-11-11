@@ -58,6 +58,10 @@ final class ClientParty {
     private static UUID menuPlayer;
     private static UUID hovered;
     private static Button leave;
+    private static Peer headerHovered;
+    private static UUID noticePlayer;
+    private static boolean noticeHovered;
+    private static int noticeX, noticeY, noticeWidth;
     private static Screen overlayScreen;
 
     private ClientParty() {}
@@ -213,6 +217,9 @@ final class ClientParty {
         spawn = reportedStage = "";
         menuPlayer = hovered = null;
         leave = null;
+        headerHovered = null;
+        noticePlayer = null;
+        noticeHovered = false;
         overlayScreen = null;
         ticks = 0;
         PLAYER_LIST.reset();
@@ -295,6 +302,9 @@ final class ClientParty {
 
     static boolean blocksInput() { return PLAYER_LIST.active(Util.getMillis()) || menuPlayer != null; }
     static boolean menuOpen() { return menuPlayer != null; }
+    static boolean blocksHover(int mouseX, int mouseY) {
+        return blocksInput() || overInvitation(mouseX, mouseY) || !peers.isEmpty() && PLAYER_LIST.overTrigger(mouseX, mouseY);
+    }
 
     static void closeListBlur() { PLAYER_LIST.closeBlur(); }
 
@@ -308,6 +318,89 @@ final class ClientParty {
 
     static boolean member(UUID player) { return MEMBERS.contains(player); }
 
+    static int invitationCount() {
+        long now = Util.getMillis();
+        return (int) INVITES.entrySet().stream().filter(entry -> entry.getValue().expires() > now && PLAYERS.containsKey(entry.getKey())).count();
+    }
+
+    private static UUID firstInvitation() {
+        long now = Util.getMillis();
+        return INVITES.entrySet().stream().filter(entry -> entry.getValue().expires() > now && PLAYERS.containsKey(entry.getKey()))
+                .map(Map.Entry::getKey).findFirst().orElse(null);
+    }
+
+    private static void openList(UUID player) {
+        closeMenu();
+        if (leave != null) leave.setFocused(false);
+        PLAYER_LIST.setOpen(true, Util.getMillis());
+        if (player != null) PLAYER_LIST.focus(player);
+        else PLAYER_LIST.moveFocus(roster(), 1);
+        SelectionSounds.CLICK.play();
+    }
+
+    static void renderPartyHeader(GuiGraphics graphics, int width, int y, int mouseX, int mouseY, float visibility, float slide) {
+        var player = PLAYERS.get(leader);
+        if (player == null) return;
+        var font = Minecraft.getInstance().font;
+        int leaveWidth = font.width(text("leave")) + 12;
+        int textWidth = Math.min(156, Math.max(1, width - leaveWidth - 58));
+        int left = (width - (22 + textWidth + 12 + leaveWidth)) / 2;
+        int opacity = Math.max(4, Math.round(visibility * 255)) << 24;
+        graphics.pose().pushPose();
+        graphics.pose().translate(0, slide, 0);
+        graphics.fill(left - 1, y - 1, left + 17, y + 17, opacity);
+        graphics.setColor(1, 1, 1, visibility);
+        PlayerFaceRenderer.draw(graphics, skin(player), left, y, 16);
+        graphics.setColor(1, 1, 1, 1);
+        SelectionText.draw(graphics, font, fitLabel(font, text("leader_name", player.name()).getString(), textWidth), left + 22, y - 1, opacity | 0xffff55);
+        SelectionText.draw(graphics, font, fitLabel(font, text("member_count", MEMBERS.size(), waitingSummary()).getString(), textWidth), left + 22, y + 10, opacity | 0xcccccc);
+        graphics.flush();
+        graphics.pose().popPose();
+        int screenY = y + Math.round(slide);
+        if (PLAYER_LIST.open() && visibility > 0.65F && mouseX >= left - 1 && mouseX < left + 17 && mouseY >= screenY - 1 && mouseY < screenY + 17) {
+            headerHovered = player;
+            graphics.renderOutline(left - 2, screenY - 2, 20, 20, opacity | 0xffffff);
+        }
+        leave = control("leave", left + 22 + textWidth + 12, screenY - 2, leaveWidth, 21, text("leave"),
+                PLAYER_LIST.open() && visibility > 0.65F, () -> action(HeritageNetwork.PartyAction.LEAVE, null, ""));
+        leave.setAlpha(visibility);
+        if (!PLAYER_LIST.keyboardFocused()) leave.setFocused(false);
+    }
+
+    private static String fitLabel(net.minecraft.client.gui.Font font, String label, int width) {
+        return font.width(label) <= width ? label : font.plainSubstrByWidth(label, Math.max(0, width - font.width("..."))) + "...";
+    }
+
+    private static void renderInvitation(GuiGraphics graphics, int width, int mouseX, int mouseY, long now) {
+        noticePlayer = null;
+        if (PLAYER_LIST.active(now)) { noticeHovered = false; return; }
+        var invitations = INVITES.entrySet().stream().filter(entry -> entry.getValue().expires() > now && PLAYERS.containsKey(entry.getKey())).toList();
+        if (invitations.isEmpty()) { noticeHovered = false; return; }
+        var invitation = invitations.getFirst();
+        var player = PLAYERS.get(invitation.getKey());
+        noticePlayer = player.id();
+        noticeWidth = Math.min(152, width - 8);
+        noticeX = width - noticeWidth - 4;
+        noticeY = 32;
+        boolean hover = overInvitation(mouseX, mouseY);
+        if (hover && !noticeHovered) SelectionSounds.HOVER.play();
+        noticeHovered = hover;
+        graphics.pose().pushPose();
+        graphics.pose().translate(noticeX, noticeY, 0);
+        SelectionToasts.background(graphics, noticeWidth, 32, now - invitation.getValue().received());
+        head(graphics, player, 7, 8, 16, false);
+        var font = Minecraft.getInstance().font;
+        SelectionText.draw(graphics, font, fitLabel(font, player.name(), noticeWidth - 36), 29, 5, 0xffffff55);
+        SelectionText.draw(graphics, font, text("invite_toast", (invitation.getValue().expires() - now + 999) / 1000), 29, 17, 0xffbbbbbb);
+        graphics.flush();
+        graphics.pose().popPose();
+    }
+
+    private static boolean overInvitation(double x, double y) {
+        var invite = INVITES.get(noticePlayer);
+        return invite != null && invite.expires() > Util.getMillis() && PLAYERS.containsKey(noticePlayer) && x >= noticeX && x < noticeX + noticeWidth && y >= noticeY && y < noticeY + 32;
+    }
+
     static Component playerCount(int count) { return text(count == 1 ? "player_count_single" : "player_count", count); }
 
     private static void renderScreen(ScreenEvent.Render.Post event) {
@@ -319,13 +412,11 @@ final class ClientParty {
         var minecraft = Minecraft.getInstance();
         long now = Util.getMillis();
         CONTROLS.clear();
+        headerHovered = null;
+        leave = null;
         graphics.flush();
         graphics.pose().pushPose();
         graphics.pose().translate(0, 0, 1200);
-        if (grouped()) {
-            leave = control("leave", 43, height - 29, Math.min(104, width / 3), 21, text("leave"), true,
-                    () -> action(HeritageNetwork.PartyAction.LEAVE, null, ""));
-        } else leave = null;
         if (minecraft.screen instanceof SpawnSelectScreen selection && !SelectionTransition.active()) {
             for (var marker : cursorMarkers(selection, now)) {
                 int x = marker.x, y = marker.y;
@@ -336,29 +427,13 @@ final class ClientParty {
                 head(graphics, marker.player, x + 5, y + 5, 8, false);
             }
         }
-        int toastIndex = 0;
-        for (var entry : INVITES.entrySet()) {
-            if (entry.getValue().expires() <= now || toastIndex >= Math.max(1, (height - 104) / 64)) continue;
-            var player = PLAYERS.get(entry.getKey());
-            if (player == null) continue;
-            int toastWidth = Math.min(216, width), x = width - toastWidth, y = 44 + toastIndex++ * 64;
-            graphics.pose().pushPose();
-            graphics.pose().translate(x, y, 0);
-            SelectionToasts.background(graphics, toastWidth, 60, now - entry.getValue().received());
-            head(graphics, player, 8, 8, 16, false);
-            SelectionText.draw(graphics, minecraft.font, minecraft.font.plainSubstrByWidth(player.name(), toastWidth - 38), 30, 7, 0xffffffff);
-            SelectionText.draw(graphics, minecraft.font, text("invite_toast", (entry.getValue().expires() - now + 999) / 1000), 30, 20, 0xffbbbbbb);
-            graphics.pose().popPose();
-            int buttonWidth = (toastWidth - 20) / 2;
-            control(player.id() + ":join", x + 8, y + 35, buttonWidth, 18, text("join"), !SelectionTransition.active(), () -> respond(player.id(), true));
-            control(player.id() + ":decline", x + 12 + buttonWidth, y + 35, buttonWidth, 18, text("decline"), !SelectionTransition.active(), () -> respond(player.id(), false));
-        }
-        BUTTONS.values().removeIf(button -> !CONTROLS.contains(button));
-        for (var button : CONTROLS) button.render(graphics, mouseX, mouseY, 0);
+        renderInvitation(graphics, width, mouseX, mouseY, now);
         if (!peers.isEmpty()) {
             PLAYER_LIST.render(graphics, width, height, roster(), mouseX, mouseY);
             PLAYER_LIST.renderTrigger(graphics, peers, mouseX, mouseY);
         } else PLAYER_LIST.reset();
+        BUTTONS.values().removeIf(button -> !CONTROLS.contains(button));
+        for (var button : CONTROLS) button.render(graphics, menuPlayer == null ? mouseX : -10000, menuPlayer == null ? mouseY : -10000, 0);
         hovered = PLAYER_LIST.open() ? PLAYER_LIST.selected() : null;
         if (menuPlayer != null) {
             var player = PLAYERS.get(menuPlayer);
@@ -382,8 +457,17 @@ final class ClientParty {
             var lines = new ArrayList<Component>();
             lines.add(playerCount(peers.size()).copy().withStyle(ChatFormatting.YELLOW));
             if (grouped()) lines.add(waitingSummary().copy().withStyle(ChatFormatting.GRAY));
+            int invitations = invitationCount();
+            if (invitations > 0) lines.add(text(invitations == 1 ? "invitation_single" : "invitations", invitations).copy().withStyle(ChatFormatting.GOLD));
             lines.add(text("list_hint", minecraft.options.keyPlayerList.getTranslatedKeyMessage()).copy().withStyle(ChatFormatting.GRAY));
             graphics.renderComponentTooltip(minecraft.font, lines, mouseX, mouseY);
+        } else if (overInvitation(mouseX, mouseY)) {
+            graphics.renderTooltip(minecraft.font, text("invitation_hint", minecraft.options.keyPlayerList.getTranslatedKeyMessage()), mouseX, mouseY);
+        } else if (leave != null && leave.isHoveredOrFocused()) {
+            graphics.renderTooltip(minecraft.font, text(follower() ? "leave_hint" : "leave_leader_hint"),
+                    leave.isFocused() ? leave.getX() : mouseX, leave.isFocused() ? leave.getY() : mouseY);
+        } else if (headerHovered != null) {
+            graphics.renderComponentTooltip(minecraft.font, playerInfo(headerHovered), mouseX, mouseY);
         } else if (hovered != null) {
             var player = PLAYERS.get(hovered);
             if (player != null) graphics.renderComponentTooltip(minecraft.font, playerTooltip(player),
@@ -421,10 +505,17 @@ final class ClientParty {
         if (!overlay(event.getScreen())) return;
         double x = event.getMouseX(), y = event.getMouseY();
         int button = event.getButton();
+        if (button == 0 && !blocksInput() && !SelectionTransition.active() && overInvitation(x, y)) {
+            openList(noticePlayer);
+            event.setCanceled(true);
+            return;
+        }
         if (!peers.isEmpty() && button == 0 && PLAYER_LIST.overTrigger(x, y)) {
             closeMenu();
-            PLAYER_LIST.setOpen(!PLAYER_LIST.open(), Util.getMillis());
-            SelectionSounds.CLICK.play();
+            if (PLAYER_LIST.open()) {
+                PLAYER_LIST.setOpen(false, Util.getMillis());
+                SelectionSounds.CLICK.play();
+            } else openList(firstInvitation());
             event.setCanceled(true);
             return;
         }
@@ -438,6 +529,10 @@ final class ClientParty {
             return;
         }
         if (PLAYER_LIST.active(Util.getMillis())) {
+            if (PLAYER_LIST.open() && button == 0 && leave != null && leave.mouseClicked(x, y, button)) {
+                event.setCanceled(true);
+                return;
+            }
             if (PLAYER_LIST.clickPageArrow(x, y, button)) {
                 event.setCanceled(true);
                 return;
@@ -448,14 +543,6 @@ final class ClientParty {
                 PLAYER_LIST.setOpen(false, Util.getMillis());
                 SelectionSounds.CLICK.play();
             }
-            event.setCanceled(true);
-            return;
-        }
-        if (SelectionTransition.active()) {
-            if (button == 0 && leave != null && leave.mouseClicked(x, y, button)) event.setCanceled(true);
-            return;
-        }
-        if (button == 0) for (var control : List.copyOf(CONTROLS)) if (control.mouseClicked(x, y, button)) {
             event.setCanceled(true);
             return;
         }
@@ -616,9 +703,7 @@ final class ClientParty {
         }
         if (!PLAYER_LIST.open() && !peers.isEmpty()
                 && Minecraft.getInstance().options.keyPlayerList.matches(key, event.getScanCode())) {
-            PLAYER_LIST.setOpen(true, Util.getMillis());
-            PLAYER_LIST.moveFocus(roster(), 1);
-            SelectionSounds.CLICK.play();
+            openList(firstInvitation());
             event.setCanceled(true);
             return;
         }
@@ -627,6 +712,21 @@ final class ClientParty {
             PLAYER_LIST.setOpen(false, Util.getMillis());
             SelectionSounds.CLICK.play();
         } else if (PLAYER_LIST.open()) {
+            if (leave != null && leave.isFocused()) {
+                if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_ENTER || key == org.lwjgl.glfw.GLFW.GLFW_KEY_SPACE) {
+                    leave.playDownSound(Minecraft.getInstance().getSoundManager());
+                    leave.onPress();
+                } else if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_TAB || key == org.lwjgl.glfw.GLFW.GLFW_KEY_LEFT
+                        || key == org.lwjgl.glfw.GLFW.GLFW_KEY_RIGHT || key == org.lwjgl.glfw.GLFW.GLFW_KEY_UP || key == org.lwjgl.glfw.GLFW.GLFW_KEY_DOWN) {
+                    boolean reverse = key == org.lwjgl.glfw.GLFW.GLFW_KEY_UP || key == org.lwjgl.glfw.GLFW.GLFW_KEY_LEFT
+                            || key == org.lwjgl.glfw.GLFW.GLFW_KEY_TAB && (event.getModifiers() & org.lwjgl.glfw.GLFW.GLFW_MOD_SHIFT) != 0;
+                    leave.setFocused(false);
+                    PLAYER_LIST.focus(reverse ? roster().getLast().id() : roster().getFirst().id());
+                    SelectionSounds.HOVER.play();
+                }
+                event.setCanceled(true);
+                return;
+            }
             int direction = key == org.lwjgl.glfw.GLFW.GLFW_KEY_LEFT ? -1
                     : key == org.lwjgl.glfw.GLFW.GLFW_KEY_RIGHT ? 1
                     : key == org.lwjgl.glfw.GLFW.GLFW_KEY_UP ? -PLAYER_LIST.columns()
@@ -634,7 +734,11 @@ final class ClientParty {
                     : key == org.lwjgl.glfw.GLFW.GLFW_KEY_TAB
                     ? (event.getModifiers() & org.lwjgl.glfw.GLFW.GLFW_MOD_SHIFT) != 0 ? -1 : 1 : 0;
             if (direction != 0) {
-                PLAYER_LIST.moveFocus(roster(), direction);
+                if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_TAB && leave != null
+                        && PLAYER_LIST.focused().equals((direction > 0 ? roster().getLast() : roster().getFirst()).id())) {
+                    leave.setFocused(true);
+                    PLAYER_LIST.focusHeader();
+                } else PLAYER_LIST.moveFocus(roster(), direction);
                 SelectionSounds.HOVER.play();
             } else if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_PAGE_UP || key == org.lwjgl.glfw.GLFW.GLFW_KEY_PAGE_DOWN) {
                 PLAYER_LIST.changePage(roster(), key == org.lwjgl.glfw.GLFW.GLFW_KEY_PAGE_UP ? -1 : 1);
@@ -650,6 +754,7 @@ final class ClientParty {
     private static void scroll(ScreenEvent.MouseScrolled.Pre event) {
         if (!overlay(event.getScreen()) || !PLAYER_LIST.active(Util.getMillis())) return;
         if (PLAYER_LIST.open() && menuPlayer == null && event.getScrollDeltaY() != 0) {
+            if (leave != null) leave.setFocused(false);
             if (PLAYER_LIST.scroll(roster(), event.getScrollDeltaY())) SelectionSounds.HOVER.play();
         }
         event.setCanceled(true);

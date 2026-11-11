@@ -28,6 +28,7 @@ final class PartyPlayerList {
     private UUID focused;
     private UUID hovered;
     private boolean keyboard;
+    private boolean headerFocused;
     private boolean triggerHovered;
     private int lastMouseX = -1;
     private int lastMouseY = -1;
@@ -81,6 +82,7 @@ final class PartyPlayerList {
         from = velocity = slide = 0;
         changed = 0;
         focused = hovered = null;
+        headerFocused = false;
         lastMouseX = lastMouseY = -1;
         cells.clear();
         pagePlayers = List.of();
@@ -94,12 +96,20 @@ final class PartyPlayerList {
 
     void closeBlur() { blur.reload(); }
 
+    void focus(UUID player) {
+        focused = player;
+        keyboard = true;
+        headerFocused = false;
+    }
+
+    void focusHeader() { keyboard = headerFocused = true; }
+
     void moveFocus(List<ClientParty.Peer> players, int direction) {
         if (players.isEmpty()) { focused = null; return; }
         int index = -1;
         for (int i = 0; i < players.size(); i++) if (players.get(i).id().equals(focused)) index = i;
         int next = index < 0 ? direction < 0 ? players.size() - 1 : 0 : Math.floorMod(index + direction, players.size());
-        focused = players.get(next).id();
+        focus(players.get(next).id());
         page = next / capacity;
         keyboard = true;
     }
@@ -108,7 +118,7 @@ final class PartyPlayerList {
         int next = Mth.clamp(page + direction, 0, Math.max(0, (players.size() - 1) / capacity));
         if (next == page) return;
         page = next;
-        focused = players.get(page * capacity).id();
+        focus(players.get(page * capacity).id());
         keyboard = true;
     }
 
@@ -126,7 +136,7 @@ final class PartyPlayerList {
 
     int columns() { return columns; }
 
-    UUID selected() { return keyboard ? focused : hoveredPageArrow == null ? hovered : null; }
+    UUID selected() { return keyboard ? headerFocused ? null : focused : hoveredPageArrow == null ? hovered : null; }
     boolean keyboardFocused() { return keyboard; }
 
     boolean clickPageArrow(double x, double y, int button) {
@@ -164,7 +174,9 @@ final class PartyPlayerList {
         return 40;
     }
 
-    boolean overTrigger(double x, double y) { return x >= 5 && x < 69 && y >= 6 && y < 28; }
+    boolean overTrigger(double x, double y) {
+        return x >= 5 && x < 69 && y >= (ClientParty.invitationCount() > 0 ? 3 : 6) && y < 28;
+    }
 
     void renderTrigger(GuiGraphics graphics, List<ClientParty.Peer> others, int mouseX, int mouseY) {
         if (others.isEmpty()) return;
@@ -184,6 +196,15 @@ final class PartyPlayerList {
         face(graphics, previous, 8, 9, 16, 1);
         face(graphics, current, 8, 9, 16, blend);
         graphics.blit(hover || open ? SELECTED : TAB, 28, 8, 0, 0, 41, 19, 41, 19);
+        int invitations = ClientParty.invitationCount();
+        if (invitations > 0) {
+            var font = Minecraft.getInstance().font;
+            String count = Integer.toString(invitations);
+            graphics.pose().pushPose();
+            graphics.pose().translate(0, 0, 1);
+            graphics.drawString(font, count, 25 - font.width(count), 3, 0xffffff55);
+            graphics.pose().popPose();
+        }
     }
 
     static String playerLabel(Font font, String name) {
@@ -223,6 +244,26 @@ final class PartyPlayerList {
             graphics.renderTooltip(font, hovered.getMessage(), mouseX, mouseY);
     }
 
+    private static void renderProgress(GuiGraphics graphics, ClientParty.Peer player, int x, int y, int opacity) {
+        graphics.fill(x, y, x + 11, y + 11, opacity);
+        if (player.stage() == 4) {
+            graphics.fill(x + 2, y + 5, x + 4, y + 7, opacity | 0x55ff55);
+            graphics.fill(x + 4, y + 7, x + 6, y + 9, opacity | 0x55ff55);
+            graphics.fill(x + 6, y + 5, x + 8, y + 7, opacity | 0x55ff55);
+            graphics.fill(x + 8, y + 3, x + 10, y + 5, opacity | 0x55ff55);
+        } else if (player.stage() == 2) {
+            graphics.pose().pushPose();
+            graphics.pose().translate(x + 5.5F, y + 5.5F, 0);
+            graphics.pose().scale(0.4F, 0.4F, 1);
+            LoadingIndicator.render(graphics, 0, 0, Util.getMillis(), opacity >>> 24);
+            graphics.pose().popPose();
+        } else {
+            var font = Minecraft.getInstance().font;
+            SelectionText.centered(graphics, font, Component.translatable("screen.kingdomsheritage.party_stage_short_" + player.stage()),
+                    x + 6, y + 2, opacity | (player.stage() == 1 ? 0x55ffff : 0xffff55));
+        }
+    }
+
     private static void face(GuiGraphics graphics, ClientParty.Peer player, int x, int y, int size, float opacity) {
         if (opacity <= 0) return;
         graphics.setColor(1, 1, 1, opacity);
@@ -239,13 +280,13 @@ final class PartyPlayerList {
             return;
         }
         if (players.isEmpty()) { reset(); return; }
-        if (lastMouseX >= 0 && (mouseX != lastMouseX || mouseY != lastMouseY)) keyboard = false;
+        if (lastMouseX >= 0 && (mouseX != lastMouseX || mouseY != lastMouseY)) keyboard = headerFocused = false;
         lastMouseX = mouseX;
         lastMouseY = mouseY;
         blur.render(graphics, visibility);
         graphics.fill(0, 0, width, height, Math.round(BACKGROUND_OPACITY * visibility) << 24);
         columns = Math.max(1, Math.min(6, (width - 32) / 64));
-        int rows = Math.max(1, (height - 104) / 56);
+        int rows = Math.max(1, (height - (ClientParty.grouped() ? 128 : 104)) / 56);
         capacity = columns * rows;
         int focusedIndex = -1;
         for (int i = 0; i < players.size(); i++) if (players.get(i).id().equals(focused)) focusedIndex = i;
@@ -256,7 +297,7 @@ final class PartyPlayerList {
         int visibleColumns = Math.min(columns, last - first);
         int visibleRows = (last - first + columns - 1) / columns;
         int left = (width - visibleColumns * 64) / 2;
-        int top = Math.max(48, (height - visibleRows * 56) / 2);
+        int top = Math.max(ClientParty.grouped() ? 80 : 48, (height - visibleRows * 56) / 2);
         slide = (1 - visibility) * 10;
         cells.clear();
         for (int index = first; index < last; index++) {
@@ -282,6 +323,7 @@ final class PartyPlayerList {
                 graphics.renderOutline(x - border, y - border, 32 + border * 2, 32 + border * 2, opacity | 0xffffff);
             }
             face(graphics, cell.player, x, y, 32, visibility);
+            if (member) renderProgress(graphics, cell.player, x + 25, y + 25, opacity);
             SelectionText.centered(graphics, font, playerLabel(font, cell.player.name()), cell.x + 32, y + 38,
                     opacity | (member ? 0xffff55 : 0xffffff));
         }
@@ -292,6 +334,7 @@ final class PartyPlayerList {
                 width / 2, height - 24, opacity | 0xcccccc);
         graphics.flush();
         graphics.pose().popPose();
+        if (ClientParty.grouped()) ClientParty.renderPartyHeader(graphics, width, top - 54, mouseX, mouseY, visibility, slide);
         pagePlayers = players;
         if (players.size() > capacity) {
             renderPageArrows(graphics, width, top + visibleRows * 56 + 2 + Math.round(slide), mouseX, mouseY, visibility);

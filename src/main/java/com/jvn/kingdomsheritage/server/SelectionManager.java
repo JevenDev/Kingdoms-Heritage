@@ -585,7 +585,7 @@ public final class SelectionManager {
     @SubscribeEvent
     public static void logout(PlayerEvent.PlayerLoggedOutEvent event) {
         if (event.getEntity() instanceof ServerPlayer player) {
-            SelectionParty.remove(player);
+            SelectionParty.disconnect(player);
             SpawnIntro.release(player);
             SelectionSteps.remove(player);
             SelectionLifecycle.cancel(player, com.jvn.kingdomsheritage.api.SelectionEvent.Reason.DISCONNECTED);

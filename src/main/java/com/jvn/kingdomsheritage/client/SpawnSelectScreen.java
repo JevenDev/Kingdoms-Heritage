@@ -403,7 +403,7 @@ public final class SpawnSelectScreen extends Screen {
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        if (ClientParty.blocksInput() || ClientParty.hoveredName(this, mouseX, mouseY) != null) mouseX = mouseY = -10000;
+        if (ClientParty.blocksHover(mouseX, mouseY) || ClientParty.hoveredName(this, mouseX, mouseY) != null) mouseX = mouseY = -10000;
         long now = net.minecraft.Util.getMillis();
         float confirmation = confirmationProgress(now);
         positionConfirmation(confirmation);

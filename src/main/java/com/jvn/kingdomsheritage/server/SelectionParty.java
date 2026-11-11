@@ -244,10 +244,20 @@ public final class SelectionParty {
         }
     }
 
-    static void leave(ServerPlayer player) {
+    static void leave(ServerPlayer player) { leave(player, false); }
+
+    private static void leave(ServerPlayer player, boolean disconnected) {
         var party = PARTIES.get(player.getUUID());
         if (party == null) return;
         var members = members(player);
+        for (var notice : departureNotices(party.members, party.leader, player.getUUID(), disconnected).entrySet()) {
+            var participant = PLAYERS.get(notice.getKey());
+            if (participant == null) continue;
+            var feedback = new JsonObject();
+            feedback.addProperty("name", player.getGameProfile().getName());
+            feedback.addProperty("result", notice.getValue());
+            participant.feedback.add(feedback);
+        }
         removeInvites(invite -> invite.sender().equals(party.leader));
         for (var member : members) SelectionManager.cancelPreparation(member.getUUID());
         if (party.search != null) party.search.close();
@@ -264,6 +274,19 @@ public final class SelectionParty {
         dirty = true;
     }
 
+    static Map<UUID, String> departureNotices(Set<UUID> members, UUID leader, UUID departing, boolean disconnected) {
+        if (!members.contains(departing)) return Map.of();
+        var notices = new LinkedHashMap<UUID, String>();
+        boolean disbanded = members.size() <= 2;
+        String result = (departing.equals(leader) ? "leader_" : "member_") + (disconnected ? "disconnected" : "left");
+        if (!departing.equals(leader) && disbanded) result += "_disbanded";
+        for (var member : members) {
+            if (!member.equals(departing)) notices.put(member, result);
+            else if (!disconnected) notices.put(member, "left_party");
+        }
+        return notices;
+    }
+
     static void finished(ServerPlayer player) {
         var party = PARTIES.get(player.getUUID());
         if (party == null) return;
@@ -272,8 +295,12 @@ public final class SelectionParty {
         dirty = true;
     }
 
-    static void remove(ServerPlayer player) {
-        leave(player);
+    static void remove(ServerPlayer player) { remove(player, false); }
+
+    static void disconnect(ServerPlayer player) { remove(player, true); }
+
+    private static void remove(ServerPlayer player, boolean disconnected) {
+        leave(player, disconnected);
         removeInvites(invite -> invite.sender().equals(player.getUUID()) || invite.recipient().equals(player.getUUID()));
         PLAYERS.remove(player.getUUID());
         dirty = true;

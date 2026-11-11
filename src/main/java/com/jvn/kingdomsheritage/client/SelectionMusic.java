@@ -53,7 +53,6 @@ public final class SelectionMusic {
     }
 
     static void stop() {
-        SelectionToasts.clear();
         if (track == null) return;
         track.finish();
         Minecraft.getInstance().getSoundManager().stop(track);

@@ -187,7 +187,7 @@ final class KitSelectionView {
         view.frameConfirmation = view.confirmationProgress();
         view.updateButtons(view.frameConfirmation);
         view.positionControls(event.getScreen(), view.frameConfirmation);
-        var rendering = ClientParty.blocksInput() ? new ScreenEvent.Render.Pre(event.getScreen(), event.getGuiGraphics(),
+        var rendering = ClientParty.blocksHover(event.getMouseX(), event.getMouseY()) ? new ScreenEvent.Render.Pre(event.getScreen(), event.getGuiGraphics(),
                 -10000, -10000, event.getPartialTick()) : event;
         if (view.confirming || view.frameConfirmation > 0) {
             view.renderConfirmation(rendering, view.frameConfirmation);
