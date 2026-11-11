@@ -154,7 +154,7 @@
   "screen.kingdomsheritage.party_feedback_member_disconnected_disbanded": "Disconnected. You are now choosing on your own.",
   "screen.kingdomsheritage.party_feedback_leader_left": "Left as leader. Your party disbanded. You can choose on your own.",
   "screen.kingdomsheritage.party_feedback_leader_disconnected": "Disconnected as leader. Your party disbanded. You can choose on your own.",
-  "screen.kingdomsheritage.party_feedback_left_party": "You left the party. Choose on your own or join another party.",
+  "screen.kingdomsheritage.party_feedback_left_party": "You left the party",
   "screen.kingdomsheritage.party_feedback_sent": "Invitation sent",
   "screen.kingdomsheritage.party_feedback_accepted": "Joined your party",
   "screen.kingdomsheritage.party_feedback_declined": "Declined your invitation",
