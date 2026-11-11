@@ -249,6 +249,9 @@ final class KitSelectionView {
             for (Button button : buttons) button.visible = false;
             if (tooltips) screen.renderWithTooltip(graphics, mouseX, mouseY, partialTick);
             else screen.render(graphics, mouseX, mouseY, partialTick);
+            if (net.neoforged.fml.ModList.get().isLoaded("accessories")) {
+                AccessoriesControls.renderLayers(screen, graphics, tooltips ? mouseX : -10000, tooltips ? mouseY : -10000, partialTick);
+            }
         } finally {
             for (int i = 0; i < buttons.size(); i++) buttons.get(i).visible = visible.get(i);
         }
