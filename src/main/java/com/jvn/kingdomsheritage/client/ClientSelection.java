@@ -16,11 +16,14 @@ import net.minecraft.network.ConnectionProtocol;
 import net.minecraft.network.chat.Component;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.ModList;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.MovementInputUpdateEvent;
+import net.neoforged.neoforge.client.gui.ConfigurationScreen;
+import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.network.registration.NetworkRegistry;
 
@@ -36,6 +39,8 @@ public final class ClientSelection {
 
     @SubscribeEvent
     public static void setup(FMLClientSetupEvent event) {
+        ModList.get().getModContainerById(KingdomsHeritage.MOD_ID).orElseThrow()
+                .registerExtensionPoint(IConfigScreenFactory.class, ConfigurationScreen::new);
         HeritageNetwork.clientReceiver = ClientSelection::receive;
         HeritageNetwork.joinReceiver = pending -> {
             if (pending) SelectionTransition.join();
