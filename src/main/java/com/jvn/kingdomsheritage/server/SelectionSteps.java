@@ -26,7 +26,7 @@ public final class SelectionSteps {
         final Set<UUID> ready = new HashSet<>();
         long version;
     }
-    private static final class Session {
+    static final class Session {
         final UUID selection;
         UUID token = UUID.randomUUID();
         Scope entered;
@@ -37,20 +37,19 @@ public final class SelectionSteps {
         int packets;
         Session(UUID selection) { this.selection = selection; }
     }
-    private static final Map<UUID, Session> SESSIONS = new HashMap<>();
     private static final Map<Scope, Progress> PROGRESS = new HashMap<>();
-    private static final Map<UUID, Map<ResourceLocation, JsonObject>> COMPLETED = new HashMap<>();
 
     private SelectionSteps() {}
 
     private static Session session(ServerPlayer player) {
         UUID selection = SelectionLifecycle.state(player).sessionId();
-        var previous = SESSIONS.get(player.getUUID());
+        var active = SelectionSession.of(player);
+        var previous = active.flow;
         if (previous == null || !previous.selection.equals(selection)) {
             PROGRESS.keySet().removeIf(key -> key.owner().equals(player.getUUID()));
             previous = new Session(selection);
-            SESSIONS.put(player.getUUID(), previous);
-            COMPLETED.remove(player.getUUID());
+            active.flow = previous;
+            active.decisions = null;
         }
         return previous;
     }
@@ -211,7 +210,7 @@ public final class SelectionSteps {
                 progress.ready.add(player.getUUID());
             } else throw new IllegalArgumentException("Unknown Heritage flow action");
             for (var member : members(player)) {
-                var recipient = SESSIONS.get(member.getUUID());
+                var recipient = SelectionSession.of(member).flow;
                 if (recipient != null && scope.equals(recipient.entered)) send(member, step, progress);
             }
         } catch (IllegalArgumentException error) {
@@ -281,13 +280,14 @@ public final class SelectionSteps {
     }
 
     static void complete(ServerPlayer player, Map<ResourceLocation, JsonObject> decisions) {
-        COMPLETED.put(player.getUUID(), decisions);
+        SelectionSession.of(player).decisions = decisions;
     }
 
     public static java.util.Optional<JsonObject> decision(ServerPlayer player, ResourceLocation id) {
-        var complete = COMPLETED.get(player.getUUID());
-        if (complete != null) return java.util.Optional.ofNullable(complete.get(id)).map(JsonObject::deepCopy);
-        var session = SESSIONS.get(player.getUUID());
+        var active = SelectionSession.find(player.getUUID());
+        if (active == null) return java.util.Optional.empty();
+        if (active.decisions != null) return java.util.Optional.ofNullable(active.decisions.get(id)).map(JsonObject::deepCopy);
+        var session = active.flow;
         if (session == null) return java.util.Optional.empty();
         var step = step(id);
         var progress = PROGRESS.get(scope(player, step, session.spawn, session.kit));
@@ -302,6 +302,7 @@ public final class SelectionSteps {
     private static void invalidate(List<ServerPlayer> players, ScreenStep.Placement from, UUID source, boolean notify, ResourceLocation first) {
         int cutoff = first == null ? -1 : java.util.stream.IntStream.range(0, HeritageFlow.steps().size())
                 .filter(index -> HeritageFlow.steps().get(index).id().equals(first)).findFirst().orElseThrow();
+        players.forEach(SelectionManager::cancelPreparation);
         Set<UUID> owners = new HashSet<>();
         for (var player : players) {
             if (SelectionDebug.isBot(player)) continue;
@@ -316,9 +317,7 @@ public final class SelectionSteps {
             state.token = UUID.randomUUID();
             state.entered = null;
             state.resetFrom = from;
-            COMPLETED.remove(player.getUUID());
-            SelectionManager.cancelPreparation(player.getUUID());
-            SelectionParty.unready(player);
+            SelectionSession.of(player).decisions = null;
             if (notify) {
                 var reset = new JsonObject();
                 reset.addProperty("token", state.token.toString());
@@ -334,10 +333,13 @@ public final class SelectionSteps {
     }
 
     static void remove(ServerPlayer player) {
-        SESSIONS.remove(player.getUUID());
-        COMPLETED.remove(player.getUUID());
+        var active = SelectionSession.find(player.getUUID());
+        if (active != null) {
+            active.flow = null;
+            active.decisions = null;
+        }
         PROGRESS.keySet().removeIf(key -> key.owner().equals(player.getUUID()));
     }
 
-    static void clear() { SESSIONS.clear(); PROGRESS.clear(); COMPLETED.clear(); }
+    static void clear() { PROGRESS.clear(); }
 }

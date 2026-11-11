@@ -37,18 +37,14 @@ public final class HeritageNetwork {
         @Override public Type<JoinState> type() { return TYPE; }
     }
 
-    public record Choose(String spawn, String kit, long revision, List<KitShop.Pick> offers) implements CustomPacketPayload {
-        public Choose {
+    public record Review(String spawn, String kit, long revision, List<KitShop.Pick> offers) implements CustomPacketPayload {
+        public Review {
             offers = List.copyOf(offers);
             if (offers.size() > KitShop.MAX_PICKS) throw new IllegalArgumentException("Too many starter kit offers");
         }
 
-        public Choose(String spawn, String kit, long revision) {
-            this(spawn, kit, revision, List.of());
-        }
-
-        public static final Type<Choose> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(KingdomsHeritage.MOD_ID, "choose"));
-        public static final StreamCodec<RegistryFriendlyByteBuf, Choose> CODEC = StreamCodec.of(
+        public static final Type<Review> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(KingdomsHeritage.MOD_ID, "review"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, Review> CODEC = StreamCodec.of(
                 (buffer, value) -> {
                     buffer.writeUtf(value.spawn, 256);
                     buffer.writeUtf(value.kit, 256);
@@ -66,14 +62,8 @@ public final class HeritageNetwork {
                     if (count < 0 || count > KitShop.MAX_PICKS) throw new io.netty.handler.codec.DecoderException("Invalid starter kit offer count");
                     var offers = new ArrayList<KitShop.Pick>(count);
                     for (int index = 0; index < count; index++) offers.add(new KitShop.Pick(buffer.readVarInt(), buffer.readVarInt()));
-                    return new Choose(spawn, kit, revision, offers);
+                    return new Review(spawn, kit, revision, offers);
                 });
-        @Override public Type<Choose> type() { return TYPE; }
-    }
-
-    public record Review(Choose choice) implements CustomPacketPayload {
-        public static final Type<Review> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(KingdomsHeritage.MOD_ID, "review"));
-        public static final StreamCodec<RegistryFriendlyByteBuf, Review> CODEC = Choose.CODEC.map(Review::new, Review::choice);
         @Override public Type<Review> type() { return TYPE; }
     }
 
@@ -146,7 +136,7 @@ public final class HeritageNetwork {
     }
 
     public static void register(RegisterPayloadHandlersEvent event) {
-        var registrar = event.registrar("10");
+        var registrar = event.registrar("11");
         registrar.playToServer(IntroReady.TYPE, IntroReady.CODEC, (packet, context) ->
                 com.jvn.kingdomsheritage.server.SpawnIntro.ready((ServerPlayer) context.player(), packet.token, packet.durationTicks));
         registrar.playToServer(FlowAction.TYPE, FlowAction.CODEC, (packet, context) ->
@@ -161,11 +151,9 @@ public final class HeritageNetwork {
                 com.jvn.kingdomsheritage.server.SpawnIntro.finish((ServerPlayer) context.player(), packet.token));
         registrar.playToClient(Catalog.TYPE, Catalog.CODEC, (packet, context) -> clientReceiver.accept(packet.json));
         registrar.playToServer(Review.TYPE, Review.CODEC, (packet, context) ->
-                SelectionManager.review((ServerPlayer) context.player(), packet.choice));
+                SelectionManager.review((ServerPlayer) context.player(), packet));
         registrar.playToServer(ReviewDecision.TYPE, ReviewDecision.CODEC, (packet, context) ->
                 SelectionManager.reviewDecision((ServerPlayer) context.player(), packet));
-        registrar.playToServer(Choose.TYPE, Choose.CODEC, (packet, context) ->
-                SelectionManager.choose((ServerPlayer) context.player(), packet));
         registrar.optional().playToClient(JoinState.TYPE, JoinState.CODEC, (packet, context) -> joinReceiver.accept(packet.pending));
     }
 }
