@@ -5,6 +5,7 @@ import com.jvn.kingdomsheritage.compat.EquipmentCompat;
 import com.jvn.kingdomsheritage.data.HeritageCatalog;
 import com.jvn.kingdomsheritage.data.HeritageException;
 import com.jvn.kingdomsheritage.data.SpawnDefinition;
+import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.exceptions.SimpleCommandExceptionType;
 import net.minecraft.commands.CommandSourceStack;
@@ -36,6 +37,10 @@ public final class HeritageCommands {
                         .then(Commands.literal("stop")
                                 .then(Commands.argument("players", EntityArgument.players()).executes(context ->
                                         cinematic(context.getSource(), EntityArgument.getPlayers(context, "players"), null)))))
+                .then(Commands.literal("debug").requires(source -> source.hasPermission(2))
+                        .executes(context -> debug(context.getSource(), 0))
+                        .then(Commands.argument("count", IntegerArgumentType.integer(0, SelectionDebug.MAX_BOTS))
+                                .executes(context -> debug(context.getSource(), IntegerArgumentType.getInteger(context, "count")))))
                 .then(Commands.literal("inspect").requires(source -> source.hasPermission(2))
                         .then(Commands.argument("player", EntityArgument.player()).executes(context ->
                                 inspect(context.getSource(), EntityArgument.getPlayer(context, "player")))))
@@ -49,6 +54,12 @@ public final class HeritageCommands {
                 .then(Commands.literal("recover").requires(source -> source.hasPermission(2))
                         .then(Commands.argument("player", EntityArgument.player()).executes(context ->
                                 change(context.getSource(), EntityArgument.getPlayer(context, "player"), true)))));
+    }
+
+    private static int debug(CommandSourceStack source, int count) {
+        SelectionDebug.setCount(source.getServer(), source.getPlayer(), count);
+        source.sendSuccess(() -> Component.translatable("commands.kingdomsheritage.debug_count", count), false);
+        return count;
     }
 
     private static int cinematic(CommandSourceStack source, java.util.Collection<ServerPlayer> players,

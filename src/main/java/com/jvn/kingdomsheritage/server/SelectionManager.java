@@ -203,9 +203,39 @@ public final class SelectionManager {
                 return;
             }
         } else REVIEWS.remove(player.getUUID());
+        queueSelection(player, review);
+    }
+
+    private static void queueSelection(ServerPlayer player, Review review) {
         var preparation = review.preparation();
         PREPARATIONS.put(player.getUUID(), new Preparation(player, preparation.request(), preparation.search(), false));
         sendProgress(player, "queued");
+    }
+
+    static void startDebugPlayer(ServerPlayer player) {
+        state(player).putBoolean("pending", true);
+        state(player).putLong("default_spawn", player.server.overworld().getSharedSpawnPos().asLong());
+        SelectionParty.register(player);
+        SelectionParty.stage(player, 0);
+        SelectionLifecycle.start(player);
+    }
+
+    static void stopDebugPlayer(ServerPlayer player) {
+        SelectionParty.disconnect(player);
+        SelectionSteps.remove(player);
+        SelectionLifecycle.cancel(player, com.jvn.kingdomsheritage.api.SelectionEvent.Reason.DISCONNECTED);
+        state(player).putBoolean("pending", false);
+    }
+
+    static void readyDebugPlayer(ServerPlayer player) {
+        if (SelectionParty.isReady(player) || !SelectionParty.ready(player)) return;
+        for (var member : SelectionParty.members(player)) {
+            var review = REVIEWS.get(member.getUUID());
+            if (review != null) {
+                queueSelection(member, review);
+                return;
+            }
+        }
     }
 
     private static void prepare(ServerPlayer player, HeritageNetwork.Choose request, boolean review) {
@@ -248,6 +278,7 @@ public final class SelectionManager {
     @SubscribeEvent
     public static void prepare(ServerTickEvent.Post event) {
         SelectionParty.tick();
+        SelectionDebug.tick(event.getServer());
         if (PREPARATIONS.isEmpty()) return;
         var preparation = PREPARATIONS.values().iterator().next();
         processPreparation(preparation.player());
@@ -301,6 +332,7 @@ public final class SelectionManager {
             var members = SelectionParty.members(player);
             var requests = new LinkedHashMap<ServerPlayer, HeritageNetwork.Choose>();
             for (var member : members) {
+                if (SelectionDebug.isBot(member)) continue;
                 var request = SelectionParty.grouped(player) ? REVIEWS.get(member.getUUID()).preparation().request() : preparation.request();
                 if (!member.isAlive() || !pending(member) || request.revision() != HeritageCatalog.revision()) {
                     throw new HeritageException("party_changed", "The party changed. Please review your choices again");
@@ -314,12 +346,12 @@ public final class SelectionManager {
             KingdomsHeritage.LOGGER.debug("Prepared Heritage location {} in {} ms of server work",
                     preparation.request().spawn(), preparation.search().workMillis());
             try {
-                for (var member : members) teleport(member, destination, state(member).getFloat("yaw"));
+                for (var member : requests.keySet()) teleport(member, destination, state(member).getFloat("yaw"));
             } catch (IllegalArgumentException error) {
-                for (var member : members) hold(member);
+                requests.keySet().forEach(SelectionManager::hold);
                 throw error;
             }
-            var backups = members.size() > 1 ? members.stream().map(InventoryBackup::capture).toList() : List.<InventoryBackup>of();
+            var backups = requests.size() > 1 ? requests.keySet().stream().map(InventoryBackup::capture).toList() : List.<InventoryBackup>of();
             var intros = new LinkedHashMap<ServerPlayer, JsonObject>();
             try {
                 for (var entry : requests.entrySet()) {
@@ -333,13 +365,14 @@ public final class SelectionManager {
                 }
             } catch (RuntimeException error) {
                 backups.forEach(InventoryBackup::restore);
-                members.forEach(SelectionManager::hold);
+                requests.keySet().forEach(SelectionManager::hold);
                 throw error;
             }
             for (var entry : requests.entrySet()) SelectionSteps.capture(entry.getKey(), entry.getValue().spawn(), entry.getValue().kit());
             for (var entry : requests.entrySet()) apply(entry.getKey(), entry.getValue(), preparation.search(), intros.get(entry.getKey()));
             SelectionParty.finished(player);
             for (var member : members) {
+                if (SelectionDebug.isBot(member)) state(member).putBoolean("pending", false);
                 REVIEWS.remove(member.getUUID());
                 SelectionParty.remove(member);
             }
@@ -347,7 +380,9 @@ public final class SelectionManager {
         } catch (IllegalArgumentException error) {
             if (SelectionParty.grouped(player)) {
                 SelectionParty.refresh(player);
-                for (var member : SelectionParty.members(player)) sendChoices(member, HeritageException.component(error));
+                for (var member : SelectionParty.members(player)) {
+                    if (!SelectionDebug.isBot(member)) sendChoices(member, HeritageException.component(error));
+                }
             } else {
                 hold(player);
                 sendChoices(player, HeritageException.component(error));
@@ -393,7 +428,7 @@ public final class SelectionManager {
 
     static void refresh(ServerPlayer player) {
         cancelPreparation(player.getUUID());
-        if (player.connection.isAcceptingMessages() && pending(player)) sendChoices(player, Component.empty());
+        if (!SelectionDebug.isBot(player) && player.connection.isAcceptingMessages() && pending(player)) sendChoices(player, Component.empty());
     }
 
     static void cancelPreparation(UUID player) {
@@ -420,7 +455,7 @@ public final class SelectionManager {
     }
 
     private static void sendProgress(ServerPlayer player, String stage) {
-        SelectionParty.stage(player, 2);
+        if (!SelectionParty.isReady(player)) SelectionParty.stage(player, 2);
         JsonObject json = new JsonObject();
         json.addProperty("progress", stage);
         PacketDistributor.sendToPlayer(player, new HeritageNetwork.Catalog(json.toString()));
@@ -613,6 +648,7 @@ public final class SelectionManager {
         PREPARATIONS.clear();
         REVIEWS.clear();
         SelectionParty.clear();
+        SelectionDebug.clear();
         SelectionLifecycle.clear();
         SelectionSteps.clear();
         com.jvn.kingdomsheritage.api.HeritageFlow.stopped();

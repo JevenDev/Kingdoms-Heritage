@@ -66,6 +66,38 @@ public final class SelectionParty {
         }
     }
 
+    static boolean choosingSpawn(ServerPlayer player) {
+        var participant = PLAYERS.get(player.getUUID());
+        return participant != null && participant.stage == 0 && player.isAlive() && SelectionManager.pending(player);
+    }
+
+    static int stage(ServerPlayer player) { return PLAYERS.get(player.getUUID()).stage; }
+
+    static String selectedSpawn(ServerPlayer player) {
+        var party = PARTIES.get(player.getUUID());
+        return party == null ? "" : party.spawn;
+    }
+
+    static long generation(ServerPlayer player) {
+        var party = PARTIES.get(player.getUUID());
+        return party == null ? -1 : party.generation;
+    }
+
+    static int cursorPage(ServerPlayer player) {
+        var participant = PLAYERS.get(player.getUUID());
+        return participant == null || participant.cursor == null ? 0 : participant.cursor.page();
+    }
+
+    static UUID inviter(ServerPlayer player) {
+        long now = System.nanoTime();
+        return INVITES.stream().filter(invite -> invite.recipient().equals(player.getUUID()) && invite.expires() > now)
+                .map(Invite::sender).findFirst().orElse(null);
+    }
+
+    static boolean invited(UUID sender, UUID recipient) {
+        return INVITES.stream().anyMatch(invite -> invite.sender().equals(sender) && invite.recipient().equals(recipient));
+    }
+
     static UUID leader(ServerPlayer player) {
         var party = PARTIES.get(player.getUUID());
         return party == null ? null : party.leader;
@@ -288,7 +320,8 @@ public final class SelectionParty {
         self.lastCursor = tick;
         self.cursor = new HeritageNetwork.Cursor(player.getUUID(), cursor.x(), cursor.y(), cursor.page());
         for (var other : PLAYERS.values()) {
-            if (other != self && other.stage == 0 && other.cursor != null && other.cursor.page() == cursor.page()) {
+            if (other != self && !SelectionDebug.isBot(other.player)
+                    && other.stage == 0 && other.cursor != null && other.cursor.page() == cursor.page()) {
                 PacketDistributor.sendToPlayer(other.player, self.cursor);
             }
         }
@@ -413,6 +446,10 @@ public final class SelectionParty {
         for (var participant : PLAYERS.values()) {
             var player = participant.player;
             SelectionLifecycle.party(player);
+            if (SelectionDebug.isBot(player)) {
+                participant.feedback.asList().clear();
+                continue;
+            }
             var party = PARTIES.get(player.getUUID());
             var state = new JsonObject();
             state.add("players", roster);

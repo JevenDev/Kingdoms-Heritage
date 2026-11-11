@@ -70,10 +70,13 @@ public final class SelectionSteps {
         return result;
     }
 
-    private static List<ServerPlayer> members(ServerPlayer player) { return SelectionParty.members(player); }
+    private static List<ServerPlayer> members(ServerPlayer player) {
+        return SelectionParty.members(player).stream().filter(member -> !SelectionDebug.isBot(member)).toList();
+    }
     private static UUID leader(ServerPlayer player) {
         UUID leader = SelectionParty.leader(player);
-        return leader == null ? player.getUUID() : leader;
+        if (leader == null) return player.getUUID();
+        return SelectionDebug.isBot(leader) ? members(player).getFirst().getUUID() : leader;
     }
     private static ScreenStep step(ResourceLocation id) {
         return HeritageFlow.steps().stream().filter(value -> value.id().equals(id)).findFirst().orElseThrow(() ->
@@ -296,10 +299,15 @@ public final class SelectionSteps {
         int cutoff = first == null ? -1 : java.util.stream.IntStream.range(0, HeritageFlow.steps().size())
                 .filter(index -> HeritageFlow.steps().get(index).id().equals(first)).findFirst().orElseThrow();
         Set<UUID> owners = new HashSet<>();
-        players.forEach(player -> { owners.add(player.getUUID()); owners.add(leader(player)); });
+        for (var player : players) {
+            if (SelectionDebug.isBot(player)) continue;
+            owners.add(player.getUUID());
+            owners.add(leader(player));
+        }
         PROGRESS.keySet().removeIf(key -> owners.contains(key.owner()) && (first == null
                 ? step(key.step()).placement().compareTo(from) >= 0 : HeritageFlow.steps().indexOf(step(key.step())) >= cutoff));
         for (var player : players) {
+            if (SelectionDebug.isBot(player)) continue;
             var state = session(player);
             state.token = UUID.randomUUID();
             state.entered = null;
