@@ -76,6 +76,25 @@ test('budget hints flag unaffordable offers and partially affordable purchase li
   assert.equal(Shop.budgetHint(6,6),null);
   assert.equal(Shop.budgetHint(6,2,3),null);
 });
+test('section names, icons and offer assignments survive validation and export',()=>{
+  let draft=Shop.edit(trail,{type:'add-section'});
+  const {id}=draft.shop.sections[0];
+  draft=Shop.edit(draft,{type:'section-name',id,value:'Food'});
+  draft=Shop.edit(draft,{type:'section-icon',id,value:'bread'});
+  draft=Shop.edit(draft,{type:'section',index:1,value:id});
+  const saved=Kit.read(JSON.stringify(draft));
+  const pack={name:'Shop pack',namespace:'test_shop',description:'A starting kit shop',keepKits:false,keepLocations:false,
+    kits:[{id:'trail',included:true,path:'trail'}],locations:[Pack.location('start')]};
+  const output=Pack.build(pack,{kits:[{id:'trail',...saved}],intros:[]});
+  assert.deepEqual(output.errors,[]);
+  const exported=JSON.parse(output.files.find(file=>file.path==='data/test_shop/heritage/kits/trail.json').content);
+  assert.deepEqual(exported.shop.sections,[{id,name:'Food',icon:'minecraft:bread'}]);
+  assert.equal(exported.shop.offers[1].section,id);
+  assert.throws(()=>Kit.read(JSON.stringify(Shop.edit(draft,{type:'section',index:1,value:'unknown'}))),/unknown shop section/);
+  const duplicate=structuredClone(draft);duplicate.shop.sections.push(duplicate.shop.sections[0]);
+  assert.throws(()=>Kit.read(JSON.stringify(duplicate)),/unique ID/);
+  assert.deepEqual(Kit.read(JSON.stringify(Shop.edit(draft,{type:'remove-section',id}))).document,trail);
+});
 test('pack export keeps edited shop offers and their limits',()=>{
   const edited=Shop.edit(trail,{type:'budget',value:18});
   const draft=Kit.read(JSON.stringify(edited));

@@ -118,6 +118,21 @@ test('shop purchases appear in arrival and survive back navigation and a resumed
   restored.back();restored.back();restored.back();restored.choose('pack:home');restored.next();restored.next();
   assert.deepEqual(restored.purchases,[]);
 });
+test('section browsing keeps global offer indices and shares purchases across tabs',()=>{
+  const kit=shopChoices().kits.at(-1);
+  kit.shop.sections=[{id:'tools',name:'Tools',icon:'minecraft:iron_boots'},{id:'light',name:'Light',icon:'minecraft:torch'}];
+  kit.shop.offers[0].section='light';
+  kit.shop.offers[2].section='tools';
+  const session=new Flow.Session({spawns:[],kits:[kit]},{shopOnly:true});
+  assert.deepEqual(Flow.shopOfferIndices(kit.shop),[0,1,2]);
+  assert.deepEqual(Flow.shopOfferIndices(kit.shop,'empty'),[]);
+  const [boots]=Flow.shopOfferIndices(kit.shop,'tools');
+  assert.equal(boots,2);
+  assert.equal(session.buy(boots),true);
+  assert.equal(session.buy(Flow.shopOfferIndices(kit.shop,'light')[0]),true);
+  assert.equal(session.shopStatus(boots).bought,1);
+  assert.deepEqual(session.purchases,[{offer:2,slot:36},{offer:0,slot:0}]);
+});
 test('standalone shop tests restart with the same draft and a fresh inventory',()=>{
   const kit=shopChoices().kits.at(-1);
   const session=new Flow.Session({spawns:[],kits:[kit]},{shopOnly:true});

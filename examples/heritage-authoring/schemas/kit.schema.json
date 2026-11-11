@@ -67,6 +67,19 @@
         "required": ["budget", "offers"],
         "properties": {
           "budget": { "type": "integer", "minimum": 0, "maximum": 1000000 },
+          "sections": {
+            "type": "array",
+            "maxItems": 256,
+            "items": {
+              "type": "object",
+              "required": ["id", "name", "icon"],
+              "properties": {
+                "id": { "type": "string", "pattern": "^[a-z0-9_-]{1,64}$" },
+                "name": { "type": "string", "maxLength": 120, "pattern": "\\S", "description": "Tooltip shown for the section tab." },
+                "icon": { "type": "string", "pattern": "^(?:[a-z0-9_.-]+:)?[a-z0-9/._-]+$", "description": "Item ID used for the section tab icon." }
+              }
+            }
+          },
           "offers": {
             "type": "array",
             "minItems": 1,
@@ -83,6 +96,7 @@
                   "default": 1,
                   "description": "Maximum stacks of this offer each player can select."
                 },
+                "section": { "type": "string", "pattern": "^[a-z0-9_-]{1,64}$", "description": "ID of a shop section. All offers are also shown on the All tab." },
                 "item": { "$ref": "#/$defs/stack" }
               }
             }

@@ -76,6 +76,11 @@ function browseLocation(count,index,offset,byPage=false){
   return Math.max(0,Math.min(last,index));
 }
 const shopPageSize=24;
+function shopOfferIndices(shop,section=''){
+  const indices=[];
+  for(const [index,offer] of shop.offers.entries())if(!section||offer.section===section)indices.push(index);
+  return indices;
+}
 function equipmentSlot(stack){
   const id=stack.id.includes(':')?stack.id:'minecraft:'+stack.id;
   if(id==='minecraft:shield')return 40;
@@ -189,7 +194,7 @@ class Session {
     if(this.phase==='review')this.phase=this.kit.shop?'kit-shop':this.allowed().length===1?'location-confirm':'kit';
   }
 }
-const api={pageSize,shopPageSize,browseLocation,companionNames,compare,catalog,label,place,destination,locations,context,narration,revealed,Session};
+const api={pageSize,shopPageSize,shopOfferIndices,browseLocation,companionNames,compare,catalog,label,place,destination,locations,context,narration,revealed,Session};
 if(typeof module!=='undefined')module.exports=api;
 else globalThis.HeritageFlow=api;
 })();

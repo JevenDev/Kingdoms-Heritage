@@ -18,7 +18,8 @@ let musicTick=0,musicFade=0,musicDuck=1,hoverReady=false;
 const backgroundStarted=clock();
 const veil=document.createElement('canvas'),veilContext=veil.getContext('2d'),veilRenderer=new HeritageCanvas(veilContext);veil.setAttribute('aria-hidden','true');Object.assign(veil.style,{position:'absolute',inset:'0',width:'100%',height:'100%',pointerEvents:'none',imageRendering:'pixelated',background:'transparent',border:'0',borderRadius:'0',boxShadow:'none'});$('flow-screen').append(veil);
 let carousel,outgoingCards=[],browseFocus=null,kitFrames=new Map();
-let shopPage=0,shopKit=null,shopTrade=null;
+let shopPage=0,shopKit=null,shopTrade=null,shopSection='',shopSectionPage=0;
+const shopTabRows=6,shopTabHeight=26,shopTabPitch=27,shopTabWidth=28;
 const shopTradeDuration=270,tradeSprite=document.createElement('canvas');
 tradeSprite.width=tradeSprite.height=16;
 const tradeContext=tradeSprite.getContext('2d');
@@ -132,10 +133,18 @@ async function loadOverlayShader(source,toast=false){
 async function loadArt(){
   if(artLoading)return artLoading;
   artLoading=(async()=>{
-    const response=await fetch(new URL('defaults.json?v=2',base));if(!response.ok)throw new Error('Default locations could not load.');bundled=await response.json();
-    await Promise.all(['card','card_expanded','card_fallback','default','random','plains','village','disconnect','disconnect_highlighted','select','select_highlighted','unselect','unselect_highlighted','button','button_highlighted','button_disabled','tab_button','tab_button_selected','empty_slot','send_request','shop'].map(async name=>{
+    const response=await fetch(new URL('defaults.json?v=3',base));if(!response.ok)throw new Error('Default locations could not load.');bundled=await response.json();
+    await Promise.all(['card','card_expanded','card_fallback','default','random','plains','village','disconnect','disconnect_highlighted','select','select_highlighted','unselect','unselect_highlighted','button','button_highlighted','button_disabled','tab_button','tab_button_selected','empty_slot','send_request','shop','tab_top_selected_1','tab_top_selected_2','tab_top_unselected_1','experience_bar_background','experience_bar_progress'].map(async name=>{
       const image=new Image();image.src=name.startsWith('button')?new URL('../../kit/assets/widget/'+name+'.png',base):new URL((name==='shop'?'../../kit/assets/':'')+name+'.png',base);await image.decode();images.set(name,image);
     }));
+    const bar=images.get('experience_bar_progress'),red=document.createElement('canvas');
+    red.width=bar.width;red.height=bar.height;
+    const pixels=red.getContext('2d');pixels.drawImage(bar,0,0);
+    const frame=pixels.getImageData(0,0,red.width,red.height);
+    for(let i=0;i<frame.data.length;i+=4){
+      frame.data[i]*=1.65;frame.data[i+1]*=.42;frame.data[i+2]*=.72;
+    }
+    pixels.putImageData(frame,0,0);images.set('experience_bar_red',red);
   })().catch(error=>{artLoading=null;throw error;});return artLoading;
 }
 async function load(){
@@ -542,7 +551,7 @@ function enter(focus=true){
       kitFrames.clear();inventory.set(session.kit,inventoryOptions);
     }});
     if(phase==='kit-shop'){
-      if(shopKit!==session.kit){shopKit=session.kit;shopPage=0;}
+      if(shopKit!==session.kit){shopKit=session.kit;shopPage=shopSectionPage=0;shopSection='';}
       HeritageInventory.hideTooltip();
       inventory.set(session.loadout(),shopInventoryOptions);
       $('flow-narration').textContent=shopBudget();
@@ -759,32 +768,74 @@ function drawShopTrade(item,x,y,progress){
     ctx.restore();
   }
 }
+const currentShopOffers=()=>F.shopOfferIndices(session.kit.shop,shopSection);
+function paintShopTab({x,y,icon,sprite}){
+  ctx.save();ctx.translate(x,y);ctx.rotate(-Math.PI/2);ctx.scale(-1,1);
+  ctx.drawImage(images.get(sprite),0,0);ctx.restore();
+  const id=HeritageKit.items.has(HeritageKit.normalize(icon))?icon:'minecraft:paper';
+  HeritageInventory.item(ctx,{id},x+9,y+5,inventory.requestIcon);
+}
+function drawShopTabs(left,top,showing){
+  const sections=session.kit.shop.sections??[];
+  if(!sections.length)return {};
+  const tabs=[{id:'',name:shopText('all_sections'),icon:'minecraft:chest'},...sections];
+  const overflow=tabs.length>shopTabRows,rows=overflow?shopTabRows-1:shopTabRows;
+  const x=left-shopTabWidth,start=shopSectionPage*rows;
+  let hovered=null,active=null;
+  if(overflow){
+    arrow('shop-sections-prev',shopText('previous_sections'),x+6,top,()=>{shopSectionPage=Math.max(0,shopSectionPage-1);},start===0,{scale:.5,forward:false});
+    arrow('shop-sections-next',shopText('next_sections'),x+6,top+150,()=>{shopSectionPage=Math.min(Math.floor((tabs.length-1)/rows),shopSectionPage+1);},start+rows>=tabs.length,{scale:.5});
+  }
+  for(const [row,tab] of tabs.slice(start,start+rows).entries()){
+    const y=top+(overflow?16:4)+row*shopTabPitch,selected=tab.id===shopSection;
+    const node=hit((tab.id?'shop-section-'+tab.id:'shop-all-offers'),tab.name,x,y,shopTabWidth,shopTabHeight,()=>{
+      if(tab.id===shopSection)return;
+      shopSection=tab.id;shopPage=0;
+      $('flow-narration').textContent=tab.name+'. '+shopBudget();
+    });
+    node.classList.add('shop-tab-hit');
+    node.setAttribute('aria-pressed',String(selected));
+    const sprite=selected?(row===0?'tab_top_selected_1':'tab_top_selected_2'):'tab_top_unselected_1';
+    const drawing={x,y,icon:tab.icon,sprite};
+    if(selected)active=drawing;else paintShopTab(drawing);
+    if(showing(node))hovered={name:tab.name,x,y};
+  }
+  return {hovered,active};
+}
 function shopScreen(w,h,now){
   const progress=shopTrade?P.clamp((now-shopTrade.started)/shopTradeDuration):1;
   if(progress>=1)shopTrade=null;
   const shake=shopTrade?Math.round(Math.sin(progress*19)*2.5*(1-progress)):0;
   const {budget,offers}=session.kit.shop,spent=session.spent,shop=images.get('shop');
   const left=Math.trunc((w-shop.width-inventory.layout.width)/2),top=Math.trunc((h-shop.height)/2),inv=left+shop.width,bottom=top+shop.height+4;
-  const pages=Math.ceil(offers.length/F.shopPageSize),start=shopPage*F.shopPageSize;
+  const visibleOffers=currentShopOffers(),pages=Math.max(1,Math.ceil(visibleOffers.length/F.shopPageSize)),start=shopPage*F.shopPageSize;
   let detail=null;
+  const showing=node=>!partyOpen&&node.matches(':hover,:focus-visible');
+  const {hovered:hoveredTab,active:activeTab}=drawShopTabs(left,top,showing);
   ctx.drawImage(shop,left,top);
+  if(activeTab)paintShopTab(activeTab);
   inventory.aim={x:pointer.x-inv-51,y:pointer.y-top-32};
   inventory.visible=true;inventory.draw(shopTrade?.buying?shopTrade.slot:null);
   ctx.drawImage(inventory.canvas,inv,top,inventory.layout.width,inventory.layout.height);
 
-  const showing=node=>!partyOpen&&node.matches(':hover,:focus-visible');
-  for(let index=start;index<Math.min(start+F.shopPageSize,offers.length);index++){
-    const cell=index-start,x=left+8+cell%3*18,y=top+12+Math.floor(cell/3)*18;
+  for(const [cell,index] of visibleOffers.slice(start,start+F.shopPageSize).entries()){
+    const x=left+8+cell%3*18,y=top+12+Math.floor(cell/3)*18;
     const status=session.shopStatus(index),{offer}=status,name=HeritageItemText.name(offer.item);
     const action=shopText('buy',name,offer.cost),feedback=shopStatusText(status);
-    const node=hit('shop-offer-'+index,action+'. '+feedback,x,y,16,16,()=>{
+    const limitReached=status.issue==='limit_reached',short=status.issue==='short'||status.issue==='short_one';
+    const count=limitReached?'. '+shopText('bought',status.bought,status.limit):'';
+    const node=hit('shop-offer-'+index,action+'. '+feedback+count,x,y,16,16,()=>{
       if(session.buy(index))updateShop(action+'.',session.purchases.at(-1),true);
       else $('flow-narration').textContent=shopStatusText(session.shopStatus(index))+'. '+shopBudget();
     });
-    ctx.globalAlpha=status.issue ? .45 : 1;
     HeritageInventory.item(ctx,offer.item,x,y,inventory.requestIcon,shopTrade?.offer===index?-shake:0);
-    ctx.globalAlpha=1;
-    const price=literal(String(offer.cost),status.issue?0xe0b7ad:0xffe4a1),scale=Math.min(.75,16/width(price));
+    if(short||limitReached)rect(x,y,16,16,short?'#0006':'#00000026');
+    if(status.issue==='no_space'){
+      rect(x,y+10,6,6,'#343434');
+      outline(x,y+10,6,'#e4e4e4');
+    }
+    if(status.bought&&!limitReached)outline(x-1,y-1,18,'#629d42');
+    const price=literal(String(offer.cost),short?0xff7777:0xffe4a1),scale=Math.min(.75,16/width(price));
     text(price,x,y,{scale,outline:false,shadow:true});
     if(showing(node)){
       outline(x-1,y-1,18,'#ffe4a1');detail={node,status,name,refunding:false};
@@ -813,13 +864,22 @@ function shopScreen(w,h,now){
 
   text(shopText('title'),w/2,top-32,{center:true});
   text(shopBudget(),w/2,top-19,{center:true});
-  const meter=Math.trunc((w-182)/2),filled=budget?Math.round(182*spent/budget):0;
-  rect(meter,top-7,182,5,'#283527');
-  rect(meter,top-7,filled,5,'#619e39');
-  rect(meter,top-6,filled,1,'#9cce61');
-  if(budget&&detail&&!detail.refunding&&!detail.status.issue){
-    const projected=Math.round(182*(spent+detail.status.offer.cost)/budget);
-    rect(meter+filled,top-7,projected-filled,5,'#517247');
+  const bar=images.get('experience_bar_background'),meter=Math.trunc((w-bar.width)/2),meterY=top-7;
+  const fill=points=>budget?Math.round(bar.width*points/budget):0,filled=fill(spent);
+  const segment=(image,start,end,alpha=1)=>{
+    if(end<=start)return;
+    ctx.globalAlpha=alpha;
+    ctx.drawImage(images.get(image),start,0,end-start,bar.height,meter+start,meterY,end-start,bar.height);
+    ctx.globalAlpha=1;
+  };
+  ctx.drawImage(bar,meter,meterY);
+  segment('experience_bar_progress',0,filled);
+  if(detail?.refunding){
+    segment('experience_bar_red',fill(spent-detail.status.offer.cost),filled);
+  }else if(detail&&['short','short_one'].includes(detail.status.issue)){
+    segment('experience_bar_red',filled,bar.width,.85);
+  }else if(detail&&!detail.status.issue){
+    segment('experience_bar_progress',filled,fill(spent+detail.status.offer.cost),.6);
   }
 
   const detailX=inv+100;
@@ -836,9 +896,10 @@ function shopScreen(w,h,now){
     const ink={limit:68,outline:false},feedback=shopStatusText(status,refunding);
     text(shopText('stack_price',offer.item.count??1,shopPoints(offer.cost)),detailX,top+46,{...ink,color:0x505050,maxLines:1});
     const lines=text(feedback,detailX,top+56,{...ink,color:status.issue&&!refunding?0x812e2a:0x37632a,maxLines:2});
-    if(lines===9&&status.limit>1)text(shopText('bought',status.bought,status.limit),detailX,top+67,{...ink,color:0x505050,maxLines:1});
+    if(lines===9&&(status.limit>1||status.bought>=status.limit))text(shopText('bought',status.bought,status.limit),detailX,top+67,{...ink,color:0x505050,maxLines:1});
   }
 
+  if(!visibleOffers.length)text(shopText('empty_section'),left+shop.width/2,top+18,{center:true,limit:shop.width-12});
   if(pages>1){
     arrow('shop-previous',shopText('previous_page'),left+3,bottom,()=>changeShopPage(-1),shopPage===0,{scale:.67,compact:true,forward:false});
     text(shopText('page',shopPage+1,pages),left+shop.width/2,bottom+6,{center:true});
@@ -851,9 +912,15 @@ function shopScreen(w,h,now){
   },!session.purchases.length);
   if(session.shopOnly)button('next','Done',inv+101,bottom,72,close);
   else button('next',shopText('review'),inv+101,bottom,72,next);
+  if(hoveredTab){
+    const lines=P.wrap(literal(hoveredTab.name),Math.min(180,w-16),renderer.advance);
+    const leftEdge=hoveredTab.x-Math.max(...lines.map(line=>line.width))-7;
+    tooltip(lines.map(line=>[line.glyphs.map(glyph=>glyph.ch).join(''),0xffffff]),
+      leftEdge>=4?leftEdge:hoveredTab.x,leftEdge>=4?hoveredTab.y+6:hoveredTab.y+shopTabHeight+3,w,h);
+  }
 }
 function changeShopPage(offset){
-  const pages=Math.ceil(session.kit.shop.offers.length/F.shopPageSize),page=P.clamp(shopPage+offset,0,pages-1);
+  const pages=Math.max(1,Math.ceil(currentShopOffers().length/F.shopPageSize)),page=P.clamp(shopPage+offset,0,pages-1);
   if(page===shopPage)return;
   shopPage=page;
   if(keyboard)needsFocus=true;
@@ -951,7 +1018,7 @@ function render(now){
   drawToast(w,h,now);
   for(const [id,node] of buttons)if(!activeButtons.has(id)){node.remove();buttons.delete(id);}
   if(needsFocus&&session.phase==='complete'){$('flow-close').focus({preventScroll:true});needsFocus=false;}
-  if(needsFocus&&!partyOpen){const target=(waitingForParty?buttons.get('party-trigger'):null)??(session.phase==='kit-shop'?buttons.get('shop-offer-'+shopPage*F.shopPageSize):null)??buttons.get('next')??buttons.get('reveal')??[...buttons].find(([id])=>id!=='disconnect')?.[1];if(target&&!target.disabled){needsFocus=false;target.focus({preventScroll:true});}}
+  if(needsFocus&&!partyOpen){const target=(waitingForParty?buttons.get('party-trigger'):null)??(session.phase==='kit-shop'?buttons.get('shop-offer-'+currentShopOffers()[shopPage*F.shopPageSize]):null)??buttons.get('next')??buttons.get('reveal')??[...buttons].find(([id])=>id!=='disconnect')?.[1];if(target&&!target.disabled){needsFocus=false;target.focus({preventScroll:true});}}
   frame=requestAnimationFrame(render);
 }
 function flowSnapshot(){

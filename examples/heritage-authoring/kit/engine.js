@@ -63,12 +63,29 @@ function validateStack(entry,label,path,warnings) {
 function validateShop(shop,warnings) {
   if(!object(shop))throw issue('shop must be an object.',['shop']);
   integer(shop.budget,0,1000000,'Shop budget',['shop','budget']);
+  const sections=new Set();
+  if(shop.sections!==undefined){
+    if(!Array.isArray(shop.sections)||shop.sections.length>256)throw issue('Enter up to 256 shop sections.',['shop','sections']);
+    for(const [index,section] of shop.sections.entries()){
+      const path=['shop','sections',index],label='Section '+(index+1);
+      if(!object(section))throw issue(label+' must be an object.',path);
+      if(typeof section.id!=='string'||!/^[a-z0-9_-]{1,64}$/.test(section.id)||sections.has(section.id)){
+        throw issue(label+' needs a unique ID with 1 to 64 lowercase letters, digits, underscores or hyphens.',[...path,'id']);
+      }
+      if(typeof section.name!=='string'||!section.name.trim()||section.name.length>120)throw issue(label+' needs a tooltip name from 1 to 120 characters.',[...path,'name']);
+      if(typeof section.icon!=='string'||!idPattern.test(section.icon))throw issue(label+' needs a valid icon item ID.',[...path,'icon']);
+      const icon=normalize(section.icon);
+      if(icon.startsWith('minecraft:')&&!items.has(icon))throw issue(label+': unknown Minecraft 1.21.1 icon '+icon,[...path,'icon']);
+      sections.add(section.id);
+    }
+  }
   if(!Array.isArray(shop.offers)||!shop.offers.length||shop.offers.length>256)throw issue('Enter 1 to 256 shop offers.',['shop','offers']);
   for(const [index,offer] of shop.offers.entries()) {
     const path=['shop','offers',index],label='Offer '+(index+1);
     if(!object(offer))throw issue(label+' must be an object.',path);
     integer(offer.cost,0,1000000,label+' cost',[...path,'cost']);
     if(offer.limit!==undefined)integer(offer.limit,1,41,label+' purchase limit',[...path,'limit']);
+    if(offer.section!==undefined&&!sections.has(offer.section))throw issue(label+' refers to an unknown shop section.',[...path,'section']);
     validateStack({item:offer.item},label,path,warnings);
   }
 }

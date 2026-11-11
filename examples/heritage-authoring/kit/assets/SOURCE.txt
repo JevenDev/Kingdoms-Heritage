@@ -3,6 +3,7 @@ Minecraft 1.21.1 preview assets
 inventory.png, steve.png, alex.png, empty_armor_slot_*.png and armor/*.png were extracted from the official Minecraft 1.21.1 client JAR.
 Their original paths are assets/minecraft/textures/gui/container/inventory.png, assets/minecraft/textures/entity/player/wide/steve.png, assets/minecraft/textures/entity/player/slim/alex.png, assets/minecraft/textures/item/empty_armor_slot_*.png and assets/minecraft/textures/models/armor/*.png.
 widget/button.png, widget/button_highlighted.png and their scaling metadata come from assets/minecraft/textures/gui/sprites/widget/ in that same client JAR. The Accessories cosmetics toggle uses these vanilla button sprites.
+The shop preview's tab_top_selected_1.png, tab_top_selected_2.png and tab_top_unselected_1.png in ../../pack/assets come from assets/minecraft/textures/gui/sprites/container/creative_inventory/ in the same client JAR. The experience_bar_background.png and experience_bar_progress.png sprites come from assets/minecraft/textures/gui/sprites/hud/.
 
 items-0.png and items-1.png contain native Minecraft renders of all 1,332 non-air vanilla registry items. Each cell is 32 x 32 pixels, rendered at GUI scale 2 with the game's item renderer, default item components, model lighting and transparent background.
 catalog.json records English item names, resource IDs, maximum stack counts, block flags, equipment types and atlas coordinates from that same running client. ../catalog.js adds armor material names for the browser player model.
