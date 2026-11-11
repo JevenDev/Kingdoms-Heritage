@@ -102,6 +102,7 @@ public final class ClientSelection {
 
     private static void receiveCatalog(JsonObject next) {
         Minecraft minecraft = Minecraft.getInstance();
+        Screen previousScreen = minecraft.screen;
         finalReview = null;
         SpawnIntroOverlay.clear();
         boolean confirmed = progress.equals("applying");
@@ -142,6 +143,7 @@ public final class ClientSelection {
             }
             if (!newSession && flowReset != null) resetExtensions(flowReset);
             else showSelection();
+            if (!newSession) ClientParty.selectionRefreshed(previousScreen, minecraft.screen);
             if (SelectionTransition.joining()) SelectionTransition.reveal();
         }
     }
@@ -265,6 +267,8 @@ public final class ClientSelection {
         var placement = HeritageScreens.placement();
         if (placement != null && placement.ordinal() < from.ordinal()) return;
         if (from == com.jvn.kingdomsheritage.api.ScreenStep.Placement.AFTER_KIT && placement == null && kits == null && finalReview == null) return;
+        var minecraft = Minecraft.getInstance();
+        Screen previousScreen = minecraft.screen;
         finalReview = null;
         progress = "";
         SelectionTransition.clear();
@@ -272,6 +276,7 @@ public final class ClientSelection {
             closeKits();
             HeritageScreens.restart();
         } else backFromExtension(HeritageScreens.Placement.valueOf(from.name()));
+        ClientParty.selectionRefreshed(previousScreen, minecraft.screen);
     }
 
     static void backFromExtension(HeritageScreens.Placement placement) {

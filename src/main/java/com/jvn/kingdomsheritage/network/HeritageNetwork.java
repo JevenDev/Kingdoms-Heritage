@@ -11,6 +11,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 
 public final class HeritageNetwork {
+    public static final int MAX_PARTY_SIZE = 8;
     public static Consumer<String> clientReceiver = json -> {};
     public static Consumer<Cursor> cursorReceiver = cursor -> {};
     public static Consumer<Boolean> joinReceiver = pending -> {};

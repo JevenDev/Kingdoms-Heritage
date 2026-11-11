@@ -55,9 +55,14 @@ public final class SelectionBackground {
     }
 
     static void render(GuiGraphics graphics, int width, int height) {
-        if (width <= 0 || height <= 0) return;
+        render(graphics, width, height, 1);
+    }
+
+    static void render(GuiGraphics graphics, int width, int height, float opacity) {
+        if (width <= 0 || height <= 0 || opacity <= 0) return;
         if (shader == null) {
-            graphics.fillGradient(0, 0, width, height, 0xff171a20, 0xff08090b);
+            int alpha = Math.round(opacity * 255) << 24;
+            graphics.fillGradient(0, 0, width, height, alpha | 0x171a20, alpha | 0x08090b);
             return;
         }
         Minecraft minecraft = Minecraft.getInstance();
@@ -88,7 +93,11 @@ public final class SelectionBackground {
             main.bindWrite(true);
             RenderSystem.setShader(GameRenderer::getPositionTexShader);
             RenderSystem.setShaderTexture(0, target.getColorTextureId());
-            RenderSystem.setShaderColor(1, 1, 1, 1);
+            if (opacity < 1) {
+                RenderSystem.enableBlend();
+                RenderSystem.defaultBlendFunc();
+            }
+            RenderSystem.setShaderColor(1, 1, 1, opacity);
             var pose = graphics.pose().last().pose();
             var quad = Tesselator.getInstance().begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_TEX);
             quad.addVertex(pose, 0, height, 0).setUv(0, 0);
@@ -98,6 +107,8 @@ public final class SelectionBackground {
             BufferUploader.drawWithShader(quad.buildOrThrow());
         } finally {
             main.bindWrite(true);
+            RenderSystem.setShaderColor(1, 1, 1, 1);
+            RenderSystem.disableBlend();
             RenderSystem.depthMask(true);
             RenderSystem.enableDepthTest();
         }

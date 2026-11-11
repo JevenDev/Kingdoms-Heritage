@@ -13,12 +13,20 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(ToastComponent.class)
 public abstract class IntroToastGuard {
+    private static final int SELECTION_TOAST_DEPTH_OFFSET = 1000;
+
     @Inject(method = "render", at = @At("HEAD"), cancellable = true)
     private void hideIntroToasts(GuiGraphics graphics, CallbackInfo callback) {
-        ToastComponent music = SelectionToasts.component();
-        if ((Object) this == music) return;
-        if ((Object) this == Minecraft.getInstance().getToasts() && music != null && !SpawnIntroOverlay.active()) {
-            music.render(graphics);
+        ToastComponent selection = SelectionToasts.component();
+        if ((Object) this == selection) return;
+        if ((Object) this == Minecraft.getInstance().getToasts() && selection != null && !SpawnIntroOverlay.active()) {
+            graphics.pose().pushPose();
+            graphics.pose().translate(0, 0, SELECTION_TOAST_DEPTH_OFFSET);
+            try {
+                selection.render(graphics);
+            } finally {
+                graphics.pose().popPose();
+            }
         }
         if (ClientSelection.blocksToasts()) callback.cancel();
     }

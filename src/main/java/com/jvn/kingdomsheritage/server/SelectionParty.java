@@ -238,7 +238,7 @@ public final class SelectionParty {
         if (action == HeritageNetwork.PartyAction.INVITE) {
             if (self.stage != 0 || target.stage != 0 || SelectionManager.busy(player) || SelectionManager.busy(target.player)
                     || PARTIES.containsKey(request.target()) || party != null && (!party.leader.equals(player.getUUID())
-                    || !party.spawn.isEmpty() || party.members.size() >= 8)) return;
+                    || !party.spawn.isEmpty() || party.members.size() >= HeritageNetwork.MAX_PARTY_SIZE)) return;
             if (INVITES.stream().filter(invite -> invite.sender().equals(player.getUUID())).count() >= 7
                     || INVITES.stream().filter(invite -> invite.recipient().equals(request.target())).count() >= 16
                     || INVITES.stream().anyMatch(invite -> invite.sender().equals(player.getUUID()) && invite.recipient().equals(request.target()))) return;
@@ -257,13 +257,13 @@ public final class SelectionParty {
                 var destination = PARTIES.get(request.target());
                 if (party != null || self.stage != 0 || target.stage != 0 || SelectionManager.busy(player)
                         || SelectionManager.busy(target.player) || destination != null && (!destination.leader.equals(request.target())
-                        || !destination.spawn.isEmpty() || destination.members.size() >= 8)) return;
+                        || !destination.spawn.isEmpty() || destination.members.size() >= HeritageNetwork.MAX_PARTY_SIZE)) return;
                 feedback(invite.sender(), invite.recipient(), "accepted");
                 if (destination == null) destination = new Party(request.target());
                 destination.members.add(player.getUUID());
                 for (var member : destination.members) PARTIES.put(member, destination);
                 UUID inviter = destination.leader;
-                boolean full = destination.members.size() == 8;
+                boolean full = destination.members.size() == HeritageNetwork.MAX_PARTY_SIZE;
                 INVITES.remove(invite);
                 removeInvites(value -> value.recipient().equals(player.getUUID()) || value.sender().equals(player.getUUID())
                         || full && value.sender().equals(inviter));
@@ -304,6 +304,7 @@ public final class SelectionParty {
             var participant = PLAYERS.get(notice.getKey());
             if (participant == null) continue;
             var feedback = new JsonObject();
+            feedback.addProperty("player", player.getUUID().toString());
             feedback.addProperty("name", player.getGameProfile().getName());
             feedback.addProperty("result", notice.getValue());
             participant.feedback.add(feedback);
@@ -373,6 +374,7 @@ public final class SelectionParty {
         var target = PLAYERS.get(recipient);
         if (participant == null || target == null) return;
         var entry = new JsonObject();
+        entry.addProperty("player", recipient.toString());
         entry.addProperty("name", target.player.getGameProfile().getName());
         entry.addProperty("result", result);
         participant.feedback.add(entry);

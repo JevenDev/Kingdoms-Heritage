@@ -1,24 +1,29 @@
 package com.jvn.kingdomsheritage.client;
 
+import com.jvn.kingdomsheritage.network.HeritageNetwork;
+import com.mojang.blaze3d.systems.RenderSystem;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 
 final class PartyPlayerList {
-    private static final int BACKGROUND_OPACITY = 104;
+    private static final float BACKDROP_OPACITY = 0.94F;
+    private static final int PORTRAIT_SIZE = 24;
+    private static final int GRID_STEP = 36;
     private static final float RESPONSE = 14;
     private static final ResourceLocation TAB = texture("tab_button");
     private static final ResourceLocation SELECTED = texture("tab_button_selected");
+    private static final ResourceLocation EMPTY_SLOT = texture("empty_slot");
     private final PartyListBlur blur = new PartyListBlur();
     private final List<Cell> cells = new ArrayList<>();
+    private final List<EmptySlot> emptySlots = new ArrayList<>();
     private boolean open;
     private float from;
     private float velocity;
@@ -33,7 +38,6 @@ final class PartyPlayerList {
     private int lastMouseY = -1;
     private int columns = 1;
     private int capacity = 1;
-    private int rowHeight = 56;
     private int page;
     private double scrollRemainder;
     private Button previousPage;
@@ -41,7 +45,17 @@ final class PartyPlayerList {
     private Button hoveredPageArrow;
     private List<ClientParty.Peer> pagePlayers = List.of();
 
-    private record Cell(ClientParty.Peer player, int x, int y) {}
+    private record Cell(ClientParty.Peer player, int x, int y, boolean party) {}
+    private record EmptySlot(int x, int y) {}
+
+    private static boolean overPortrait(double mouseX, double mouseY, int x, int y) {
+        return mouseX >= x - 1 && mouseX < x + PORTRAIT_SIZE + 1 && mouseY >= y - 1 && mouseY < y + PORTRAIT_SIZE + 1;
+    }
+
+    private int portraitX(int center, int index, int count) {
+        int rowSize = Math.min(columns, count - index / columns * columns);
+        return center - (PORTRAIT_SIZE + (rowSize - 1) * GRID_STEP) / 2 + index % columns * GRID_STEP;
+    }
 
     private static ResourceLocation texture(String name) {
         return ResourceLocation.fromNamespaceAndPath("kingdomsheritage", "textures/gui/selection/" + name + ".png");
@@ -85,6 +99,7 @@ final class PartyPlayerList {
         headerFocused = false;
         lastMouseX = lastMouseY = -1;
         cells.clear();
+        emptySlots.clear();
         pagePlayers = List.of();
         hoveredPageArrow = null;
         if (previousPage != null) previousPage.visible = nextPage.visible = false;
@@ -98,7 +113,7 @@ final class PartyPlayerList {
 
     void focus(UUID player) {
         focused = player;
-        keyboard = true;
+        keyboard = player != null;
         headerFocused = false;
     }
 
@@ -106,12 +121,22 @@ final class PartyPlayerList {
 
     void moveFocus(List<ClientParty.Peer> players, int direction) {
         if (players.isEmpty()) { focused = null; return; }
-        int index = -1;
-        for (int i = 0; i < players.size(); i++) if (players.get(i).id().equals(focused)) index = i;
+        int index = indexOf(players, focused);
         int next = index < 0 ? direction < 0 ? players.size() - 1 : 0 : Math.floorMod(index + direction, players.size());
         focus(players.get(next).id());
-        page = next / capacity;
-        keyboard = true;
+        int otherIndex = indexOf(pagePlayers, focused);
+        if (otherIndex >= 0) page = otherIndex / capacity;
+    }
+
+    void moveVertical(List<ClientParty.Peer> players, int direction) {
+        int index = indexOf(players, focused);
+        int next = index + direction * columns;
+        if (index >= 0 && next >= 0 && next < players.size()) moveFocus(players, next - index);
+    }
+
+    private static int indexOf(List<ClientParty.Peer> players, UUID id) {
+        for (int i = 0; i < players.size(); i++) if (players.get(i).id().equals(id)) return i;
+        return -1;
     }
 
     void changePage(List<ClientParty.Peer> players, int direction) {
@@ -133,8 +158,6 @@ final class PartyPlayerList {
         keyboard = false;
         return page != previous;
     }
-
-    int columns() { return columns; }
 
     UUID selected() { return keyboard ? headerFocused ? null : focused : hoveredPageArrow == null ? hovered : null; }
     boolean keyboardFocused() { return keyboard; }
@@ -159,13 +182,19 @@ final class PartyPlayerList {
     UUID hit(double x, double y) {
         y -= slide;
         for (var cell : cells) {
-            if (x >= cell.x && x < cell.x + 64 && y >= cell.y && y < cell.y + rowHeight - 6) return cell.player.id();
+            if (overPortrait(x, y, cell.x, cell.y)) return cell.player.id();
         }
         return null;
     }
 
+    boolean overEmptySlot(double x, double y) {
+        if (!open || visibility(Util.getMillis()) < 0.65F) return false;
+        for (var slot : emptySlots) if (overPortrait(x, y - slide, slot.x, slot.y)) return true;
+        return false;
+    }
+
     int menuX() {
-        for (var cell : cells) if (cell.player.id().equals(focused)) return cell.x + 48;
+        for (var cell : cells) if (cell.player.id().equals(focused)) return cell.x + PORTRAIT_SIZE + 5;
         return 24;
     }
 
@@ -207,11 +236,7 @@ final class PartyPlayerList {
         }
     }
 
-    static String playerLabel(Font font, String name) {
-        return font.width(name) <= 60 ? name : font.plainSubstrByWidth(name, 60 - font.width("...")) + "...";
-    }
-
-    private void renderPageArrows(GuiGraphics graphics, int width, int y, int mouseX, int mouseY, float visibility) {
+    private void renderPageArrows(GuiGraphics graphics, int center, int y, int mouseX, int mouseY, float visibility) {
         if (previousPage == null) {
             previousPage = SelectionControls.arrow(0, 0, false, Component.translatable("spectatorMenu.previous_page"),
                     button -> changePage(pagePlayers, -1));
@@ -227,8 +252,8 @@ final class PartyPlayerList {
         var font = Minecraft.getInstance().font;
         String label = (page + 1) + " / " + ((pagePlayers.size() + capacity - 1) / capacity);
         int halfLabel = font.width(label) / 2;
-        previousPage.setPosition(width / 2 - halfLabel - 28, y - 5);
-        nextPage.setPosition(width / 2 + halfLabel + 8, y - 5);
+        previousPage.setPosition(center - halfLabel - 28, y - 5);
+        nextPage.setPosition(center + halfLabel + 8, y - 5);
         previousPage.active = open && page > 0;
         nextPage.active = open && (page + 1) * capacity < pagePlayers.size();
         previousPage.visible = nextPage.visible = true;
@@ -258,11 +283,26 @@ final class PartyPlayerList {
         }
     }
 
+    private void renderCell(GuiGraphics graphics, Cell cell, float visibility, int opacity) {
+        int x = cell.x;
+        int y = cell.y;
+        boolean loading = cell.player.stage() == HeritageParty.Stage.LOADING.ordinal();
+        ClientParty.head(graphics, cell.player, x, y, PORTRAIT_SIZE, loading, visibility);
+        if (cell.party) {
+            int color = ClientParty.partyPortraitColor(cell.player.id());
+            graphics.renderOutline(x - 1, y - 1, PORTRAIT_SIZE + 2, PORTRAIT_SIZE + 2, opacity | color);
+            if (!loading) renderProgress(graphics, cell.player, x + PORTRAIT_SIZE - 12, y + PORTRAIT_SIZE - 12, opacity);
+        }
+        if (cell.player.id().equals(selected()))
+            graphics.renderOutline(x - 2, y - 2, PORTRAIT_SIZE + 4, PORTRAIT_SIZE + 4, opacity | 0xffffff);
+    }
+
     void render(GuiGraphics graphics, int width, int height, List<ClientParty.Peer> players, int mouseX, int mouseY) {
         long now = Util.getMillis();
         float visibility = visibility(now);
         if (!active(now)) {
             cells.clear();
+            emptySlots.clear();
             blur.close();
             return;
         }
@@ -271,27 +311,42 @@ final class PartyPlayerList {
         lastMouseX = mouseX;
         lastMouseY = mouseY;
         blur.render(graphics, visibility);
-        graphics.fill(0, 0, width, height, Math.round(BACKGROUND_OPACITY * visibility) << 24);
-        columns = Math.max(1, Math.min(6, (width - 32) / 64));
-        rowHeight = ClientParty.grouped() ? 68 : 56;
-        int rows = Math.max(1, (height - (ClientParty.grouped() ? 160 : 104)) / rowHeight);
-        capacity = columns * rows;
-        int focusedIndex = -1;
-        for (int i = 0; i < players.size(); i++) if (players.get(i).id().equals(focused)) focusedIndex = i;
-        if (focusedIndex < 0) { focused = players.getFirst().id(); focusedIndex = 0; }
-        page = Mth.clamp(focusedIndex / capacity, 0, (players.size() - 1) / capacity);
-        int first = page * capacity;
-        int last = Math.min(players.size(), first + capacity);
-        int visibleColumns = Math.min(columns, last - first);
-        int visibleRows = (last - first + columns - 1) / columns;
-        int left = (width - visibleColumns * 64) / 2;
-        int top = Math.max(ClientParty.grouped() ? 104 : 48, (height - visibleRows * rowHeight) / 2);
+        SelectionBackground.render(graphics, width, height, BACKDROP_OPACITY * visibility);
+
+        int top = Math.max(32, (height - 192) / 2);
+        int sectionWidth = Math.max(1, (Math.min(width - 24, 372) - 14) / 2);
+        int partyCenter = (width - sectionWidth - 14) / 2;
+        int otherCenter = width - partyCenter;
+        int gridY = top + 20;
         slide = (1 - visibility) * 10;
+
+        var partyPlayers = players.stream().filter(player -> ClientParty.onPartySide(player.id())).toList();
+        pagePlayers = players.stream().filter(player -> !ClientParty.onPartySide(player.id())).toList();
+        columns = Mth.clamp((sectionWidth + GRID_STEP - PORTRAIT_SIZE - 4) / GRID_STEP, 1, 4);
+        int rows = Mth.clamp((height - gridY - 76) / GRID_STEP, 1, 3);
+        capacity = columns * rows;
+        if (focused != null && indexOf(players, focused) < 0) focus(null);
+        int focusedIndex = indexOf(pagePlayers, focused);
+        if (focusedIndex >= 0) page = focusedIndex / capacity;
+        page = Mth.clamp(page, 0, Math.max(0, (pagePlayers.size() - 1) / capacity));
+        int first = page * capacity;
+        int last = Math.min(pagePlayers.size(), first + capacity);
+
         cells.clear();
+        emptySlots.clear();
+        int slotCount = HeritageNetwork.MAX_PARTY_SIZE;
+        for (int index = 0; index < slotCount; index++) {
+            int x = portraitX(partyCenter, index, slotCount);
+            int y = gridY + index / columns * GRID_STEP;
+            if (index < partyPlayers.size()) cells.add(new Cell(partyPlayers.get(index), x, y, true));
+            else emptySlots.add(new EmptySlot(x, y));
+        }
         for (int index = first; index < last; index++) {
             int local = index - first;
-            cells.add(new Cell(players.get(index), left + local % columns * 64, top + local / columns * rowHeight));
+            cells.add(new Cell(pagePlayers.get(index), portraitX(otherCenter, local, last - first),
+                    gridY + local / columns * GRID_STEP, false));
         }
+
         UUID nextHovered = open && visibility > 0.65F ? hit(mouseX, mouseY) : null;
         if (nextHovered != null && !nextHovered.equals(hovered)) SelectionSounds.HOVER.play();
         hovered = nextHovered;
@@ -299,35 +354,34 @@ final class PartyPlayerList {
         var font = Minecraft.getInstance().font;
         graphics.pose().pushPose();
         graphics.pose().translate(0, slide, 0);
-        SelectionText.centered(graphics, font, ClientParty.playerCount(players.size()), width / 2, top - 24, opacity | 0xffff55);
-        for (var cell : cells) {
-            int x = cell.x + 16;
-            int y = cell.y;
-            boolean loading = cell.player.stage() == HeritageParty.Stage.LOADING.ordinal();
-            boolean member = ClientParty.member(cell.player.id());
-            if (member) graphics.renderOutline(x - 2, y - 2, 36, 36, opacity | 0xffff55);
-            if (cell.player.id().equals(selected())) {
-                int border = member ? 3 : 2;
-                graphics.renderOutline(x - border, y - border, 32 + border * 2, 32 + border * 2, opacity | 0xffffff);
-            }
-            ClientParty.head(graphics, cell.player, x, y, 32, loading, visibility);
-            if (member && !loading) renderProgress(graphics, cell.player, x + 25, y + 25, opacity);
-            SelectionText.centered(graphics, font, playerLabel(font, cell.player.name()), cell.x + 32, y + 38,
-                    opacity | (member ? 0xffff55 : 0xffffff));
-            if (member) SelectionText.centered(graphics, font, playerLabel(font, ClientParty.kitChoice(cell.player.id()).getString()),
-                    cell.x + 32, y + 50, opacity | 0xcccccc);
+        SelectionText.centered(graphics, font, Component.translatable("screen.kingdomsheritage.party_other_players"),
+                otherCenter, top, opacity | 0xf4f1e8);
+        if (pagePlayers.isEmpty()) SelectionText.centered(graphics, font, Component.translatable("screen.kingdomsheritage.party_no_other_players"),
+                otherCenter, gridY, opacity | 0xaaaaaa);
+        graphics.setColor(1, 1, 1, visibility);
+        RenderSystem.enableBlend();
+        RenderSystem.defaultBlendFunc();
+        for (var slot : emptySlots) {
+            graphics.blit(EMPTY_SLOT, slot.x - 1, slot.y - 1, PORTRAIT_SIZE + 2, PORTRAIT_SIZE + 2, 0, 0, 32, 32, 32, 32);
         }
-        if (players.size() > capacity) SelectionText.centered(graphics, font,
-                Component.literal((page + 1) + " / " + ((players.size() + capacity - 1) / capacity)),
-                width / 2, top + visibleRows * rowHeight + 2, opacity | 0xcccccc);
-        SelectionText.centered(graphics, font, Component.translatable("screen.kingdomsheritage.party_list_controls"),
-                width / 2, height - 24, opacity | 0xcccccc);
+        RenderSystem.disableBlend();
+        graphics.setColor(1, 1, 1, 1);
+        for (var cell : cells) renderCell(graphics, cell, visibility, opacity);
+        int pageY = gridY + rows * GRID_STEP + 2;
+        boolean paged = pagePlayers.size() > capacity;
+        if (paged) SelectionText.centered(graphics, font,
+                Component.literal((page + 1) + " / " + ((pagePlayers.size() + capacity - 1) / capacity)),
+                otherCenter, pageY, opacity | 0xcccccc);
         graphics.flush();
         graphics.pose().popPose();
-        if (ClientParty.grouped()) ClientParty.renderPartyHeader(graphics, width, top - 78, mouseX, mouseY, visibility, slide);
-        pagePlayers = players;
-        if (players.size() > capacity) {
-            renderPageArrows(graphics, width, top + visibleRows * rowHeight + 2 + Math.round(slide), mouseX, mouseY, visibility);
+        SelectionText.centered(graphics, font, Component.translatable("screen.kingdomsheritage.party_list_controls"),
+                width / 2, height - 12, opacity | 0xcccccc);
+        int lastRow = (Math.max(slotCount, last - first) - 1) / columns;
+        int summaryY = gridY + lastRow * GRID_STEP + PORTRAIT_SIZE + 10;
+        if (paged) summaryY = Math.max(summaryY, pageY + 20);
+        ClientParty.renderPartySummary(graphics, partyCenter, top, width, summaryY, mouseX, mouseY, visibility, slide);
+        if (paged) {
+            renderPageArrows(graphics, otherCenter, pageY + Math.round(slide), mouseX, mouseY, visibility);
         } else {
             hoveredPageArrow = null;
             if (previousPage != null) previousPage.visible = nextPage.visible = false;
