@@ -12,6 +12,22 @@ test('completed paths persist separately and reload without marking other paths 
 test('item changes invalidate only paths using that kit',()=>{
   const value=choices(),ledger=new C.Ledger();for(const route of C.page(value,{}))ledger.record('pack',route,all,{});value.kits[0].items[0].item.count=2;assert.deepEqual(ledger.summary('pack',value,{}),{total:8,tested:4,changed:4,partial:0});
 });
+test('shop paths require testing the playable shop and track changes to its rules',()=>{
+  const value=choices(),kit=value.kits[1];
+  kit.shop={budget:2,offers:[{cost:1,item:{id:'minecraft:bread'}}]};
+  const before=C.scene(value,{},'test:home',kit.id),ledger=new C.Ledger();
+  const previous={...before,parts:{...before.parts,kit:C.hash([kit,value.kits.map(entry=>entry.id),value.guiScale])}};
+  ledger.record('pack',previous,all,{});
+  assert.equal(ledger.status('pack',before).state,'changed');
+  assert.equal(ledger.record('pack',before,['kit'],{}),true);
+  delete kit.items;
+  assert.equal(C.scene(value,{},'test:home',kit.id).parts.arrival,before.parts.arrival);
+  kit.shop.budget=3;
+  const after=C.scene(value,{},'test:home',kit.id);
+  assert.notEqual(after.parts.kit,before.parts.kit);
+  assert.equal(after.parts.location,before.parts.location);
+  assert.equal(ledger.status('pack',after).state,'changed');
+});
 test('default intro changes leave overridden and explicitly disabled pool intros tested',()=>{
   const value=choices(),ledger=new C.Ledger();for(const route of C.page(value,{}))ledger.record('pack',route,all,{});value.spawns[0].intro.text='New default';assert.deepEqual(ledger.summary('pack',value,{}),{total:8,tested:6,changed:2,partial:0});
 });

@@ -51,7 +51,7 @@ function narration(player,names,kit,translations={}) {
   location=location.replace(/^Village .+$/,'Village').replace(/^Ruined Portal.*$/,'Ruined Portal').replace(/^Ocean Ruin .+$/,'Ocean Ruins').toLowerCase();
   const segment=(prefix,value,suffix,pause)=>({text:prefix+value+suffix,pause,highlight:[Array.from(prefix).length,Array.from(value).length]});
   const placeName=(/^(the |a |an )/.test(location)?'':'the ')+location;
-  const equipment=kit.items.length?segment(' with equipment from the "',label(kit,'title',translations),'" kit...',1000):segment(' with ','nothing but your own two hands','...',1000);
+  const equipment=kit.items?.length?segment(' with equipment from the "',label(kit,'title',translations),'" kit...',1000):segment(' with ','nothing but your own two hands','...',1000);
   const party=names.companions?[segment(' You will arrive with ',names.companions,'...',1000)]:[];
   return [segment('',player,'...',500),segment(' you woke up in ',placeName,'...',1000),equipment,...party,{text:' is that correct?',pause:0}];
 }
@@ -75,16 +75,39 @@ function browseLocation(count,index,offset,byPage=false){
   }else index+=offset;
   return Math.max(0,Math.min(last,index));
 }
+const shopPageSize=24;
+function equipmentSlot(stack){
+  const id=stack.id.includes(':')?stack.id:'minecraft:'+stack.id;
+  if(id==='minecraft:shield')return 40;
+  if(/^minecraft:(?:(?:leather|chainmail|iron|golden|diamond|netherite|turtle)_helmet|(?:skeleton|wither_skeleton)_skull|(?:player|zombie|creeper|dragon|piglin)_head|carved_pumpkin)$/.test(id))return 39;
+  if(/^minecraft:(?:(?:leather|chainmail|iron|golden|diamond|netherite)_chestplate|elytra)$/.test(id))return 38;
+  if(/^minecraft:(?:leather|chainmail|iron|golden|diamond|netherite)_leggings$/.test(id))return 37;
+  if(/^minecraft:(?:leather|chainmail|iron|golden|diamond|netherite)_boots$/.test(id))return 36;
+  return -1;
+}
 class Session {
   constructor(choices){this.choices=structuredClone(choices);this.restart();}
-  restart(){this.phase='location';this.spawn=null;this.kit=null;this.arrival=null;this.kitIndex=0;this.poolIndex=null;}
-  snapshot(){return {phase:this.phase,spawnId:this.spawn?.id??'',kitId:this.kit?.id??'',poolIndex:this.spawn?.type==='pool'?this.poolIndex:null};}
+  restart(){this.phase='location';this.spawn=null;this.kit=null;this.arrival=null;this.kitIndex=0;this.poolIndex=null;this.purchases=[];}
+  snapshot(){
+    const result={phase:this.phase,spawnId:this.spawn?.id??'',kitId:this.kit?.id??'',poolIndex:this.spawn?.type==='pool'?this.poolIndex:null};
+    if(this.kit?.shop&&this.purchases.length)result.purchases=this.purchases.map(pick=>({...pick}));
+    return result;
+  }
   resume(value){
     this.restart();if(!value||!this.choices.spawns.some(entry=>entry.id===value.spawnId))return false;
     this.choose(value.spawnId);const allowed=this.allowed();if(!allowed.length){this.restart();return false;}
     this.kitIndex=Math.max(0,allowed.findIndex(entry=>entry.id===value.kitId));this.kit=allowed[this.kitIndex];
-    const phases=['location-confirm','kit','kit-confirm','loading','review','intro'];this.phase=phases.includes(value.phase)?value.phase:'location-confirm';
-    if(['kit','kit-confirm'].includes(this.phase)&&allowed.length===1)this.phase='location-confirm';
+    const phases=['location-confirm','kit','kit-confirm','kit-shop','loading','review','intro'];this.phase=phases.includes(value.phase)?value.phase:'location-confirm';
+    if(this.phase==='kit-shop'&&!this.kit.shop)this.phase='kit';
+    if(this.phase==='kit-confirm'&&this.kit.shop)this.phase='kit-shop';
+    if(['kit','kit-confirm'].includes(this.phase)&&allowed.length===1&&!this.kit.shop)this.phase='location-confirm';
+    if(this.kit.shop&&this.kit.id===value.kitId&&Array.isArray(value.purchases)){
+      for(const pick of value.purchases){
+        const {offer,slot}=pick??{},status=this.shopStatus(offer);
+        if(!status||status.issue||!Number.isInteger(slot)||slot<0||this.occupiedSlots().has(slot))continue;
+        if(slot<36||slot===equipmentSlot(status.offer.item))this.purchases.push({offer,slot});
+      }
+    }
     const arriving=['loading','review','intro'].includes(this.phase);this.poolIndex=this.spawn.type==='pool'&&Number.isInteger(value.poolIndex)&&this.spawn.pool[value.poolIndex]?value.poolIndex:arriving?0:null;
     this.arrival=arriving?destination(this.spawn,this.poolIndex??0):null;if(this.phase==='intro'&&!this.arrival.intro)this.phase='review';return true;
   }
@@ -93,20 +116,56 @@ class Session {
     if(this.phase!=='location')return;
     const spawn=this.choices.spawns.find(entry=>entry.id===id);
     if(!spawn)throw new Error('Choose an available location.');
-    this.spawn=spawn;this.phase='location-confirm';this.kitIndex=0;this.kit=this.allowed()[0];
+    this.spawn=spawn;this.phase='location-confirm';this.kitIndex=0;this.kit=this.allowed()[0];this.purchases=[];
   }
   select(index){
     if(this.phase!=='kit')return;
-    const kit=this.allowed()[index];if(!kit)return;
-    this.kitIndex=index;this.kit=kit;
+    const kit=this.allowed()[index];if(!kit||kit===this.kit)return;
+    this.kitIndex=index;this.kit=kit;this.purchases=[];
   }
+  loadout(){
+    if(!this.purchases.length)return this.kit;
+    return {...this.kit,items:[...(this.kit.items??[]),...this.purchases.map(({offer,slot})=>({index:slot,item:this.kit.shop.offers[offer].item}))]};
+  }
+  occupiedSlots(){
+    const fixed=(this.kit.items??[]).filter(entry=>(entry.inventory??'player')==='player');
+    return new Set([...fixed.map(entry=>entry.index),...this.purchases.map(pick=>pick.slot)]);
+  }
+  get spent(){return this.purchases.reduce((total,pick)=>total+this.kit.shop.offers[pick.offer].cost,0);}
+  shopStatus(index){
+    const offer=Number.isInteger(index)?this.kit?.shop?.offers[index]:null;if(!offer)return null;
+    const bought=this.purchases.filter(pick=>pick.offer===index).length,limit=offer.limit??1;
+    const remaining=this.kit.shop.budget-this.spent-offer.cost;
+    const occupied=this.occupiedSlots(),equipment=equipmentSlot(offer.item);
+    let slot=equipment;
+    if(slot<0||occupied.has(slot)){
+      slot=0;
+      while(slot<36&&occupied.has(slot))slot++;
+      if(slot===36)slot=-1;
+    }
+    const issue=bought>=limit?'limit_reached':remaining===-1?'short_one':remaining<0?'short':slot<0?'no_space':'';
+    return {offer,bought,limit,remaining,slot,issue};
+  }
+  buy(index){
+    if(this.phase!=='kit-shop')return false;
+    const status=this.shopStatus(index);
+    if(!status||status.issue)return false;
+    this.purchases.push({offer:index,slot:status.slot});return true;
+  }
+  refund(slot){
+    if(this.phase!=='kit-shop')return false;
+    const index=this.purchases.findIndex(pick=>pick.slot===slot);
+    if(index<0)return false;
+    this.purchases.splice(index,1);return true;
+  }
+  resetShop(){if(this.phase==='kit-shop')this.purchases=[];}
   next(poolIndex=0){
     if(this.phase==='location-confirm'){
       if(!this.kit)throw new Error('This location has no allowed kits.');
-      if(this.allowed().length>1){this.phase='kit';return;}
+      if(this.allowed().length>1||this.kit.shop){this.phase='kit';return;}
       this.prepareArrival(poolIndex);
-    }else if(this.phase==='kit')this.phase='kit-confirm';
-    else if(this.phase==='kit-confirm')this.prepareArrival(poolIndex);
+    }else if(this.phase==='kit')this.phase=this.kit.shop?'kit-shop':'kit-confirm';
+    else if(['kit-confirm','kit-shop'].includes(this.phase))this.prepareArrival(poolIndex);
     else if(this.phase==='loading')this.phase='review';
     else if(this.phase==='review')this.phase=this.arrival.intro?'intro':'complete';
     else if(this.phase==='intro')this.phase='complete';
@@ -119,11 +178,11 @@ class Session {
   back(){
     if(this.phase==='location-confirm'){this.phase='location';return;}
     if(this.phase==='kit'){this.phase='location-confirm';return;}
-    if(this.phase==='kit-confirm'){this.phase='kit';return;}
-    if(this.phase==='review')this.phase=this.allowed().length===1?'location-confirm':'kit';
+    if(['kit-confirm','kit-shop'].includes(this.phase)){this.phase='kit';return;}
+    if(this.phase==='review')this.phase=this.kit.shop?'kit-shop':this.allowed().length===1?'location-confirm':'kit';
   }
 }
-const api={pageSize,browseLocation,companionNames,compare,catalog,label,place,destination,locations,context,narration,revealed,Session};
+const api={pageSize,shopPageSize,browseLocation,companionNames,compare,catalog,label,place,destination,locations,context,narration,revealed,Session};
 if(typeof module!=='undefined')module.exports=api;
 else globalThis.HeritageFlow=api;
 })();

@@ -41,6 +41,97 @@ test('one allowed kit skips kit screens and no intro completes directly after re
   session.next();session.next();session.next();assert.equal(session.phase,'complete');
   session.restart();assert.equal(session.phase,'location');assert.equal(session.spawn,null);assert.equal(session.arrival,null);
 });
+function shopChoices({budget=6,items=[]}={}){
+  const source=choices();
+  source.spawns[0].kits=['pack:shop'];
+  source.kits.push({id:'pack:shop',title:'Trail Kit',items,shop:{budget,offers:[
+    {cost:2,limit:3,item:{id:'minecraft:torch',count:16}},
+    {cost:3,item:{id:'minecraft:shield'}},
+    {cost:0,limit:2,item:{id:'iron_boots'}}
+  ]}});
+  return source;
+}
+function enterShop(source=shopChoices()){
+  const session=new Flow.Session(source);
+  session.choose('pack:home');session.next();
+  assert.equal(session.phase,'kit');session.next();
+  assert.equal(session.phase,'kit-shop');
+  return session;
+}
+test('the kit shop enforces stack limits and per-kit points, with separate shortfall messages',()=>{
+  const session=enterShop();
+  assert.equal(session.buy(0),true);
+  assert.equal(session.shopStatus(1).remaining,1);
+  assert.equal(session.buy(1),true);
+  assert.equal(session.shopStatus(0).issue,'short_one');
+  assert.equal(session.buy(0),false);
+  assert.equal(session.shopStatus(1).issue,'limit_reached');
+  assert.equal(session.buy(2),true);
+  assert.deepEqual(session.purchases.at(-1),{offer:2,slot:36});
+  assert.equal(session.refund(40),true);
+  assert.equal(session.buy(0),true);
+  assert.equal(session.shopStatus(1).issue,'short_one');
+  assert.equal(session.buy(0),true);
+  assert.equal(session.shopStatus(1).issue,'short');
+  assert.equal(session.shopStatus(0).issue,'limit_reached');
+  assert.equal(session.spent,6);
+  assert.equal(session.buy(2),true);
+  assert.equal(session.shopStatus(2).issue,'limit_reached');
+  assert.equal(session.buy(2),false);
+});
+test('refunds keep other stacks in place and fixed stacks survive a reset',()=>{
+  const fixed={index:0,item:{id:'minecraft:apple'}},helmet={index:39,item:{id:'minecraft:iron_helmet'}};
+  const source=shopChoices({items:[fixed,helmet]}),session=enterShop(source);
+  assert.equal(session.refund(0),false);
+  assert.equal(session.buy(0),true);assert.equal(session.buy(0),true);assert.equal(session.buy(1),false);
+  assert.equal(session.refund(1),true);assert.equal(session.refund(1),false);
+  assert.deepEqual(session.loadout().items,[fixed,helmet,{index:2,item:{id:'minecraft:torch',count:16}}]);
+  assert.equal(session.buy(1),true);
+  assert.equal(session.loadout().items.at(-1).index,40);
+  session.resetShop();
+  assert.equal(session.spent,0);assert.deepEqual(session.loadout().items,[fixed,helmet]);
+  assert.deepEqual(session.kit,source.kits.at(-1));
+});
+test('a full regular inventory still has room for compatible equipment',()=>{
+  const items=Array.from({length:36},(_,index)=>({index,item:{id:'minecraft:apple'}}));
+  const session=enterShop(shopChoices({items}));
+  assert.equal(session.shopStatus(0).issue,'no_space');
+  assert.equal(session.buy(0),false);
+  assert.equal(session.buy(2),true);
+  assert.equal(session.shopStatus(2).issue,'no_space');
+  assert.deepEqual(session.purchases,[{offer:2,slot:36}]);
+});
+test('shop purchases appear in arrival and survive back navigation and a resumed preview',()=>{
+  const source=shopChoices(),session=enterShop(source);
+  delete source.kits.at(-1).items;
+  assert.match(Flow.narration('Alex',Flow.locations(session.spawn),source.kits.at(-1))[2].text,/nothing but your own two hands/);
+  session.buy(0);session.buy(0);session.refund(0);session.back();session.next();
+  assert.deepEqual(session.purchases,[{offer:0,slot:1}]);
+  session.next();session.next();assert.equal(session.phase,'review');
+  const names=Flow.context(session.arrival,session.loadout(),'Alex',Flow.locations(session.arrival));
+  assert.equal(names.facts.receives_kit,'true');
+  assert.match(Flow.narration('Alex',names,session.loadout())[2].text,/equipment from the "Trail Kit"/);
+  const restored=new Flow.Session(source);
+  assert.equal(restored.resume(session.snapshot()),true);
+  restored.back();assert.equal(restored.phase,'kit-shop');
+  assert.deepEqual(restored.purchases,[{offer:0,slot:1}]);
+  restored.back();restored.back();restored.back();restored.choose('pack:home');restored.next();restored.next();
+  assert.deepEqual(restored.purchases,[]);
+});
+test('preview purchases from an exported shop never write back to the pack',()=>{
+  const location=Pack.location('home');location.kits=['trail'];
+  const document=JSON.parse(fs.readFileSync(path.join(__dirname,'../templates/trail-kit.json'),'utf8'));
+  const output=build({keepKits:false,locations:[location],kits:[{id:'trail',path:'trail',included:true}]},{kits:[{id:'trail',document,warnings:[]}],intros:[]});
+  assert.deepEqual(output.errors,[]);
+  const source=Flow.catalog(output,bundled),before=structuredClone(output),session=new Flow.Session(source);
+  session.choose(source.spawns[0].id);session.next();session.next();
+  assert.equal(session.phase,'kit-shop');
+  assert.equal(source.kits[0].shop.offers.length,25);
+  assert.equal(session.buy(24),true);
+  assert.equal(session.loadout().items[0].item.id,'minecraft:torch');
+  assert.deepEqual(source.kits[0].items,[]);
+  assert.deepEqual(output,before);
+});
 test('arrival intros start only after the final story confirmation',()=>{
   const session=new Flow.Session(choices());session.choose('pack:home');session.next();session.next();session.next();session.next();
   assert.equal(session.phase,'review');session.next();assert.equal(session.phase,'intro');session.next();assert.equal(session.phase,'complete');
