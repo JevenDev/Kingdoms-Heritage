@@ -22,6 +22,7 @@ import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.levelgen.structure.PoolElementStructurePiece;
 import net.minecraft.world.level.levelgen.structure.Structure;
 import net.minecraft.world.level.levelgen.structure.StructurePiece;
+import net.minecraft.world.level.levelgen.structure.StructureStart;
 import net.minecraft.world.level.levelgen.structure.pools.StructurePoolElement;
 
 final class StructureSpawnResolver {
@@ -37,6 +38,13 @@ final class StructureSpawnResolver {
         return registry.getTag(TagKey.create(Registries.STRUCTURE, definition.target()))
                 .filter(tag -> tag.size() > 0)
                 .orElseThrow(() -> new HeritageException("structure", "Unknown or empty structure target: %s", definition.target().toString()));
+    }
+
+    static boolean contains(StructureStart start, BlockPos position) {
+        return start.isValid() && start.getPieces().stream().anyMatch(piece -> {
+            var box = piece.getBoundingBox();
+            return box.isInside(position) || box.getYSpan() <= 2 && box.isInside(position.below());
+        });
     }
 
     static boolean matches(ServerLevel level, StructurePiece piece, ResourceLocation template) {
@@ -83,6 +91,7 @@ final class StructureSpawnResolver {
         }
 
         BlockPos result() { return result; }
+        StructureStart structure() { return locator.result(); }
 
         boolean step(long deadline) {
             if (result != null) return true;

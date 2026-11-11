@@ -14,6 +14,7 @@ public final class SelectionRegression {
         ArrivalRegression.run();
         rollsBackAfterSecondMemberFailure();
         spacesPartyArrivalsWhenTerrainAllows();
+        keepsPartyArrivalsInTheStructureWhenPossible();
         System.out.println("Heritage selection regression checks passed");
     }
 
@@ -21,7 +22,7 @@ public final class SelectionRegression {
         var anchor = new BlockPos(40, 64, -12);
         var assigned = new ArrayList<>(List.of(anchor));
         for (int i = 1; i < 8; i++) {
-            var next = SpawnResolver.partyPosition(anchor, assigned, pos -> pos.getY() == 65 && pos.getX() >= 40);
+            var next = SpawnResolver.partyPosition(anchor, assigned, pos -> pos.getY() == 65 && pos.getX() >= 40, null);
             if (next.getX() < 40 || next.getY() != 65 || assigned.stream().anyMatch(pos -> {
                 int dx = pos.getX() - next.getX(), dz = pos.getZ() - next.getZ();
                 return dx * dx + dz * dz < 9;
@@ -29,9 +30,20 @@ public final class SelectionRegression {
             assigned.add(next);
         }
         var tight = anchor.east();
-        if (!SpawnResolver.partyPosition(anchor, List.of(anchor), tight::equals).equals(tight)
-                || !SpawnResolver.partyPosition(anchor, List.of(anchor), pos -> false).equals(anchor)) {
+        if (!SpawnResolver.partyPosition(anchor, List.of(anchor), tight::equals, null).equals(tight)
+                || !SpawnResolver.partyPosition(anchor, List.of(anchor), pos -> false, null).equals(anchor)) {
             throw new AssertionError("Party arrival did not fall back to the nearest safe space or anchor");
+        }
+    }
+
+    private static void keepsPartyArrivalsInTheStructureWhenPossible() {
+        var anchor = new BlockPos(15, 64, 15);
+        var inside = anchor.east();
+        var outside = anchor.west(3);
+        var assigned = List.of(anchor);
+        if (!SpawnResolver.partyPosition(anchor, assigned, pos -> pos.equals(inside) || pos.equals(outside), inside::equals).equals(inside)
+                || !SpawnResolver.partyPosition(anchor, assigned, outside::equals, inside::equals).equals(outside)) {
+            throw new AssertionError("Party arrival should prefer safe interior space and fall back outside only when necessary");
         }
     }
 

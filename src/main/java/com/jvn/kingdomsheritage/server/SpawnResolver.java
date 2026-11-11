@@ -19,13 +19,16 @@ import net.minecraft.tags.BlockTags;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.levelgen.Heightmap;
+import net.minecraft.world.level.levelgen.structure.StructureStart;
 import net.minecraft.world.phys.AABB;
 
 public final class SpawnResolver {
     public record Destination(ServerLevel level, BlockPos position) {}
     private record CacheKey(ServerLevel level, SpawnDefinition.Kind kind, ResourceLocation target, boolean tag,
                             ResourceLocation piece, BlockPos origin, int radius) {}
-    private static final LinkedHashMap<CacheKey, BlockPos> CACHE = new LinkedHashMap<>();
+    private record Located(BlockPos position, StructureStart structure) {}
+    private static final int PARTY_RADIUS = 6;
+    private static final LinkedHashMap<CacheKey, Located> CACHE = new LinkedHashMap<>();
     private static long cachedRevision = -1;
 
     private SpawnResolver() {}
@@ -44,7 +47,8 @@ public final class SpawnResolver {
         private final SpawnChunks chunks;
         private Iterator<BlockPos> columns;
         private BlockPos pendingColumn;
-        private BlockPos cached;
+        private Located cached;
+        private StructureStart structure;
         private BiomeSpawnSearch biomeSearch;
         private StructureSpawnResolver.Search structureSearch;
         private boolean initialized;
@@ -68,6 +72,20 @@ public final class SpawnResolver {
         public Destination destination() { return destination; }
         public long workMillis() { return workNanos / 1000000; }
         public String stage() { return located ? "checking" : "searching"; }
+
+        boolean preparePartyArrival() {
+            return structure == null || chunks.prepare(destination.position(), PARTY_RADIUS + 1);
+        }
+
+        Destination partyArrival(List<BlockPos> assigned) {
+            if (assigned.isEmpty()) return destination;
+            Predicate<BlockPos> safeArrival = candidate ->
+                    level.hasChunksAt(candidate.offset(-1, 0, -1), candidate.offset(1, 0, 1))
+                            && safe(level, candidate)
+                            && (definition.kind() != SpawnDefinition.Kind.BIOME || matchesBiome(level, candidate, definition));
+            Predicate<BlockPos> inside = structure == null ? null : candidate -> StructureSpawnResolver.contains(structure, candidate);
+            return new Destination(level, partyPosition(destination.position(), assigned, safeArrival, inside));
+        }
 
         public boolean step() {
             if (destination != null) return true;
@@ -125,9 +143,11 @@ public final class SpawnResolver {
                 initialized = true;
             }
             if (cached != null) {
-                if (!chunks.prepare(cached)) return false;
-                if (safe(level, cached) && (definition.kind() != SpawnDefinition.Kind.BIOME || matchesBiome(level, cached, definition))) {
-                    destination = new Destination(level, cached);
+                var position = cached.position();
+                if (!chunks.prepare(position)) return false;
+                if (safe(level, position) && (definition.kind() != SpawnDefinition.Kind.BIOME || matchesBiome(level, position, definition))) {
+                    structure = cached.structure();
+                    destination = new Destination(level, position);
                     return true;
                 }
                 CACHE.remove(cacheKey);
@@ -146,6 +166,7 @@ public final class SpawnResolver {
             } else if (definition.kind() == SpawnDefinition.Kind.STRUCTURE) {
                 if (structureSearch == null) structureSearch = new StructureSpawnResolver.Search(level, definition, origin, chunks);
                 if (!structureSearch.step(deadline)) return false;
+                structure = structureSearch.structure();
                 complete(structureSearch.result());
             } else if (definition.kind() == SpawnDefinition.Kind.BIOME) {
                 if (biomeSearch == null) biomeSearch = new BiomeSpawnSearch(level, definition, origin);
@@ -166,7 +187,7 @@ public final class SpawnResolver {
             destination = new Destination(level, position);
             if (definition.kind() == SpawnDefinition.Kind.BIOME || definition.kind() == SpawnDefinition.Kind.STRUCTURE) {
                 if (CACHE.size() >= 128) CACHE.remove(CACHE.keySet().iterator().next());
-                CACHE.put(cacheKey, position);
+                CACHE.put(cacheKey, new Located(position, structure));
             }
         }
     }
@@ -269,19 +290,18 @@ public final class SpawnResolver {
         return safe(level, position) ? Optional.of(position) : Optional.empty();
     }
 
-    static Destination partyArrival(Destination anchor, SpawnDefinition definition, List<BlockPos> assigned) {
-        if (assigned.isEmpty()) return anchor;
-        var level = anchor.level();
-        var position = partyPosition(anchor.position(), assigned, candidate ->
-                level.hasChunksAt(candidate.offset(-1, 0, -1), candidate.offset(1, 0, 1))
-                        && safe(level, candidate)
-                        && (definition.kind() != SpawnDefinition.Kind.BIOME || matchesBiome(level, candidate, definition)));
-        return new Destination(level, position);
+    static BlockPos partyPosition(BlockPos anchor, List<BlockPos> assigned, Predicate<BlockPos> safe, Predicate<BlockPos> preferred) {
+        if (preferred != null) {
+            var position = findPartyPosition(anchor, assigned, preferred.and(safe));
+            if (position != null) return position;
+        }
+        var position = findPartyPosition(anchor, assigned, safe);
+        return position == null ? anchor : position;
     }
 
-    static BlockPos partyPosition(BlockPos anchor, List<BlockPos> assigned, Predicate<BlockPos> safe) {
+    private static BlockPos findPartyPosition(BlockPos anchor, List<BlockPos> assigned, Predicate<BlockPos> safe) {
         for (int spacing : new int[]{3, 1}) {
-            for (int radius = spacing; radius <= 6; radius++) {
+            for (int radius = spacing; radius <= PARTY_RADIUS; radius++) {
                 var candidates = ring(anchor, radius);
                 while (candidates.hasNext()) {
                     var column = candidates.next();
@@ -296,7 +316,7 @@ public final class SpawnResolver {
                 }
             }
         }
-        return anchor;
+        return null;
     }
 
     static boolean safe(ServerLevel level, BlockPos position) {

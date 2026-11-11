@@ -54,9 +54,7 @@ public final class SpawnIntro {
         locations.addProperty("dimension", level.dimension().location().toString());
         var registry = level.registryAccess().registryOrThrow(Registries.STRUCTURE);
         level.structureManager().startsForStructure(new ChunkPos(position), structure -> true).stream()
-                .filter(start -> start.isValid() && start.getPieces().stream().anyMatch(piece ->
-                        piece.getBoundingBox().isInside(position) || (piece.getBoundingBox().getYSpan() <= 2
-                                && piece.getBoundingBox().isInside(position.below()))))
+                .filter(start -> StructureSpawnResolver.contains(start, position))
                 .map(start -> registry.getKey(start.getStructure())).filter(java.util.Objects::nonNull)
                 .sorted(Comparator.comparing((ResourceLocation id) -> spawn == null || !matchesStructure(spawn, id, registry))
                         .thenComparing(ResourceLocation::toString))
