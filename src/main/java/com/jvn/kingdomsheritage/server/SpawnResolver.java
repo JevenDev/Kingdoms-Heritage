@@ -6,7 +6,9 @@ import com.jvn.kingdomsheritage.data.HeritageException;
 import com.jvn.kingdomsheritage.data.SpawnDefinition;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Optional;
+import java.util.function.Predicate;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
@@ -265,6 +267,36 @@ public final class SpawnResolver {
         }
         BlockPos position = new BlockPos(x, chunk.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x & 15, z & 15) + 1, z);
         return safe(level, position) ? Optional.of(position) : Optional.empty();
+    }
+
+    static Destination partyArrival(Destination anchor, SpawnDefinition definition, List<BlockPos> assigned) {
+        if (assigned.isEmpty()) return anchor;
+        var level = anchor.level();
+        var position = partyPosition(anchor.position(), assigned, candidate ->
+                level.hasChunksAt(candidate.offset(-1, 0, -1), candidate.offset(1, 0, 1))
+                        && safe(level, candidate)
+                        && (definition.kind() != SpawnDefinition.Kind.BIOME || matchesBiome(level, candidate, definition)));
+        return new Destination(level, position);
+    }
+
+    static BlockPos partyPosition(BlockPos anchor, List<BlockPos> assigned, Predicate<BlockPos> safe) {
+        for (int spacing : new int[]{3, 1}) {
+            for (int radius = spacing; radius <= 6; radius++) {
+                var candidates = ring(anchor, radius);
+                while (candidates.hasNext()) {
+                    var column = candidates.next();
+                    if (assigned.stream().anyMatch(other -> {
+                        int dx = other.getX() - column.getX(), dz = other.getZ() - column.getZ();
+                        return dx * dx + dz * dz < spacing * spacing;
+                    })) continue;
+                    for (int dy : new int[]{0, 1, -1, 2, -2}) {
+                        var candidate = column.offset(0, dy, 0);
+                        if (safe.test(candidate)) return candidate;
+                    }
+                }
+            }
+        }
+        return anchor;
     }
 
     static boolean safe(ServerLevel level, BlockPos position) {
