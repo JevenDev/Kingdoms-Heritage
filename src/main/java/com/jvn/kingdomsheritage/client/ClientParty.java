@@ -682,7 +682,7 @@ final class ClientParty {
             }
             UUID player = PLAYER_LIST.open() ? PLAYER_LIST.hit(x, y) : null;
             if (player != null && (button == 0 || button == 1)) openMenu(player, (int) x + 12, (int) y - 12, false);
-            else if (button == 0 && PLAYER_LIST.open()) {
+            else if (button == 0 && PLAYER_LIST.open() && !PLAYER_LIST.overFadingPortrait(x, y)) {
                 PLAYER_LIST.setOpen(false, Util.getMillis());
                 SelectionSounds.CLICK.play();
             }

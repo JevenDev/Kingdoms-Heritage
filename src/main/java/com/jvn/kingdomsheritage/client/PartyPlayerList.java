@@ -3,7 +3,9 @@ package com.jvn.kingdomsheritage.client;
 import com.jvn.kingdomsheritage.network.HeritageNetwork;
 import com.mojang.blaze3d.systems.RenderSystem;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
@@ -21,6 +23,7 @@ final class PartyPlayerList {
     private static final int TOP_MARGIN = 28;
     private static final int FOOTER_MARGIN = 20;
     private static final float RESPONSE = 14;
+    private static final int SLOT_FADE_MILLIS = 180;
     private static final ResourceLocation TAB = texture("tab_button");
     private static final ResourceLocation SELECTED = texture("tab_button_selected");
     private static final ResourceLocation EMPTY_SLOT = texture("empty_slot");
@@ -29,6 +32,12 @@ final class PartyPlayerList {
     private final PartyListBlur blur = new PartyListBlur();
     private final List<Cell> cells = new ArrayList<>();
     private final List<EmptySlot> emptySlots = new ArrayList<>();
+    private final Map<SlotKey, SlotFade> slotFades = new LinkedHashMap<>();
+    private int layoutWidth;
+    private int layoutHeight;
+    private int partyCenter;
+    private int otherCenter;
+    private int gridY;
     private boolean open;
     private float from;
     private float velocity;
@@ -50,8 +59,46 @@ final class PartyPlayerList {
     private Button hoveredPageArrow;
     private List<ClientParty.Peer> pagePlayers = List.of();
 
-    private record Cell(ClientParty.Peer player, int x, int y, boolean party) {}
+    private record Cell(ClientParty.Peer player, int x, int y, boolean party, int color, InviteBadge badge) {}
     private record EmptySlot(int x, int y) {}
+    private record SlotKey(UUID player, int columnOffset, int rowOffset, boolean party) {}
+
+    private enum InviteBadge {
+        INCOMING(INVITED, 7), OUTGOING(SEND_REQUEST, 15);
+
+        final ResourceLocation texture;
+        final int size;
+
+        InviteBadge(ResourceLocation texture, int size) {
+            this.texture = texture;
+            this.size = size;
+        }
+    }
+
+    private static final class SlotFade {
+        Cell cell;
+        float from;
+        boolean present = true;
+        long changed;
+
+        SlotFade(Cell cell, float opacity, long now) {
+            this.cell = cell;
+            from = opacity;
+            changed = now;
+        }
+
+        float opacity(long now) {
+            float progress = Mth.clamp((now - changed) / (float) SLOT_FADE_MILLIS, 0, 1);
+            return Mth.lerp(progress * progress * (3 - 2 * progress), from, present ? 1 : 0);
+        }
+
+        void setPresent(boolean present, long now) {
+            if (this.present == present) return;
+            from = opacity(now);
+            changed = now;
+            this.present = present;
+        }
+    }
 
     private static boolean overPortrait(double mouseX, double mouseY, int x, int y) {
         return mouseX >= x - 1 && mouseX < x + PORTRAIT_SIZE + 1 && mouseY >= y - 1 && mouseY < y + PORTRAIT_SIZE + 1;
@@ -109,6 +156,7 @@ final class PartyPlayerList {
         lastMouseX = lastMouseY = -1;
         cells.clear();
         emptySlots.clear();
+        clearSlotFades();
         pagePlayers = List.of();
         hoveredPageArrow = null;
         if (previousPage != null) previousPage.visible = nextPage.visible = false;
@@ -190,10 +238,22 @@ final class PartyPlayerList {
 
     UUID hit(double x, double y) {
         y -= slide;
+        long now = Util.getMillis();
         for (var cell : cells) {
-            if (overPortrait(x, y, cell.x, cell.y)) return cell.player.id();
+            if (overPortrait(x, y, cell.x, cell.y) && slotFades.get(slotKey(cell)).opacity(now) >= 0.5F) return cell.player.id();
         }
         return null;
+    }
+
+    boolean overFadingPortrait(double x, double y) {
+        long now = Util.getMillis();
+        for (var entry : slotFades.entrySet()) {
+            var slot = entry.getKey();
+            var fade = entry.getValue();
+            if (slot.player != null && (!fade.present || fade.opacity(now) < 0.5F)
+                    && overPortrait(x, y - slide, slotX(slot), gridY + slot.rowOffset)) return true;
+        }
+        return false;
     }
 
     boolean overEmptySlot(double x, double y) {
@@ -245,7 +305,7 @@ final class PartyPlayerList {
         }
     }
 
-    private void renderPageArrows(GuiGraphics graphics, int center, int y, int mouseX, int mouseY, float visibility) {
+    private void renderPageArrows(GuiGraphics graphics, int center, int y, int labelWidth, int mouseX, int mouseY, float visibility) {
         if (previousPage == null) {
             previousPage = SelectionControls.arrow(0, 0, false, Component.translatable("spectatorMenu.previous_page"),
                     button -> changePage(pagePlayers, -1));
@@ -259,8 +319,7 @@ final class PartyPlayerList {
             }
         }
         var font = Minecraft.getInstance().font;
-        String label = (page + 1) + " / " + ((pagePlayers.size() + capacity - 1) / capacity);
-        int halfLabel = font.width(label) / 2;
+        int halfLabel = labelWidth / 2;
         previousPage.setPosition(center - halfLabel - 28, y - 5);
         nextPage.setPosition(center + halfLabel + 8, y - 5);
         previousPage.active = open && page > 0;
@@ -292,31 +351,90 @@ final class PartyPlayerList {
         }
     }
 
-    private static void renderInviteBadge(GuiGraphics graphics, UUID player, int right, int bottom, float visibility, long now) {
-        boolean incoming = ClientParty.invitedBy(player, now);
-        if (!incoming && !ClientParty.inviteSentTo(player)) return;
-        int size = incoming ? 7 : 15;
+    private static InviteBadge inviteBadge(UUID player, long now) {
+        if (ClientParty.invitedBy(player, now)) return InviteBadge.INCOMING;
+        return ClientParty.inviteSentTo(player) ? InviteBadge.OUTGOING : null;
+    }
+
+    private static void renderInviteBadge(GuiGraphics graphics, InviteBadge badge, int right, int bottom, float visibility) {
+        int size = badge.size;
         graphics.setColor(1, 1, 1, visibility);
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
-        graphics.blit(incoming ? INVITED : SEND_REQUEST, right - size / 2, bottom - size / 2, 0, 0, size, size, size, size);
+        graphics.blit(badge.texture, right - size / 2, bottom - size / 2, 0, 0, size, size, size, size);
         RenderSystem.disableBlend();
         graphics.setColor(1, 1, 1, 1);
     }
 
-    private void renderCell(GuiGraphics graphics, Cell cell, float visibility, int opacity, long now) {
-        int x = cell.x;
-        int y = cell.y;
+    private void renderCell(GuiGraphics graphics, Cell cell, int x, int y, float visibility, int opacity, boolean present) {
         boolean loading = cell.player.stage() == HeritageParty.Stage.LOADING.ordinal();
         ClientParty.head(graphics, cell.player, x, y, PORTRAIT_SIZE, loading, visibility);
         if (cell.party) {
-            int color = ClientParty.partyPortraitColor(cell.player.id());
-            graphics.renderOutline(x - 1, y - 1, PORTRAIT_SIZE + 2, PORTRAIT_SIZE + 2, opacity | color);
+            graphics.renderOutline(x - 1, y - 1, PORTRAIT_SIZE + 2, PORTRAIT_SIZE + 2, opacity | cell.color);
             if (!loading) renderProgress(graphics, cell.player, x + PORTRAIT_SIZE - 12, y + PORTRAIT_SIZE - 12, opacity);
         }
-        if (cell.player.id().equals(selected()))
+        if (present && cell.player.id().equals(selected()))
             graphics.renderOutline(x - 2, y - 2, PORTRAIT_SIZE + 4, PORTRAIT_SIZE + 4, opacity | 0xffffff);
-        if (!cell.party) renderInviteBadge(graphics, cell.player.id(), x + PORTRAIT_SIZE, y + PORTRAIT_SIZE, visibility, now);
+        if (cell.badge != null) renderInviteBadge(graphics, cell.badge, x + PORTRAIT_SIZE, y + PORTRAIT_SIZE, visibility);
+    }
+
+    private SlotKey slotKey(Cell cell) {
+        int center = cell.party ? partyCenter : otherCenter;
+        return new SlotKey(cell.player.id(), cell.x - center, cell.y - gridY, cell.party);
+    }
+
+    private int slotX(SlotKey slot) {
+        return (slot.party ? partyCenter : otherCenter) + slot.columnOffset;
+    }
+
+    private void clearSlotFades() {
+        slotFades.clear();
+        layoutWidth = layoutHeight = 0;
+    }
+
+    private void updateSlotFades(int width, int height, long now) {
+        boolean animate = width == layoutWidth && height == layoutHeight;
+        if (!animate) slotFades.clear();
+        layoutWidth = width;
+        layoutHeight = height;
+
+        Map<SlotKey, Cell> current = new LinkedHashMap<>();
+        for (var slot : emptySlots) current.put(new SlotKey(null, slot.x - partyCenter, slot.y - gridY, true), null);
+        for (var cell : cells) current.put(slotKey(cell), cell);
+        slotFades.entrySet().removeIf(entry -> {
+            if (current.containsKey(entry.getKey())) return false;
+            var fade = entry.getValue();
+            fade.setPresent(false, now);
+            return fade.opacity(now) <= 0;
+        });
+        current.forEach((key, cell) -> {
+            var fade = slotFades.computeIfAbsent(key, ignored -> new SlotFade(cell, animate ? 0 : 1, now));
+            fade.cell = cell;
+            fade.setPresent(true, now);
+        });
+    }
+
+    private void renderSlots(GuiGraphics graphics, float visibility, long now, boolean present) {
+        for (var entry : slotFades.entrySet()) {
+            var fade = entry.getValue();
+            if (fade.present != present) continue;
+            float opacity = visibility * fade.opacity(now);
+            int alpha = Math.round(opacity * 255);
+            if (alpha < 4) continue;
+            var slot = entry.getKey();
+            int x = slotX(slot);
+            int y = gridY + slot.rowOffset;
+            if (fade.cell != null) {
+                renderCell(graphics, fade.cell, x, y, opacity, alpha << 24, present);
+            } else {
+                graphics.setColor(1, 1, 1, opacity);
+                RenderSystem.enableBlend();
+                RenderSystem.defaultBlendFunc();
+                graphics.blit(EMPTY_SLOT, x - 1, y - 1, PORTRAIT_SIZE + 2, PORTRAIT_SIZE + 2, 0, 0, 32, 32, 32, 32);
+                RenderSystem.disableBlend();
+                graphics.setColor(1, 1, 1, 1);
+            }
+        }
     }
 
     void render(GuiGraphics graphics, int width, int height, List<ClientParty.Peer> players, int mouseX, int mouseY) {
@@ -325,6 +443,7 @@ final class PartyPlayerList {
         if (!active(now)) {
             cells.clear();
             emptySlots.clear();
+            clearSlotFades();
             blur.close();
             return;
         }
@@ -359,15 +478,17 @@ final class PartyPlayerList {
         page = Mth.clamp(page, 0, Math.max(0, (pagePlayers.size() - 1) / capacity));
         int first = page * capacity;
         int last = Math.min(pagePlayers.size(), first + capacity);
-        String pageLabel = (page + 1) + " / " + ((pagePlayers.size() + capacity - 1) / capacity);
+        int pageCount = (pagePlayers.size() + capacity - 1) / capacity;
+        String pageLabel = (page + 1) + " / " + pageCount;
+        int pageLabelWidth = paged ? font.width(pageCount + " / " + pageCount) : 0;
 
         int partySpan = Math.max(font.width(partyTitle), portraitSpan(Math.min(columns, slotCount)));
         int otherSpan = pagePlayers.isEmpty() ? font.width(noOthers) : portraitSpan(Math.min(columns, pagePlayers.size()));
         otherSpan = Math.max(otherSpan, font.width(otherTitle));
-        if (paged) otherSpan = Math.max(otherSpan, font.width(pageLabel) + 56);
+        if (paged) otherSpan = Math.max(otherSpan, pageLabelWidth + 56);
         int centerGap = sectionWidth + 14;
-        int partyCenter = (width - centerGap + (partySpan - otherSpan) / 2) / 2;
-        int otherCenter = partyCenter + centerGap;
+        partyCenter = (width - centerGap + (partySpan - otherSpan) / 2) / 2;
+        otherCenter = partyCenter + centerGap;
 
         int lastRow = (Math.max(slotCount, Math.min(pagePlayers.size(), capacity)) - 1) / columns;
         int gridBottom = HEADER_TO_GRID + lastRow * GRID_STEP + PORTRAIT_SIZE + 1;
@@ -375,7 +496,7 @@ final class PartyPlayerList {
         int groupHeight = gridBottom + (summary == null ? 0 : 9 + summaryHeight);
         if (paged) groupHeight = Math.max(groupHeight, pageOffset + pageGap + summaryHeight);
         int top = Math.max(TOP_MARGIN, (height - groupHeight) / 2);
-        int gridY = top + HEADER_TO_GRID;
+        gridY = top + HEADER_TO_GRID;
         int pageY = top + pageOffset;
 
         cells.clear();
@@ -383,14 +504,18 @@ final class PartyPlayerList {
         for (int index = 0; index < slotCount; index++) {
             int x = portraitX(partyCenter, index, slotCount);
             int y = gridY + index / columns * GRID_STEP;
-            if (index < partyPlayers.size()) cells.add(new Cell(partyPlayers.get(index), x, y, true));
-            else emptySlots.add(new EmptySlot(x, y));
+            if (index < partyPlayers.size()) {
+                var player = partyPlayers.get(index);
+                cells.add(new Cell(player, x, y, true, ClientParty.partyPortraitColor(player.id()), null));
+            } else emptySlots.add(new EmptySlot(x, y));
         }
         for (int index = first; index < last; index++) {
             int local = index - first;
-            cells.add(new Cell(pagePlayers.get(index), portraitX(otherCenter, local, last - first),
-                    gridY + local / columns * GRID_STEP, false));
+            var player = pagePlayers.get(index);
+            cells.add(new Cell(player, portraitX(otherCenter, local, last - first),
+                    gridY + local / columns * GRID_STEP, false, 0, inviteBadge(player.id(), now)));
         }
+        updateSlotFades(width, height, now);
 
         UUID nextHovered = open && visibility > 0.65F ? hit(mouseX, mouseY) : null;
         if (nextHovered != null && !nextHovered.equals(hovered)) SelectionSounds.HOVER.play();
@@ -401,15 +526,8 @@ final class PartyPlayerList {
         SelectionText.centered(graphics, font, partyTitle, partyCenter, top, opacity | 0xf4f1e8);
         SelectionText.centered(graphics, font, otherTitle, otherCenter, top, opacity | 0xf4f1e8);
         if (pagePlayers.isEmpty()) SelectionText.centered(graphics, font, noOthers, otherCenter, gridY, opacity | 0xaaaaaa);
-        graphics.setColor(1, 1, 1, visibility);
-        RenderSystem.enableBlend();
-        RenderSystem.defaultBlendFunc();
-        for (var slot : emptySlots) {
-            graphics.blit(EMPTY_SLOT, slot.x - 1, slot.y - 1, PORTRAIT_SIZE + 2, PORTRAIT_SIZE + 2, 0, 0, 32, 32, 32, 32);
-        }
-        RenderSystem.disableBlend();
-        graphics.setColor(1, 1, 1, 1);
-        for (var cell : cells) renderCell(graphics, cell, visibility, opacity, now);
+        renderSlots(graphics, visibility, now, false);
+        renderSlots(graphics, visibility, now, true);
         if (paged) SelectionText.centered(graphics, font, pageLabel, otherCenter, pageY, opacity | 0xcccccc);
         graphics.flush();
         graphics.pose().popPose();
@@ -418,7 +536,7 @@ final class PartyPlayerList {
         if (summary != null) ClientParty.renderPartySummary(graphics, font, summary, width, top + groupHeight - summaryHeight,
                 mouseX, mouseY, visibility, slide);
         if (paged) {
-            renderPageArrows(graphics, otherCenter, pageY + Math.round(slide), mouseX, mouseY, visibility);
+            renderPageArrows(graphics, otherCenter, pageY + Math.round(slide), pageLabelWidth, mouseX, mouseY, visibility);
         } else {
             hoveredPageArrow = null;
             if (previousPage != null) previousPage.visible = nextPage.visible = false;
