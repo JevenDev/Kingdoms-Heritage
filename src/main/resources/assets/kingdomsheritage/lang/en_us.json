@@ -51,6 +51,7 @@
   "screen.kingdomsheritage.shop.bought": "%s/%s bought",
   "screen.kingdomsheritage.shop.limit_reached": "Limit reached",
   "screen.kingdomsheritage.shop.no_space": "No empty slot",
+  "screen.kingdomsheritage.shop.short_one": "Need 1 more point",
   "screen.kingdomsheritage.shop.short": "Need %s more points",
   "screen.kingdomsheritage.begin": "Begin",
   "screen.kingdomsheritage.wait": "Preparing...",

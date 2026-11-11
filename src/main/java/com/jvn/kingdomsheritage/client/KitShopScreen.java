@@ -196,7 +196,8 @@ final class KitShopScreen extends Screen {
         var offer = shop.offers().get(index);
         if (bought[index] >= offer.limit()) return text("limit_reached");
         int shortfall = offer.cost() - (shop.budget() - spent);
-        return shortfall > 0 ? text("short", shortfall) : null;
+        if (shortfall <= 0) return null;
+        return shortfall == 1 ? text("short_one") : text("short", shortfall);
     }
 
     private int nextSlot(int offer) {
