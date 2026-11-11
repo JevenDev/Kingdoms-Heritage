@@ -1,11 +1,33 @@
 (() => {
 'use strict';
-const K=HeritageKit,PAGE_SIZE=32,MAX_OFFERS=256,DEFAULT_BUDGET=12;
+const K=HeritageKit,F=typeof module==='undefined'?HeritageFlow:require('../pack/flow.js');
+const COLUMNS=F.shopColumns,PAGE_SIZE=F.shopPageSize,ROWS=PAGE_SIZE/COLUMNS,MAX_OFFERS=256,DEFAULT_BUDGET=12;
 const pageOf=index=>Math.floor(index/PAGE_SIZE);
 function paginate(offers,page) {
   const count=Math.max(1,Math.ceil(offers.length/PAGE_SIZE));
   const index=Math.max(0,Math.min(page,count-1)),start=index*PAGE_SIZE;
   return {index,count,start,offers:offers.slice(start,start+PAGE_SIZE)};
+}
+function slotOf({row,column}){
+  const offset=column-1;
+  return Math.floor(offset/COLUMNS)*PAGE_SIZE+(row-1)*COLUMNS+offset%COLUMNS;
+}
+function positionOf(slot){
+  return {row:Math.floor(slot%PAGE_SIZE/COLUMNS)+1,column:pageOf(slot)*COLUMNS+slot%COLUMNS+1};
+}
+function layoutSlots(shop,section=''){
+  const slots=[],automatic=[];
+  for(const index of F.shopOfferIndices(shop,section)){
+    const offer=shop.offers[index];
+    if((offer.section??'')===section&&offer.position)slots[slotOf(offer.position)]=index;
+    else automatic.push(index);
+  }
+  let slot=0;
+  for(const index of automatic){
+    while(slots[slot]!==undefined)slot++;
+    slots[slot++]=index;
+  }
+  return slots;
 }
 function budgetHint(budget,cost,limit=1){
   if(cost===0)return null;
@@ -59,6 +81,23 @@ function edit(kit,action) {
     case 'position':
       if(action.value)offer.position=action.value;else delete offer.position;
       break;
+    case 'place': {
+      const section=action.section??'';
+      if((offer.section??'')!==section)throw new Error('Open the offer’s section to place it in a slot.');
+      const slots=layoutSlots(shop,section),from=slots.indexOf(action.index),to=action.slot;
+      if(!Number.isInteger(to)||to<0||to>=MAX_OFFERS*ROWS)throw new Error('That shop slot is outside the layout.');
+      if(from===to)break;
+      const target=shop.offers[slots[to]];
+      if(target&&(target.section??'')!==section)throw new Error('Choose an empty slot or an offer in the same section.');
+      slots.forEach((index,slot)=>{
+        const entry=shop.offers[index];
+        if((entry.section??'')!==section)return;
+        if(index===action.index)entry.position=positionOf(to);
+        else if(slot===to)entry.position=positionOf(from);
+        else if(!entry.position)entry.position=positionOf(slot);
+      });
+      break;
+    }
     case 'section':
       if(action.value)offer.section=action.value;else delete offer.section;
       break;
@@ -118,11 +157,12 @@ function create(config) {
       K.read(JSON.stringify(candidate));
       if(action.type==='add')selection=candidate.shop.offers.length-1;
       if(action.type==='move')selection=action.to;
-      if(['add','move','remove'].includes(action.type)){
-        const indices=candidate.shop?HeritageFlow.shopOfferIndices(candidate.shop,activeSection):[];
+      if(action.type==='place'||action.type==='position')selection=action.index;
+      if(['add','move','remove','place','position'].includes(action.type)){
+        const indices=candidate.shop?F.shopOfferIndices(candidate.shop,activeSection):[];
         if(action.type==='remove')selection=indices.find(index=>index>=action.index)??indices.at(-1)??-1;
-        const position=indices.indexOf(selection);
-        if(position>=0)page=pageOf(position);
+        const slot=candidate.shop?layoutSlots(candidate.shop,activeSection).indexOf(selection):-1;
+        if(slot>=0)page=pageOf(slot);
       }
       if(!config.commit(candidate))throw new Error('The shop edit could not be saved. Check the kit for pending edits.');
     }catch(error){
@@ -211,7 +251,6 @@ function create(config) {
     const hint=label('p','hint shop-budget-hint');
     hint.id='shop-budget-hint-'+rows.length;hint.hidden=true;
     const row={element,icon,name,position,hint};
-    element.dataset.slot=String(rows.length);
     identity.addEventListener('pointerdown',event=>dragOffer(event,row.index));
     for(const [field,title,min,max] of [['count','Count',1,99],['cost','Price',0,1000000],['limit','Limit',1,41]]){
       const fieldLabel=label('label','',title),input=label('input');
@@ -254,9 +293,19 @@ function create(config) {
     const offer=kit.shop.offers[index];
     V.dragStart(event,{item:offer.item},slot=>{
       if(config.getKit()!==kit||page!==startPage||activeSection!==startSection)return;
+      if(typeof slot==='string'){
+        const to=Number(slot.slice('offer:'.length));
+        if(index!==to)apply({type:'move',index,to});
+        return;
+      }
       const target=cells[slot].index;
-      const to=target??cells.findLast(cell=>cell.index!==undefined).index;
-      if(index!==to)apply({type:'move',index,to,insert:target===undefined});
+      if(index===target)return;
+      const targetOffer=kit.shop.offers[target];
+      if(targetOffer&&((offer.section??'')!==activeSection||(targetOffer.section??'')!==activeSection||!offer.position&&!targetOffer.position)){
+        apply({type:'move',index,to:target});
+      }else{
+        apply({type:'place',index,section:activeSection,slot:startPage*PAGE_SIZE+slot});
+      }
     },{source:event.currentTarget,dropTarget:element=>{
       const target=element?.closest('[data-slot]');
       return target?.parentElement===tray||target?.parentElement===list?target:null;
@@ -290,7 +339,8 @@ function create(config) {
     const offers=reason&&reason.invalid?[]:shop?.offers??[];
     const sections=offers.length?shop.sections??[]:[];
     if(activeSection&&!sections.some(section=>section.id===activeSection)){activeSection='';page=0;}
-    const indices=HeritageFlow.shopOfferIndices({offers},activeSection),view=paginate(indices,page);
+    const indices=F.shopOfferIndices({offers},activeSection),view=paginate(layoutSlots({offers},activeSection),page);
+    const pageOffers=view.offers.filter(index=>index!==undefined).sort((a,b)=>a-b);
     const sectionOptions=JSON.stringify(sections.map(({id,name})=>[id,name]));
     page=view.index;
     if(selection>=offers.length)selection=offers.length-1;
@@ -304,13 +354,14 @@ function create(config) {
     $('shop-pages').hidden=!offers.length;
     renderSections(sections,!!offers.length);renderInlineTabs(sections);
     meter.alt='0 / '+(shop?.budget??0)+' points spent';
-    $('shop-page').textContent=indices.length?'Page '+(page+1)+' of '+view.count+' · Offers '+(view.start+1)+'–'+(view.start+view.offers.length):'No offers in this section.';
+    $('shop-page').textContent=indices.length?'Page '+(page+1)+' of '+view.count+' · Columns '+(page*COLUMNS+1)+'–'+((page+1)*COLUMNS):'No offers in this section.';
     previous.disabled=page===0;next.disabled=page+1===view.count;
-    while(rows.length>view.offers.length)rows.pop().element.remove();
-    while(rows.length<view.offers.length)rows.push(makeRow());
-    for(const [offset,index] of view.offers.entries()){
-      const row=rows[offset],offer=offers[index],name=T.name(offer.item),position=view.start+offset;
-      row.index=index;row.previous=indices[position-1];row.next=indices[position+1];row.position.textContent=String(index+1);
+    while(rows.length>pageOffers.length)rows.pop().element.remove();
+    while(rows.length<pageOffers.length)rows.push(makeRow());
+    for(const [offset,index] of pageOffers.entries()){
+      const row=rows[offset],offer=offers[index],name=T.name(offer.item),position=indices.indexOf(index);
+      row.index=index;row.element.dataset.slot='offer:'+index;
+      row.previous=indices[position-1];row.next=indices[position+1];row.position.textContent=String(index+1);
       iconFor(row.icon,offer.item);row.name.textContent=name;row.name.title=offer.item.id;
       row.count.value=offer.item.count??1;row.count.max=K.maxCount(offer.item);
       row.cost.value=offer.cost;row.limit.value=offer.limit??1;
@@ -356,6 +407,6 @@ function create(config) {
   next.addEventListener('click',()=>{page++;render();});
   return {add,render,reset(){page=0;selection=-1;activeSection='';sectionsPanel.open=false;itemId.value='';report();render();}};
 }
-globalThis.HeritageShopEditor={create,edit,paginate,budgetHint};
+globalThis.HeritageShopEditor={create,edit,layoutSlots,paginate,budgetHint};
 if(typeof module!=='undefined')module.exports=globalThis.HeritageShopEditor;
 })();

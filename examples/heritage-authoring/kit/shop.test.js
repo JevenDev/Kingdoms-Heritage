@@ -81,6 +81,40 @@ test('slot reordering keeps whole offers and can move one to the end of a filter
   assert.equal(offers[3].limit,2);
 });
 
+test('dropping into an empty grid cell saves the slot and leaves other offers where they were',()=>{
+  const kit={title:'Shop',shop:{budget:5,offers:[
+    {item:{id:'minecraft:stick'},cost:1},
+    {item:{id:'minecraft:torch',count:16},cost:2}
+  ]}};
+  const edited=Shop.edit(kit,{type:'place',index:0,slot:11});
+  const saved=Kit.read(JSON.stringify(edited)).document;
+  assert.deepEqual(saved.shop.offers.map(offer=>offer.position),[{row:3,column:4},{row:1,column:2}]);
+  const {offers:cells}=Shop.paginate(Shop.layoutSlots(saved.shop),0);
+  assert.equal(cells[0],undefined);
+  assert.equal(cells[1],1);
+  assert.equal(cells[11],0);
+  assert.equal(kit.shop.offers[0].position,undefined);
+
+  const swapped=Shop.edit(saved,{type:'place',index:0,slot:1});
+  assert.equal(Shop.layoutSlots(swapped.shop)[1],0);
+  assert.equal(Shop.layoutSlots(swapped.shop)[11],1);
+});
+
+test('grid drops use the selected section and retain columns on later pages',()=>{
+  const kit={title:'Shop',shop:{budget:5,sections:[{id:'light',name:'Lighting',icon:'minecraft:torch'}],offers:[
+    {item:{id:'minecraft:bread'},cost:1},
+    {item:{id:'minecraft:torch'},cost:1,section:'light',position:{row:1,column:5}},
+    {item:{id:'minecraft:lantern'},cost:2,section:'light'}
+  ]}};
+  const edited=Shop.edit(kit,{type:'place',index:1,section:'light',slot:38});
+  const saved=Kit.read(JSON.stringify(edited)).document;
+  assert.deepEqual(saved.shop.offers[1].position,{row:2,column:7});
+  assert.equal(Shop.paginate(Shop.layoutSlots(saved.shop,'light'),1).offers[6],1);
+  assert.equal(Shop.layoutSlots(saved.shop,'light')[0],2);
+  assert.deepEqual(saved.shop.offers[0],kit.shop.offers[0]);
+  assert.throws(()=>Shop.edit(kit,{type:'place',index:1,slot:6}),/Open the offer’s section/);
+});
+
 test('budget hints flag unaffordable offers and partially affordable purchase limits',()=>{
   assert.deepEqual(Shop.budgetHint(6,8),{field:'cost',text:'Price exceeds the 6-point budget.'});
   assert.deepEqual(Shop.budgetHint(6,3,3),{field:'limit',text:'Budget covers 2 of 3 stacks.'});
