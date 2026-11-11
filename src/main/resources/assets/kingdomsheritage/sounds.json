@@ -8,6 +8,15 @@
       }
     ]
   },
+  "selection_music_solace": {
+    "sounds": [
+      {
+        "name": "kingdomsheritage:music/solace",
+        "volume": 0.5,
+        "stream": true
+      }
+    ]
+  },
   "dialogue": {
     "sounds": [
       { "name": "kingdomsheritage:dialogue/dialogue_villager_01", "volume": 0.5 }
