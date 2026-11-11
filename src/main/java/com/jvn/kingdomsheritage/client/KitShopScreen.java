@@ -28,8 +28,8 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 
 final class KitShopScreen extends Screen {
-    private static final int SHOP_WIDTH = 68, INVENTORY_WIDTH = 176, PANEL_HEIGHT = 166;
-    private static final int COLUMNS = 3, PAGE_SIZE = COLUMNS * KitShop.ROWS, SLOT_PITCH = 18, BAR_WIDTH = 182;
+    private static final int COLUMNS = KitShop.VISIBLE_COLUMNS, PAGE_SIZE = COLUMNS * KitShop.ROWS, SLOT_PITCH = 18, BAR_WIDTH = 182;
+    private static final int SHOP_WIDTH = 14 + COLUMNS * SLOT_PITCH, INVENTORY_WIDTH = 176, PANEL_HEIGHT = 166;
     private static final int EFFECT_DURATION = 270;
     private static final int TAB_HEIGHT = 26, TAB_PITCH = 27, TAB_WIDTH = 28, TAB_SPRITE_WIDTH = 32, TAB_ROWS = 6;
     private static final int DETAIL_WIDTH = 68, NAME_LINES = 2;
