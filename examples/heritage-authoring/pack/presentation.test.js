@@ -39,11 +39,14 @@ test('location page animations slide and fade from the native offsets',()=>{
 test('kit carousel matches native sizing and retains velocity when retargeted',()=>{
   const carousel=new Motion.KitCarousel(1,100),bounds={x:152,y:52,width:176,height:166};
   const poses=carousel.poses(bounds,480,3,100);
-  assert.deepEqual(poses.at(-1),{index:1,distance:0,scale:1,opacity:1,x:152,y:52});
-  near(poses[0].scale,.68,'neighbor scale');near(poses[0].opacity,.32,'neighbor opacity');
+  assert.deepEqual(poses.at(-1),{index:1,distance:0,scale:1,look:1,opacity:1,x:152,y:52});
+  near(poses[0].scale,.68,'neighbor scale');near(poses[0].opacity,.32,'neighbor opacity');assert.equal(poses[0].look,0);
   near(poses[0].x,12.96,'left position');
   carousel.select(2,100);const moving=carousel.motion(180);assert.ok(moving.position>1&&moving.position<2);
+  const inMotion=carousel.poses(bounds,480,3,180),old=inMotion.find(pose=>pose.index===1),next=inMotion.find(pose=>pose.index===2);
+  assert.ok(old.look>0&&old.look<1&&next.look>0&&next.look<1);near(old.look+next.look,1,'cursor look transfers between kits');
   carousel.select(0,180);near(carousel.motion(180).position,moving.position,'retarget position');near(carousel.motion(180).velocity,moving.velocity,'retarget speed');
+  assert.deepEqual(carousel.poses(bounds,480,3,180),inMotion);
   assert.deepEqual(carousel.motion(1180),{position:0,velocity:0});
 });
 test('player list uses eight native portrait slots and centers the roster with its summary',()=>{

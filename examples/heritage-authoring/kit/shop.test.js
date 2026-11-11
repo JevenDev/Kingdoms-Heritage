@@ -68,6 +68,17 @@ test('shop edits preserve item data and follow game paging when offers cross pag
   assert.deepEqual(pages[0].offers[23],{cost:3,limit:4,item:{id:'minecraft:torch',count:32,components:{'minecraft:custom_name':'"Camping Torches"'}}});
 });
 
+test('slot reordering keeps whole offers and can move one to the end of a filtered view',()=>{
+  const scout=require('../templates/trail-scout-kit.json'),offers=scout.shop.offers;
+  const swapped=Shop.edit(scout,{type:'move',index:0,to:2});
+  assert.deepEqual(swapped.shop.offers,[offers[2],offers[1],offers[0],...offers.slice(3)]);
+  const moved=Shop.edit(scout,{type:'move',index:3,to:5,insert:true});
+  assert.deepEqual(moved.shop.offers,[...offers.slice(0,3),offers[4],offers[5],offers[3]]);
+  assert.deepEqual(moved.items,scout.items);
+  assert.deepEqual(moved.shop.sections,scout.shop.sections);
+  assert.equal(offers[3].limit,2);
+});
+
 test('budget hints flag unaffordable offers and partially affordable purchase limits',()=>{
   assert.deepEqual(Shop.budgetHint(6,8),{field:'cost',text:'Price exceeds the 6-point budget.'});
   assert.deepEqual(Shop.budgetHint(6,3,3),{field:'limit',text:'Budget covers 2 of 3 stacks.'});

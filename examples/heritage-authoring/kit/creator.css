@@ -195,6 +195,10 @@
 .shop-tray .shop-cell { position: relative; display: grid; place-items: center; width: 36px; min-width: 0; height: 36px; min-height: 0; padding: 0; border: 0; border-radius: 0; background: transparent; }
 .shop-tray .shop-cell:is(:focus-visible,[aria-pressed=true]) { outline: 2px solid #ffe2a0; outline-offset: -2px; }
 .shop-tray .shop-cell:hover { background: #ffffff36; }
+.shop-tray[data-editable=true] button.shop-cell, .shop-offers[data-editable=true] .shop-offer-item { cursor: grab; touch-action: none; }
+.mc-dragging :is(.shop-tray[data-editable=true] button.shop-cell,.shop-offers[data-editable=true] .shop-offer-item) { cursor: grabbing; }
+.shop-offer.mc-drop-target { border-bottom-color: var(--accent-strong); outline: 1px solid var(--accent-strong); }
+.shop-tray .shop-cell.mc-drop-target { background: #ffffff80; outline: 1px solid #fff; outline-offset: -1px; }
 .shop-cell-count, .shop-cell-cost { position: absolute; pointer-events: none; font: 12px/1 Monocraft,monospace; text-shadow: 1px 1px #292929; }
 .shop-cell-count { right: 2px; bottom: 2px; color: #fff; }
 .shop-cell-cost { top: 2px; left: 2px; color: #ffc45b; }

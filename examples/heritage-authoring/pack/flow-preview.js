@@ -679,13 +679,19 @@ function selectKit(index){
   if(document.activeElement?.dataset.action?.startsWith('kit-card-'))needsFocus=true;
   session.select(index);carousel.select(index,clock());inventory.set(session.kit,inventoryOptions);updateEditChoices();
 }
-function kitFrame(index,kits){
-  if(kitFrames.has(index))return kitFrames.get(index);
-  const image=document.createElement('canvas');image.width=inventory.layout.width;image.height=inventory.layout.height;
-  const aim=inventory.aim,hover=inventory.hover;inventory.aim={x:0,y:0};inventory.hover=null;
-  inventory.preview(kits[index]);image.getContext('2d').drawImage(inventory.canvas,0,0,image.width,image.height);
-  inventory.aim=aim;inventory.hover=hover;inventory.preview(null);
-  kitFrames.set(index,image);return image;
+function kitFrame(index,kits,look){
+  const yaw=kitYaw*look,pitch=kitPitch*look,frame=kitFrames.get(index);
+  const {width,height}=inventory.layout;
+  if(frame?.yaw===yaw&&frame.pitch===pitch&&frame.image.width===width&&frame.image.height===height)return frame.image;
+  const image=frame?.image??document.createElement('canvas'),context=image.getContext('2d');
+  if(image.width!==width||image.height!==height){image.width=width;image.height=height;}
+  const aim=inventory.aim,hover=inventory.hover;
+  inventory.aim={x:-Math.tan(yaw)*40,y:-Math.tan(pitch)*40};inventory.hover=null;
+  inventory.preview(kits[index],false);
+  context.clearRect(0,0,width,height);
+  context.drawImage(inventory.canvas,0,0,width,height);
+  inventory.aim=aim;inventory.hover=hover;inventory.preview(null,false);
+  kitFrames.set(index,{image,yaw,pitch});return image;
 }
 function kitScreen(w,h,now){
   const progress=kitProgress(now),reviewing=kitConfirming||progress>0,layout=inventory.layout,bw=layout.width,bh=layout.height,normalX=Math.trunc((w-bw)/2),normalY=Math.trunc((h-bh)/2),center=normalX+Math.trunc(bw/2),pose=HeritagePresentation.kitPose(w,h,bw,bh,progress,now);
@@ -706,7 +712,7 @@ function kitScreen(w,h,now){
       const right=!moving&&card.distance<0?Math.min(card.x+width,normalX):card.x+width;
       const node=neighbor&&!reviewing&&right>left?hit('kit-card-'+card.index,name,left,card.y,right-left,height,()=>selectKit(card.index)):null;
       const opacity=Math.min(1,card.opacity+(node?.matches(':hover,:focus-visible') ? .2 : 0))*(1-progress);
-      ctx.globalAlpha=opacity;ctx.drawImage(kitFrame(card.index,kits),card.x,card.y,width,height);ctx.globalAlpha=1;
+      ctx.globalAlpha=opacity;ctx.drawImage(kitFrame(card.index,kits,card.look),card.x,card.y,width,height);ctx.globalAlpha=1;
       const nameAlpha=Math.round(opacity*P.clamp((Math.abs(card.distance)-.85)/.15)*255);
       if(neighbor&&nameAlpha>=4)text(name,card.x+width/2,card.y-13,{center:true,limit:width-8,maxLines:1,alpha:nameAlpha});
     }
@@ -724,7 +730,7 @@ function kitScreen(w,h,now){
     arrow('previous-kit','Previous kit',Math.max(4,normalX-42),normalY+Math.trunc((bh-32)/2),()=>selectKit(session.kitIndex-1),session.kitIndex===0,{forward:false});
     arrow('next-kit','Next kit',Math.min(w-36,normalX+bw+10),normalY+Math.trunc((bh-32)/2),()=>selectKit(session.kitIndex+1),session.kitIndex+1===kits.length);
     const bottom=Math.min(h-24,normalY+bh+6),size=Math.min(100,Math.trunc((bw-4)/2));
-    button('back','Back',center-size-2,bottom,size,back);button('next',session.kit.shop?'Open shop':'Choose kit',center+2,bottom,size,next,moving);
+    button('back','Back',center-size-2,bottom,size,back);button('next',bundled.translations['screen.kingdomsheritage.next'],center+2,bottom,size,next,moving);
     if(bottom+34<h)text(label(session.kit,'description'),center,bottom+25,{center:true,color:0xcccccc,limit:w-16,maxLines:1});
   }
 }

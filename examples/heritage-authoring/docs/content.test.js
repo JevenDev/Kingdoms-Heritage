@@ -5,6 +5,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const P = require('../editor/engine.js');
 const Pack = require('../pack/engine.js');
+require('../kit/catalog.js');
+const Kit = require('../kit/engine.js');
 require('./content.js');
 
 const root = path.join(__dirname, '..');
@@ -47,6 +49,17 @@ test('embedded pack examples and the complete dialogue template match their sour
   assert.ok(embedded.some(document => JSON.stringify(document) === JSON.stringify(template)));
   const language = read('heritage-example-resources/assets/heritage_example/lang/en_us.json');
   assert.ok(embedded.some(document => JSON.stringify(document) === JSON.stringify(language)));
+});
+
+test('the documented shop examples match their templates and load in the kit creator', () => {
+  const scout = read('templates/trail-scout-kit.json');
+  const trail = read('templates/trail-kit.json');
+  assert.deepEqual(blocks(pages.get('kits').markdown).find(document => document.shop), scout);
+  for (const document of [scout, trail]) {
+    const parsed = Kit.read(JSON.stringify(document));
+    assert.deepEqual(parsed.document.shop, document.shop);
+    assert.deepEqual(parsed.warnings, []);
+  }
 });
 
 test('dialogue reference links resolve to local pages, sections and downloadable sources', () => {

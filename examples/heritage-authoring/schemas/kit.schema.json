@@ -66,7 +66,7 @@
         "type": "object",
         "required": ["budget", "offers"],
         "properties": {
-          "budget": { "type": "integer", "minimum": 0, "maximum": 1000000 },
+          "budget": { "type": "integer", "minimum": 0, "maximum": 1000000, "description": "Points available to each player for this kit." },
           "sections": {
             "type": "array",
             "maxItems": 256,
@@ -88,7 +88,7 @@
               "type": "object",
               "required": ["cost", "item"],
               "properties": {
-                "cost": { "type": "integer", "minimum": 0, "maximum": 1000000 },
+                "cost": { "type": "integer", "minimum": 0, "maximum": 1000000, "description": "Price for the entire item stack. Use zero for a free offer." },
                 "limit": {
                   "type": "integer",
                   "minimum": 1,

@@ -57,7 +57,9 @@ function edit(kit,action) {
       if(action.value)offer.section=action.value;else delete offer.section;
       break;
     case 'move':
-      if(shop.offers[action.to])[shop.offers[action.index],shop.offers[action.to]]=[shop.offers[action.to],offer];
+      if(!shop.offers[action.to]||action.index===action.to)break;
+      if(action.insert)shop.offers.splice(action.to,0,shop.offers.splice(action.index,1)[0]);
+      else [shop.offers[action.index],shop.offers[action.to]]=[shop.offers[action.to],offer];
       break;
     case 'remove':
       shop.offers.splice(action.index,1);
@@ -203,6 +205,8 @@ function create(config) {
     const hint=label('p','hint shop-budget-hint');
     hint.id='shop-budget-hint-'+rows.length;hint.hidden=true;
     const row={element,icon,name,position,hint};
+    element.dataset.slot=String(rows.length);
+    identity.addEventListener('pointerdown',event=>dragOffer(event,row.index));
     for(const [field,title,min,max] of [['count','Count',1,99],['cost','Price',0,1000000],['limit','Limit',1,41]]){
       const fieldLabel=label('label','',title),input=label('input');
       input.type='number';input.min=min;input.max=max;input.step='1';input.required=true;
@@ -226,8 +230,23 @@ function create(config) {
   }
   function makeCell(){
     const element=label('div','shop-cell');
+    element.dataset.slot=String(cells.length);
     tray.append(element);
     return {element};
+  }
+  function dragOffer(event,index){
+    if(locked)return;
+    const kit=config.getKit(),startPage=page,startSection=activeSection;
+    const offer=kit.shop.offers[index];
+    V.dragStart(event,{item:offer.item},slot=>{
+      if(config.getKit()!==kit||page!==startPage||activeSection!==startSection)return;
+      const target=cells[slot].index;
+      const to=target??cells.findLast(cell=>cell.index!==undefined).index;
+      if(index!==to)apply({type:'move',index,to,insert:target===undefined});
+    },{source:event.currentTarget,dropTarget:element=>{
+      const target=element?.closest('[data-slot]');
+      return target?.parentElement===tray||target?.parentElement===list?target:null;
+    }});
   }
   function fillCell(cell,offer,index){
     cell.index=index;
@@ -239,6 +258,7 @@ function create(config) {
     if(!cell.button){
       cell.button=button('',()=>{highlight(cell.index);focusRow(cell.index,'count');});
       cell.button.className='shop-cell';
+      cell.button.addEventListener('pointerdown',event=>dragOffer(event,cell.index));
       cell.icon=label('span','');
       cell.cost=label('span','shop-cell-cost');
       cell.count=label('span','shop-cell-count');
@@ -252,6 +272,7 @@ function create(config) {
   function render(){
     const kit=config.getKit(),shop=kit.shop,reason=config.lockedReason();
     locked=!!reason;
+    tray.dataset.editable=list.dataset.editable=String(!locked);
     const offers=reason&&reason.invalid?[]:shop?.offers??[];
     const sections=offers.length?shop.sections??[]:[];
     if(activeSection&&!sections.some(section=>section.id===activeSection)){activeSection='';page=0;}

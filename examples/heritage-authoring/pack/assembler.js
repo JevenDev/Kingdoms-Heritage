@@ -136,6 +136,13 @@ function locationDescription(entry) {
   const description={default:'World spawn',random:'Random place',biome:fields.target?placeName(fields.target)+' biome':'Choose a biome',structure:fields.target?placeName(fields.target)+' structure':'Choose a structure',fixed:'At '+['x','y','z'].map(key=>fields[key]??'?').join(', '),pool:'Random choice of '+entry.destinations.length+(entry.destinations.length===1?' place':' places')}[fields.type]||'Choose where players start';
   return fields.dimension&&!['minecraft:overworld','overworld'].includes(fields.dimension)?placeName(fields.dimension)+' · '+description:description;
 }
+function kitContents(kit){
+  const stacks=kit?.items?.length??0,shop=kit?.shop;
+  const parts=[];
+  if(stacks)parts.push(stacks+' starting stack'+(stacks===1?'':'s'));
+  if(shop)parts.push(shop.offers.length+' shop offer'+(shop.offers.length===1?'':'s'),shop.budget+(shop.budget===1?' point':' points'));
+  return parts.join(' · ')||'No starting items';
+}
 function renderContentSummary(){
   const entry=active(),host=$('location-content-summary');host.replaceChildren();if(!entry)return;
   const kits=locationKitIds(entry).map(id=>id==='bundled-empty'?'Heritage Empty-handed':catalog.kits.find(draft=>draft.id===id)?.name||'Missing kit'),intro=catalog.intros.find(draft=>draft.id===entry.intro);
@@ -287,7 +294,7 @@ function contentNode(node,kind,id){node.dataset.contentKind=kind;node.dataset.co
 function renderContentBrowser(){
   const host=$('content-assets'),entry=active(),another=$('editor-new-entry');$('content-bin-tools').append(another);host.replaceChildren();$('content-location-name').textContent=entry?.fields.title||'Location content';if(!entry)return;
   const group=(kind,label)=>{const section=element('section',{class:'content-asset-group'}),heading=element('div',{class:'section-heading'});heading.append(element('h3',{},label));if(embeddedSession?.kind===kind)heading.append(another);else heading.append(element('a',{href:editorUrl(kind,null,true),class:'library-edit','aria-label':'New '+kind+' for '+(entry.fields.title||entry.path)},'New '+kind));const list=element('div',{class:'content-asset-list'});section.append(heading,list);host.append(section);return list;};
-  const kits=group('kit','Kits');for(const id of locationKitIds(entry)){const draft=catalog.kits.find(kit=>kit.id===id),editable=id!==P.emptyKit.id&&id!=='bundled-empty'&&draft,row=contentNode(element(editable?'a':'div',{class:'content-asset'},''),'kit',id);if(editable){row.href=editorUrl('kit',id);row.setAttribute('aria-current',String(embeddedSession?.kind==='kit'&&embeddedSession.id===id));}const item=draft?.document?.items?.[0]?.item;if(item)row.append(HeritageInventory.icon(item.id));const detail=element('span');detail.append(element('strong',{},id==='bundled-empty'?'Heritage Empty-handed':draft?.name||'Missing kit'),element('span',{class:'hint'},draft?.error?'Needs attention':draft?.document?.items?.length?draft.document.items.length+' item stack'+(draft.document.items.length===1?'':'s'):'No items'));row.append(detail);kits.append(row);}
+  const kits=group('kit','Kits');for(const id of locationKitIds(entry)){const draft=catalog.kits.find(kit=>kit.id===id),editable=id!==P.emptyKit.id&&id!=='bundled-empty'&&draft,row=contentNode(element(editable?'a':'div',{class:'content-asset'},''),'kit',id);if(editable){row.href=editorUrl('kit',id);row.setAttribute('aria-current',String(embeddedSession?.kind==='kit'&&embeddedSession.id===id));}const item=draft?.document?.items?.[0]?.item;if(item)row.append(HeritageInventory.icon(item.id));const detail=element('span');detail.append(element('strong',{},id==='bundled-empty'?'Heritage Empty-handed':draft?.name||'Missing kit'),element('span',{class:'hint'},draft?.error?'Needs attention':kitContents(draft?.document)));row.append(detail);kits.append(row);}
   const intros=group('intro','Intros'),add=(id,label,destination=null)=>{const draft=catalog.intros.find(intro=>intro.id===id),row=contentNode(element(draft?'a':'div',{class:'content-asset',...(draft?{href:editorUrl('intro',id)}:{}),'aria-current':String(embeddedSession?.kind==='intro'&&embeddedSession.id===id&&embeddedSession.destination===destination)}),'intro',id),detail=element('span');if(Number.isInteger(destination))row.dataset.destinationIntro=destination;detail.append(element('strong',{},draft?.name||'Missing intro'),element('span',{class:'hint'+(draft?'':' error')},draft?label:label+' · Choose another intro'));row.append(detail);intros.append(row);};
   if(entry.intro)add(entry.intro,entry.fields.type==='pool'?'Default arrival':'Arrival');else intros.append(element('p',{class:'hint'},'No default intro'));
   entry.destinations.forEach((destination,index)=>{if(typeof destination.intro==='string'&&destination.intro)add(destination.intro,'Place '+(index+1),index);});contentBrowser?.refresh();
@@ -427,9 +434,9 @@ function kitChoices(){
     if(all&&!kit.included)continue;
     const row=contentNode(element('div',{class:'location-kit-choice'}),'kit',kit.id),label=element('label',{class:'check'+(kit.missing?' location-kit-missing':'')}),input=element('input',{type:'checkbox','data-allowed-kit':kit.id}),content=element('span',{class:'kit-choice-content'});
     input.checked=all?!!kit.included:entry.kits.includes(kit.id);input.disabled=all;
-    const count=kit.draft?.document?.items?.length??0,excluded=!all&&entry.kits.includes(kit.id)&&!kit.included&&!kit.missing,description=kit.missing?'Restore this kit or untick it to remove the assignment.':excluded?'Selected here, but excluded from the pack.':kit.draft?.error?'Needs attention':count?count+' item stack'+(count===1?'':'s'):'No starting items';
+    const excluded=!all&&entry.kits.includes(kit.id)&&!kit.included&&!kit.missing,description=kit.missing?'Restore this kit or untick it to remove the assignment.':excluded?'Selected here, but excluded from the pack.':kit.draft?.error?'Needs attention':kitContents(kit.draft?.document);
     content.append(element('span',{},kit.name),element('span',{class:'hint'},description));label.append(input,content);row.append(label);
-    const items=kit.draft?.document?.items??[],pictures=element('div',{class:'kit-choice-items'});for(const entry of items.slice(0,2))pictures.append(HeritageInventory.icon(entry.item.id));if(items.length>2)pictures.append(element('span',{},'+'+(items.length-2)));if(!items.length)pictures.append(element('span',{class:'hint'},'Empty inventory'));const preview=element('button',{type:'button','data-preview-kit':kit.id,'aria-label':'Preview '+kit.name,'aria-pressed':'false'},'Preview');preview.disabled=!!kit.missing;if(kit.missing)preview.title='Restore this kit or remove its assignment before previewing it.';const actions=element('div',{class:'kit-choice-actions'});actions.append(preview);row.append(pictures,actions);
+    const items=kit.draft?.document?.items??[],pictures=element('div',{class:'kit-choice-items'});for(const entry of items.slice(0,2))pictures.append(HeritageInventory.icon(entry.item.id));if(items.length>2)pictures.append(element('span',{},'+'+(items.length-2)));if(!items.length&&!kit.draft?.document?.shop)pictures.append(element('span',{class:'hint'},'Empty inventory'));const preview=element('button',{type:'button','data-preview-kit':kit.id,'aria-label':'Preview '+kit.name,'aria-pressed':'false'},'Preview');preview.disabled=!!kit.missing;if(kit.missing)preview.title='Restore this kit or remove its assignment before previewing it.';const actions=element('div',{class:'kit-choice-actions'});actions.append(preview);row.append(pictures,actions);
     if(excluded)actions.append(element('button',{type:'button','data-include-allowed-kit':kit.id},'Include kit'));
     if(kit.id!==P.emptyKit.id&&kit.id!=='bundled-empty'&&!kit.missing)actions.append(element('a',{class:'library-edit',href:editorUrl('kit',kit.id),'aria-label':'Edit '+kit.name},'Edit'));
     container.append(row);
@@ -845,7 +852,7 @@ async function startExample(){
     if(saveBlocked)throw new Error(storageError);
     setOpeningProject(true);$('project-status').textContent='Creating the starter example…';
     await restoreProject(await HeritagePackExample.create());setStep('pack');
-    $('project-status').textContent='Example ready. Home and Open Plains share the Traveler kit and Arrival intro. Open Locations to edit them.';
+    $('project-status').textContent='Home and Open Plains share the Traveler and Trail Scout kits and the Arrival intro.';
   }catch(error){$('project-status').textContent='Could not start the example: '+error.message;}
   finally{setOpeningProject(false);}
 }

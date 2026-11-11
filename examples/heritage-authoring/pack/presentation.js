@@ -134,7 +134,8 @@ class KitCarousel extends Spring {
     const step=Math.max(bounds.width*.58,Math.min(bounds.width*.95,(width-bounds.width*.32)/2));
     for(let index=Math.max(0,Math.floor(position)-1);index<=Math.min(count-1,Math.ceil(position)+1);index++){
       const distance=index-position,depth=Math.min(1,Math.abs(distance)),scale=1-.32*depth;
-      poses.push({index,distance,scale,opacity:(1-.68*depth)*clamp(2-Math.abs(distance)),
+      const look=1-depth*depth*depth*(depth*(depth*6-15)+10);
+      poses.push({index,distance,scale,look,opacity:(1-.68*depth)*clamp(2-Math.abs(distance)),
         x:bounds.x+bounds.width/2+distance*step-bounds.width*scale/2,y:bounds.y+bounds.height*(1-scale)/2});
     }
     return poses.sort((a,b)=>Math.abs(b.distance)-Math.abs(a.distance));

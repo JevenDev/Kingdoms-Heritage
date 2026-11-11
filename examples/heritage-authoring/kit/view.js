@@ -246,7 +246,7 @@ function setCursor(stack) {
 }
 function dragStart(event,payload,onDrop,options={}) {
   if(!(options.buttons??[0]).includes(event.button)||event.isPrimary===false)return;
-  const source=event.target.closest('button');if(!source)return;
+  const source=options.source??event.target.closest('button');if(!source)return;
   const start={x:event.clientX,y:event.clientY,time:performance.now()},pointerId=event.pointerId;
   let active=true,moved=false,cancelled=false,ghost,target,ghostKey;const visited=[],button=event.button;
   source.setPointerCapture(pointerId);
@@ -262,7 +262,9 @@ function dragStart(event,payload,onDrop,options={}) {
     if(source.hasPointerCapture(pointerId))source.releasePointerCapture(pointerId);
   }
   function destination(event) {
-    const slot=document.elementFromPoint(event.clientX,event.clientY)?.closest('.mc-slot');
+    const element=document.elementFromPoint(event.clientX,event.clientY);
+    if(options.dropTarget)return options.dropTarget(element);
+    const slot=element?.closest('.mc-slot');
     return slot?.closest('.mc-inventory')?.dataset.editable==='true'?slot:null;
   }
   function move(event) {
@@ -294,7 +296,7 @@ function dragStart(event,payload,onDrop,options={}) {
     const suppress=event=>{event.preventDefault();event.stopImmediatePropagation();};
     for(const type of ['click','contextmenu'])window.addEventListener(type,suppress,{capture:true,once:true});setTimeout(()=>{for(const type of ['click','contextmenu'])window.removeEventListener(type,suppress,true);},0);
     if(!cancelled&&!dragged){options.onTap?.(event);return;}
-    if(!cancelled&&value!==null&&HeritageEquipment.valid(value))onDrop(value,{slots:visited,button:event.button??0});
+    if(!cancelled&&value!==null&&(options.dropTarget||HeritageEquipment.valid(value)))onDrop(value,{slots:visited,button:event.button??0});
   }
   function cancel(event){if(event.pointerId===pointerId)cleanup();}
   function escape(event){if(event.key==='Escape'){cancelled=true;clearPreview();event.preventDefault();event.stopImmediatePropagation();}}
@@ -426,10 +428,10 @@ class Inventory {
       }else if(!warnings.length)marker?.remove();
     }
   }
-  preview(kit) {
+  preview(kit,interactive=true) {
     if(!kit&&!this.previewKit)return;
-    this.previewKit=kit;this.previewEntries=kit?new Map(kit.items.map(entry=>[HeritageEquipment.id(entry),entry])):null;
-    this.dirty=true;this.labels();this.draw();
+    this.previewKit=kit;this.previewEntries=kit?new Map((kit.items??[]).map(entry=>[HeritageEquipment.id(entry),entry])):null;
+    this.dirty=true;if(interactive)this.labels();this.draw();
   }
   select(value,focus=false) {
     if(!HeritageEquipment.valid(value))return;
