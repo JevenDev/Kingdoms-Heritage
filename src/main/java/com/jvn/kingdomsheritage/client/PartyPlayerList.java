@@ -30,6 +30,7 @@ final class PartyPlayerList {
     private static final ResourceLocation SEND_REQUEST = texture("send_request");
     private static final ResourceLocation INVITED = texture("invited");
     private static final ResourceLocation SEARCH = texture("search");
+    private static final ResourceLocation REVIEW = texture("review");
     private static final ResourceLocation READY = texture("ready");
     private final PartyListBlur blur = new PartyListBlur();
     private final List<Cell> cells = new ArrayList<>();
@@ -379,19 +380,11 @@ final class PartyPlayerList {
             var letter = Component.translatable("screen.kingdomsheritage.party_stage_short_" + player.stage());
             SelectionText.centered(graphics, font, letter, right + 3, bottom - 1,
                     opacity | (choosingKit ? 0x55ffff : 0xffff55));
-            return;
-        }
-
-        if (player.stage() == HeritageParty.Stage.READY.ordinal()) {
+        } else if (player.stage() == HeritageParty.Stage.REVIEW.ordinal()) {
+            renderCornerBadge(graphics, REVIEW, 9, 10, right, bottom, visibility);
+        } else if (player.stage() == HeritageParty.Stage.READY.ordinal()) {
             renderCornerBadge(graphics, READY, 9, 8, right, bottom, visibility);
-            return;
         }
-
-        int x = right - 12, y = bottom - 12;
-        graphics.fill(x, y, x + 11, y + 11, opacity);
-        var font = Minecraft.getInstance().font;
-        SelectionText.centered(graphics, font, Component.translatable("screen.kingdomsheritage.party_stage_short_" + player.stage()),
-                x + 6, y + 2, opacity | 0xffff55);
     }
 
     private static InviteBadge inviteBadge(UUID player, long now) {
