@@ -133,7 +133,7 @@ async function loadOverlayShader(source,toast=false){
 async function loadArt(){
   if(artLoading)return artLoading;
   artLoading=(async()=>{
-    const response=await fetch(new URL('defaults.json?v=4',base));if(!response.ok)throw new Error('Default locations could not load.');bundled=await response.json();
+    const response=await fetch(new URL('defaults.json?v=5',base));if(!response.ok)throw new Error('Default locations could not load.');bundled=await response.json();
     await Promise.all(['card','card_expanded','card_fallback','default','random','plains','village','disconnect','disconnect_highlighted','select','select_highlighted','unselect','unselect_highlighted','button','button_highlighted','button_disabled','tab_button','tab_button_selected','empty_slot','send_request','shop','tab_top_selected_1','tab_top_selected_2','tab_top_unselected_1','experience_bar_background','experience_bar_progress'].map(async name=>{
       const image=new Image();image.src=name.startsWith('button')?new URL('../../kit/assets/widget/'+name+'.png',base):new URL((name==='shop'?'../../kit/assets/shop.png?v=2':name+'.png'),base);await image.decode();images.set(name,image);
     }));
@@ -707,21 +707,39 @@ function kitScreen(w,h,now){
     for(const index of kitFrames.keys())if(Math.abs(index-motion.position)>2)kitFrames.delete(index);
     for(const card of carousel.poses({x:normalX,y:normalY,width:bw,height:bh},w,kits.length,now)){
       if(card.opacity<=0||card.index===session.kitIndex&&(!moving||reviewing))continue;
-      const width=bw*card.scale,height=bh*card.scale,name=label(kits[card.index],'title'),neighbor=card.index!==session.kitIndex;
+      const kit=kits[card.index],budget=kitBudgetLabel(kit);
+      const width=bw*card.scale,height=bh*card.scale,name=label(kit,'title'),neighbor=card.index!==session.kitIndex;
       const left=!moving&&card.distance>0?Math.max(card.x,normalX+bw):card.x;
       const right=!moving&&card.distance<0?Math.min(card.x+width,normalX):card.x+width;
-      const node=neighbor&&!reviewing&&right>left?hit('kit-card-'+card.index,name,left,card.y,right-left,height,()=>selectKit(card.index)):null;
+      const node=neighbor&&!reviewing&&right>left?hit('kit-card-'+card.index,budget?name+', '+budget:name,left,card.y,right-left,height,()=>selectKit(card.index)):null;
       const opacity=Math.min(1,card.opacity+(node?.matches(':hover,:focus-visible') ? .2 : 0))*(1-progress);
       ctx.globalAlpha=opacity;ctx.drawImage(kitFrame(card.index,kits,card.look),card.x,card.y,width,height);ctx.globalAlpha=1;
       const nameAlpha=Math.round(opacity*P.clamp((Math.abs(card.distance)-.85)/.15)*255);
-      if(neighbor&&nameAlpha>=4)text(name,card.x+width/2,card.y-13,{center:true,limit:width-8,maxLines:1,alpha:nameAlpha});
+      if(neighbor&&nameAlpha>=4){
+        const style={center:true,limit:width-8,maxLines:1,alpha:nameAlpha};
+        const captionY=Math.round(card.y)-13;
+        text(name,card.x+width/2,captionY-(budget?12:0),style);
+        if(budget)text(budget,card.x+width/2,captionY,{...style,color:0xf2cd83});
+      }
     }
   }
   if(reviewing){ctx.save();ctx.translate(pose.x+bw*pose.scale/2,pose.y+bh*pose.scale/2);ctx.rotate(pose.tilt*Math.PI/180);ctx.scale(pose.scale,pose.scale);ctx.drawImage(inventory.canvas,-bw/2,-bh/2,bw,bh);ctx.restore();}
   else if(!moving&&modelOnly)ctx.drawImage(inventory.canvas,normalX,normalY,bw,bh);
   else if(!moving)Object.assign(host.style,{left:normalX/w*100+'%',top:normalY/h*100+'%',width:bw/w*100+'%',height:bh/h*100+'%'});
-  const titleY=Math.max(2,normalY-13),title=label(session.kit,'title')+' ('+(session.kitIndex+1)+'/'+session.allowed().length+')';
-  if(progress<1){const alpha=Math.max(4,Math.round((1-progress)*255));if(titleY>=16)text('Choose your starting kit',center,titleY-12,{center:true,alpha});let shown=title;while(width(literal(shown))>Math.min(w-24,bw+60))shown=Array.from(shown).slice(0,-1).join('');text(shown,center,titleY,{center:true,alpha});}
+  const budget=kitBudgetLabel(session.kit),titleY=Math.max(2,normalY-(budget?23:13));
+  const title=label(session.kit,'title')+' ('+(session.kitIndex+1)+'/'+kits.length+')';
+  if(progress<1){
+    const alpha=Math.max(4,Math.round((1-progress)*255));
+    if(titleY>=14)text('Choose your starting kit',center,titleY-12,{center:true,alpha});
+    let shown=title;
+    while(width(literal(shown))>Math.min(w-24,bw+60))shown=Array.from(shown).slice(0,-1).join('');
+    text(shown,center,titleY,{center:true,alpha});
+    if(budget){
+      const summary=literal(budget,0xf2cd83);
+      if(session.kit.items?.length)summary.push(...literal('  ·  '+shopText('included_gear'),0xcccccc));
+      text(summary,center,titleY+11,{center:true,limit:w-16,maxLines:1,alpha});
+    }
+  }
   if(reviewing){
     const scale=Math.max(.1,Math.min(1,(w-32)/(bw+216),(h-96)/bh)),left=Math.round((w-(bw+216)*scale)/2+(bw+24)*scale)+Math.round((1-progress)*12),limit=Math.max(1,Math.round(192*scale)),promptHeight=P.wrap(literal('Is this your choice?'),limit,renderer.advance).length*9,textHeight=promptHeight+Math.min(2,P.wrap(literal(label(session.kit,'title')),limit,renderer.advance).length)*9,top=Math.trunc((h-textHeight-64)/2),alpha=P.clamp((progress-.3)/.7);
     if(alpha>0){text('Is this your choice?',left,top,{limit,alpha:Math.max(4,Math.round(alpha*255))});text(label(session.kit,'title'),left,top+promptHeight+6,{color:0xf2cd83,limit,maxLines:2,alpha:Math.max(4,Math.round(alpha*255))});}
@@ -730,7 +748,8 @@ function kitScreen(w,h,now){
     arrow('previous-kit','Previous kit',Math.max(4,normalX-42),normalY+Math.trunc((bh-32)/2),()=>selectKit(session.kitIndex-1),session.kitIndex===0,{forward:false});
     arrow('next-kit','Next kit',Math.min(w-36,normalX+bw+10),normalY+Math.trunc((bh-32)/2),()=>selectKit(session.kitIndex+1),session.kitIndex+1===kits.length);
     const bottom=Math.min(h-24,normalY+bh+6),size=Math.min(100,Math.trunc((bw-4)/2));
-    button('back','Back',center-size-2,bottom,size,back);button('next',bundled.translations['screen.kingdomsheritage.next'],center+2,bottom,size,next,moving);
+    button('back','Back',center-size-2,bottom,size,back);
+    button('next',budget?shopText('open'):bundled.translations['screen.kingdomsheritage.next'],center+2,bottom,size,next,moving);
     if(bottom+34<h)text(label(session.kit,'description'),center,bottom+25,{center:true,color:0xcccccc,limit:w-16,maxLines:1});
   }
 }
@@ -738,6 +757,7 @@ function shopText(key,...args){
   let index=0;
   return bundled.translations['screen.kingdomsheritage.shop.'+key].replace(/%s/g,()=>args[index++]);
 }
+const kitBudgetLabel=kit=>kit.shop?shopText(kit.shop.budget===1?'kit_budget_one':'kit_budget',kit.shop.budget):'';
 const shopPoints=count=>shopText(count===1?'one_point':'points',count);
 const shopBudget=()=>shopText('budget',session.spent,session.kit.shop.budget,session.kit.shop.budget-session.spent);
 function shopStatusText(status,refunding=false){

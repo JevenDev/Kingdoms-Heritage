@@ -118,8 +118,9 @@ final class KitSelectionView {
         back.setMessage(Component.translatable(reviewing ? "screen.kingdomsheritage.choose_another" : "gui.back"));
         confirm.active = !model.submitted() && model.problem().getString().isEmpty()
                 && !carousel.moving(net.minecraft.Util.getMillis()) && (confirming ? progress == 1 : progress == 0);
-        confirm.setMessage(model.submitted() ? ClientSelection.progress() : Component.translatable(
-                reviewing ? "screen.kingdomsheritage.confirm_begin" : "screen.kingdomsheritage.next"));
+        String confirmKey = reviewing ? "screen.kingdomsheritage.confirm_begin"
+                : model.hasShop() ? "screen.kingdomsheritage.shop.open" : "screen.kingdomsheritage.next";
+        confirm.setMessage(model.submitted() ? ClientSelection.progress() : Component.translatable(confirmKey));
         confirm.setTooltip(Tooltip.create(model.policyHint()));
     }
 
@@ -442,14 +443,27 @@ final class KitSelectionView {
         Screen screen = event.getScreen();
         var font = Minecraft.getInstance().font;
         int center = view.bounds.getX() + view.bounds.getWidth() / 2;
-        int titleY = Math.max(2, view.bounds.getY() - 13);
+        var budget = view.model.shopBudgetLabel(view.model.index());
+        int titleY = Math.max(2, view.bounds.getY() - (budget == null ? 13 : 23));
         graphics.pose().pushPose();
         graphics.pose().translate(0, 0, 500);
-        if (titleY >= 16) SelectionText.centered(graphics, font, Component.translatable("screen.kingdomsheritage.kit"), center, titleY - 12, 0xffffff);
+        if (titleY >= 14) SelectionText.centered(graphics, font, Component.translatable("screen.kingdomsheritage.kit"), center, titleY - 12, 0xffffff);
         JsonObject choice = view.model.choices().get(view.model.index());
         var title = DefinitionJson.component(choice, "title").copy();
         title.append(" (" + (view.model.index() + 1) + "/" + view.model.choices().size() + ")");
         SelectionText.centered(graphics, font, font.plainSubstrByWidth(title.getString(), Math.min(screen.width - 24, view.bounds.getWidth() + 60)), center, titleY, 0xffffff);
+        if (budget != null) {
+            var summary = budget.copy().withStyle(style -> style.withColor(0xf2cd83));
+            if (view.model.hasIncludedGear()) {
+                summary.append(Component.literal("  ·  ").withStyle(style -> style.withColor(0xcccccc)));
+                summary.append(Component.translatable("screen.kingdomsheritage.shop.included_gear")
+                        .withStyle(style -> style.withColor(0xcccccc)));
+            }
+            var summaryLines = font.split(summary, Math.max(1, screen.width - 16));
+            if (!summaryLines.isEmpty()) {
+                SelectionText.centered(graphics, font, summaryLines.getFirst(), center, titleY + 11, 0xffffff);
+            }
+        }
         boolean hasError = !view.model.problem().getString().isEmpty() || !view.model.error().getString().isEmpty();
         Component detail = !view.model.problem().getString().isEmpty() ? view.model.problem()
                 : !view.model.error().getString().isEmpty()

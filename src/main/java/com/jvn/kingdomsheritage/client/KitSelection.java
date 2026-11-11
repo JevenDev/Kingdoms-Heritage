@@ -75,8 +75,23 @@ public final class KitSelection {
     }
 
     boolean hasShop() {
-        return kit != null && kit.shop() != null && inventoryPolicy != HeritageConfig.InventoryPolicy.PRESERVE;
+        return hasShop(kit);
     }
+
+    private boolean hasShop(KitDefinition definition) {
+        return definition != null && definition.shop() != null && inventoryPolicy != HeritageConfig.InventoryPolicy.PRESERVE;
+    }
+
+    Component shopBudgetLabel(int index) {
+        var neighbor = neighborPreviews.get(index);
+        var definition = index == this.index ? kit : neighbor == null ? null : neighbor.kit();
+        if (!hasShop(definition)) return null;
+        int points = definition.shop().budget();
+        return Component.translatable(points == 1 ? "screen.kingdomsheritage.shop.kit_budget_one"
+                : "screen.kingdomsheritage.shop.kit_budget", points);
+    }
+
+    boolean hasIncludedGear() { return !stacks.isEmpty(); }
 
     void openShop() {
         if (!hasShop()) return;

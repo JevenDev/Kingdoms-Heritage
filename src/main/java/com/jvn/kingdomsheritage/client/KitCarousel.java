@@ -120,9 +120,17 @@ final class KitCarousel {
                 var lines = font.split(name, textWidth);
                 float nameOpacity = opacity * Mth.clamp((Math.abs(index - position) - 0.85F) / 0.15F, 0, 1);
                 if (!lines.isEmpty() && nameOpacity * 255 >= 4) {
-                    SelectionText.centered(graphics, font, lines.getFirst(),
-                            Math.round(pose.x + bounds.getWidth() * pose.scale / 2), Math.round(pose.y) - 13,
-                            Math.round(nameOpacity * 255) << 24 | 0xffffff);
+                    int center = Math.round(pose.x + bounds.getWidth() * pose.scale / 2);
+                    int captionY = Math.round(pose.y) - 13;
+                    int alpha = Math.round(nameOpacity * 255) << 24;
+                    var budget = model.shopBudgetLabel(index);
+                    SelectionText.centered(graphics, font, lines.getFirst(), center,
+                            budget == null ? captionY : captionY - 12, alpha | 0xffffff);
+                    if (budget != null) {
+                        var caption = font.split(budget, textWidth);
+                        if (!caption.isEmpty()) SelectionText.centered(graphics, font, caption.getFirst(),
+                                center, captionY, alpha | 0xf2cd83);
+                    }
                 }
             }
         }
