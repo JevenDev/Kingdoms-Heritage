@@ -251,7 +251,7 @@ final class ClientParty {
             var kits = ClientSelection.kits();
             kitChanged(spawn, kits != null && kits.spawnId().equals(spawn) ? kits.kitId() : null);
         }
-        if (ticks % 2 != 0 || !(minecraft.screen instanceof SpawnSelectScreen screen) || SelectionTransition.active()) return;
+        if (!grouped() || ticks % 2 != 0 || !(minecraft.screen instanceof SpawnSelectScreen screen) || SelectionTransition.active()) return;
         double scale = minecraft.getWindow().getGuiScale();
         int x = Mth.clamp((int) (minecraft.mouseHandler.xpos() / scale / screen.width * 65535), 0, 65535);
         int y = Mth.clamp((int) (minecraft.mouseHandler.ypos() / scale / screen.height * 65535), 0, 65535);
@@ -263,7 +263,7 @@ final class ClientParty {
     }
 
     private static void cursor(HeritageNetwork.Cursor packet) {
-        if (!PLAYERS.containsKey(packet.player()) || packet.player().equals(self())) return;
+        if (!member(packet.player()) || !PLAYERS.containsKey(packet.player()) || packet.player().equals(self())) return;
         long now = Util.getMillis();
         var previous = CURSORS.get(packet.player());
         float x = packet.x() / 65535F, y = packet.y() / 65535F;
