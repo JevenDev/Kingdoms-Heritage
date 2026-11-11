@@ -15,6 +15,18 @@ public final class SelectionToasts {
         toasts.addToast(toast);
     }
 
+    static void partyFeedback(ClientParty.Peer player, String result) {
+        boolean accepted = result.equals("accepted");
+        if (toasts != null && (accepted || result.equals("sent"))) {
+            var notice = toasts.getToast(PartyNoticeToast.class, player.id());
+            if (notice != null) {
+                notice.updateInvite(accepted);
+                return;
+            }
+        }
+        add(new PartyNoticeToast(player, result));
+    }
+
     public static ToastComponent component() { return toasts; }
 
     static void clear() {

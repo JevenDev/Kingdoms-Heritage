@@ -36,6 +36,7 @@ final class ClientParty {
         float x(long now) { return Mth.lerp(Mth.clamp((now - received) / 100F, 0, 1), fromX, x); }
         float y(long now) { return Mth.lerp(Mth.clamp((now - received) / 100F, 0, 1), fromY, y); }
     }
+    private static final String READY_TOOLTIP = "kingdomsheritage:party_ready_count";
     private static final ResourceLocation CROSSHAIR = ResourceLocation.fromNamespaceAndPath("kingdomsheritage", "textures/gui/party_crosshair.png");
     private static final ToucanPlayerSkinResolver SKINS = new ToucanPlayerSkinResolver(128, 30000);
     private static final Map<UUID, Peer> PLAYERS = new LinkedHashMap<>();
@@ -62,7 +63,7 @@ final class ClientParty {
     private static UUID menuPlayer;
     private static UUID hovered;
     private static Button leave;
-    private static Component summaryHovered;
+    private static List<Component> summaryTooltip = List.of();
     private static UUID noticePlayer;
     private static boolean noticeHovered;
     private static int noticeX, noticeY, noticeWidth;
@@ -91,20 +92,25 @@ final class ClientParty {
     }
 
     private static boolean overlay(Screen screen) {
-        if (overlayScreen != screen) {
-            overlayScreen = screen;
+        Screen next = showsOverlay(screen) ? screen : null;
+        if (overlayScreen != next) {
+            overlayScreen = next;
             PLAYER_LIST.reset();
             CONTROLS.clear();
             BUTTONS.clear();
             MENU.clear();
-            menuPlayer = hovered = null;
+            menuPlayer = hovered = noticePlayer = null;
+            noticeHovered = false;
             leave = null;
         }
-        return showsOverlay(screen);
+        return next != null;
     }
 
     private static boolean showsOverlay(Screen screen) {
-        return screen != null && ClientSelection.selecting() && (HeritageScreens.finished() || partyScreen(screen));
+        if (screen == null || !ClientSelection.selecting()) return false;
+        if (screen instanceof SpawnSelectScreen) return true;
+        return grouped() ? HeritageScreens.finished() || partyScreen(screen)
+                : HeritageScreens.placement() == HeritageScreens.Placement.BEFORE_SPAWN && partyScreen(screen);
     }
 
     static void selectionRefreshed(Screen previous, Screen next) {
@@ -143,13 +149,6 @@ final class ClientParty {
             if (MEMBERS.contains(id) && PLAYERS.containsKey(id)) SUGGESTIONS.put(id, vote.get("spawn").getAsString());
         }
         SUGGESTIONS.keySet().retainAll(PLAYERS.keySet());
-        UUID selfId = self();
-        peers = orderedPlayers(List.copyOf(PLAYERS.values()), MEMBERS, selfId);
-        var players = new ArrayList<Peer>(peers.size() + 1);
-        var local = PLAYERS.get(selfId);
-        if (local != null) players.add(local);
-        players.addAll(peers);
-        roster = List.copyOf(players);
         if (!previousMembers.equals(MEMBERS)) {
             if (!MEMBERS.isEmpty()) SelectionSounds.CONFIRMATION.play();
             CURSORS.clear();
@@ -166,6 +165,7 @@ final class ClientParty {
         }
         INVITES.clear();
         INVITES.putAll(nextInvites);
+        updateRoster(now);
         OUTGOING.clear();
         for (var value : state.getAsJsonArray("outgoing")) OUTGOING.add(UUID.fromString(value.getAsString()));
         if (state.has("feedback")) {
@@ -176,7 +176,7 @@ final class ClientParty {
                 var player = id == null ? player(name) : PLAYERS.get(id);
                 if (player == null) player = new Peer(id == null ? UUIDUtil.createOfflinePlayerUUID(name) : id, name, 0, false);
                 String result = feedback.get("result").getAsString();
-                SelectionToasts.add(new PartyNoticeToast(player, result));
+                SelectionToasts.partyFeedback(player, result);
                 if (!result.equals("accepted")) SelectionSounds.NOTICE.play();
             }
         }
@@ -281,7 +281,7 @@ final class ClientParty {
         spawn = reportedStage = "";
         menuPlayer = hovered = null;
         leave = null;
-        summaryHovered = null;
+        summaryTooltip = List.of();
         noticePlayer = null;
         noticeHovered = false;
         overlayScreen = null;
@@ -299,8 +299,20 @@ final class ClientParty {
     }
 
     static Component waitingSummary() {
-        var status = readiness(snapshot());
+        return waitingSummary(readiness(snapshot()));
+    }
+
+    private static Component waitingSummary(Readiness status) {
         return text("ready_count", status.ready(), status.total());
+    }
+
+    private static List<Component> readinessTooltip(Readiness status, Component count) {
+        var lines = new ArrayList<Component>();
+        lines.add(count.copy().withStyle(ChatFormatting.YELLOW));
+        for (var player : status.waiting()) {
+            lines.add(text("waiting_member", player.name(), text("stage_" + player.stage().ordinal())).copy().withStyle(ChatFormatting.GRAY));
+        }
+        return lines;
     }
 
     static Component waitingNames() {
@@ -345,12 +357,7 @@ final class ClientParty {
         face(graphics, player, x, y, size, opacity);
         if (status && player.stage() != 0) graphics.fill(x, y, x + size, y + size, Math.round(opacity * 170) << 24 | 0x343434);
         if (status && player.stage() == HeritageParty.Stage.LOADING.ordinal()) {
-            graphics.pose().pushPose();
-            graphics.pose().translate(x + size / 2F, y + size / 2F, 0);
-            float scale = size / 32F;
-            graphics.pose().scale(scale, scale, 1);
-            LoadingIndicator.render(graphics, 0, 0, Util.getMillis(), Math.round(opacity * 255));
-            graphics.pose().popPose();
+            LoadingIndicator.renderPortrait(graphics, x + size / 2, y + size / 2, Util.getMillis(), Math.round(opacity * 255));
         }
     }
 
@@ -383,19 +390,41 @@ final class ClientParty {
         return hovered;
     }
 
-    static boolean blocksInput() { return PLAYER_LIST.active(Util.getMillis()) || menuPlayer != null; }
+    static boolean blocksInput() {
+        return showsOverlay(Minecraft.getInstance().screen) && (PLAYER_LIST.active(Util.getMillis()) || menuPlayer != null);
+    }
     static boolean menuOpen() { return menuPlayer != null; }
     static boolean blocksHover(int mouseX, int mouseY) {
-        return blocksInput() || overInvitation(mouseX, mouseY) || !peers.isEmpty() && PLAYER_LIST.overTrigger(mouseX, mouseY);
+        return showsOverlay(Minecraft.getInstance().screen) && (PLAYER_LIST.active(Util.getMillis()) || menuPlayer != null
+                || overInvitation(mouseX, mouseY) || !peers.isEmpty() && PLAYER_LIST.overTrigger(mouseX, mouseY));
     }
 
     static void closeListBlur() { PLAYER_LIST.closeBlur(); }
 
-    static List<Peer> orderedPlayers(List<Peer> players, Set<UUID> members, UUID self) {
+    private static void updateRoster(long now) {
+        UUID selfId = self();
+        var inviteSenders = INVITES.keySet().stream().filter(id -> invitedBy(id, now)).collect(java.util.stream.Collectors.toSet());
+        peers = orderedPlayers(List.copyOf(PLAYERS.values()), MEMBERS, inviteSenders, selfId);
+        var players = new ArrayList<Peer>(peers.size() + 1);
+        var local = PLAYERS.get(selfId);
+        if (local != null) players.add(local);
+        players.addAll(peers);
+        roster = List.copyOf(players);
+    }
+
+    static List<Peer> orderedPlayers(List<Peer> players, Set<UUID> members, Set<UUID> inviteSenders, UUID self) {
         return players.stream().filter(player -> !player.id().equals(self))
                 .sorted(java.util.Comparator.comparing((Peer player) -> !members.contains(player.id()))
+                        .thenComparing(player -> !inviteSenders.contains(player.id()))
                         .thenComparing(Peer::name, String.CASE_INSENSITIVE_ORDER).thenComparing(Peer::id)).toList();
     }
+
+    static boolean invitedBy(UUID player, long now) {
+        var invite = INVITES.get(player);
+        return invite != null && invite.expires() > now;
+    }
+
+    static boolean inviteSentTo(UUID player) { return OUTGOING.contains(player); }
 
     static boolean member(UUID player) { return MEMBERS.contains(player); }
     static boolean onPartySide(UUID player) { return member(player) || self().equals(player); }
@@ -430,18 +459,28 @@ final class ClientParty {
         graphics.pose().translate(0, slide, 0);
         SelectionText.centered(graphics, font, title, center, titleY, opacity | 0xf4f1e8);
         if (grouped()) {
+            var status = readiness(snapshot());
+            var ready = waitingSummary(status);
             var summary = Component.empty().append(spawnChoice().copy().withStyle(style -> style.withColor(0xf2cd83)))
-                    .append("  ·  ").append(text("your_kit", kitChoice(self()))).append("  ·  ").append(waitingSummary());
+                    .append("  ·  ").append(text("your_kit", kitChoice(self()))).append("  ·  ")
+                    .append(ready.copy().withStyle(style -> style.withInsertion(READY_TOOLTIP)));
             var lines = font.split(summary, Math.max(1, width - 24));
             int lineStep = font.lineHeight + 2;
             int lineCount = Math.min(2, lines.size());
-            for (int i = 0; i < lineCount; i++) {
-                SelectionText.centered(graphics, font, lines.get(i), width / 2, summaryY + i * lineStep, opacity | 0xcccccc);
-            }
             int screenY = summaryY + Math.round(slide);
-            if (lines.size() > lineCount && PLAYER_LIST.open() && visibility > 0.65F
-                    && mouseX >= 12 && mouseX < width - 12 && mouseY >= screenY && mouseY < screenY + lineCount * lineStep) {
-                summaryHovered = summary;
+            boolean canHover = PLAYER_LIST.open() && visibility > 0.65F;
+            for (int i = 0; i < lineCount; i++) {
+                var line = lines.get(i);
+                int lineWidth = font.width(line);
+                int x = width / 2 - lineWidth / 2;
+                int y = i * lineStep;
+                SelectionText.draw(graphics, font, line, x, summaryY + y, opacity | 0xcccccc);
+                if (canHover && mouseX >= x && mouseX < x + lineWidth && mouseY >= screenY + y && mouseY < screenY + y + font.lineHeight) {
+                    var style = font.getSplitter().componentStyleAtWidth(line, mouseX - x);
+                    if (style != null && READY_TOOLTIP.equals(style.getInsertion()) && !status.waiting().isEmpty()) {
+                        summaryTooltip = readinessTooltip(status, ready);
+                    } else if (lines.size() > lineCount) summaryTooltip = List.of(summary);
+                }
             }
             int buttonWidth = Math.min(width, font.width(text("leave")) + 12);
             leave = control("leave", (width - buttonWidth) / 2, screenY + lineCount * lineStep + 3, buttonWidth, 16,
@@ -492,7 +531,7 @@ final class ClientParty {
         var minecraft = Minecraft.getInstance();
         long now = Util.getMillis();
         CONTROLS.clear();
-        summaryHovered = null;
+        summaryTooltip = List.of();
         leave = null;
         graphics.flush();
         graphics.pose().pushPose();
@@ -546,8 +585,8 @@ final class ClientParty {
         } else if (leave != null && leave.isHoveredOrFocused()) {
             graphics.renderTooltip(minecraft.font, text(follower() ? "leave_hint" : "leave_leader_hint"),
                     leave.isFocused() ? leave.getX() : mouseX, leave.isFocused() ? leave.getY() : mouseY);
-        } else if (summaryHovered != null) {
-            graphics.renderTooltip(minecraft.font, summaryHovered, mouseX, mouseY);
+        } else if (!summaryTooltip.isEmpty()) {
+            graphics.renderComponentTooltip(minecraft.font, summaryTooltip, mouseX, mouseY);
         } else if (PLAYER_LIST.overEmptySlot(mouseX, mouseY)) {
             graphics.renderTooltip(minecraft.font, text("empty_slot").copy().withStyle(ChatFormatting.GRAY), mouseX, mouseY);
         } else if (hovered != null) {
@@ -577,10 +616,11 @@ final class ClientParty {
     }
 
     private static void respond(UUID id, boolean accept) {
-        var invite = INVITES.get(id);
-        if (invite == null || invite.expires() <= Util.getMillis()) return;
+        long now = Util.getMillis();
+        if (!invitedBy(id, now)) return;
         action(accept ? HeritageNetwork.PartyAction.ACCEPT : HeritageNetwork.PartyAction.DECLINE, id, "");
         INVITES.remove(id);
+        updateRoster(now);
         MENU.clear();
         menuPlayer = null;
     }
@@ -710,9 +750,8 @@ final class ClientParty {
             MENU.clear();
             return;
         }
-        var invitation = INVITES.get(player.id());
-        boolean incoming = invitation != null && invitation.expires() > Util.getMillis();
-        boolean outgoing = OUTGOING.contains(player.id());
+        boolean incoming = invitedBy(player.id(), Util.getMillis());
+        boolean outgoing = inviteSentTo(player.id());
         var self = PLAYERS.get(self());
         boolean available = self != null && self.stage() == 0 && !follower() && spawn.isEmpty() && player.stage() == 0
                 && !MEMBERS.contains(player.id()) && MEMBERS.size() < HeritageNetwork.MAX_PARTY_SIZE && !outgoing && player.available()

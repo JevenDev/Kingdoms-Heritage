@@ -21,6 +21,8 @@ final class PartyPlayerList {
     private static final ResourceLocation TAB = texture("tab_button");
     private static final ResourceLocation SELECTED = texture("tab_button_selected");
     private static final ResourceLocation EMPTY_SLOT = texture("empty_slot");
+    private static final ResourceLocation SEND_REQUEST = texture("send_request");
+    private static final ResourceLocation INVITED = texture("invited");
     private final PartyListBlur blur = new PartyListBlur();
     private final List<Cell> cells = new ArrayList<>();
     private final List<EmptySlot> emptySlots = new ArrayList<>();
@@ -283,7 +285,19 @@ final class PartyPlayerList {
         }
     }
 
-    private void renderCell(GuiGraphics graphics, Cell cell, float visibility, int opacity) {
+    private static void renderInviteBadge(GuiGraphics graphics, UUID player, int right, int bottom, float visibility, long now) {
+        boolean incoming = ClientParty.invitedBy(player, now);
+        if (!incoming && !ClientParty.inviteSentTo(player)) return;
+        int size = incoming ? 7 : 15;
+        graphics.setColor(1, 1, 1, visibility);
+        RenderSystem.enableBlend();
+        RenderSystem.defaultBlendFunc();
+        graphics.blit(incoming ? INVITED : SEND_REQUEST, right - size / 2, bottom - size / 2, 0, 0, size, size, size, size);
+        RenderSystem.disableBlend();
+        graphics.setColor(1, 1, 1, 1);
+    }
+
+    private void renderCell(GuiGraphics graphics, Cell cell, float visibility, int opacity, long now) {
         int x = cell.x;
         int y = cell.y;
         boolean loading = cell.player.stage() == HeritageParty.Stage.LOADING.ordinal();
@@ -295,6 +309,7 @@ final class PartyPlayerList {
         }
         if (cell.player.id().equals(selected()))
             graphics.renderOutline(x - 2, y - 2, PORTRAIT_SIZE + 4, PORTRAIT_SIZE + 4, opacity | 0xffffff);
+        if (!cell.party) renderInviteBadge(graphics, cell.player.id(), x + PORTRAIT_SIZE, y + PORTRAIT_SIZE, visibility, now);
     }
 
     void render(GuiGraphics graphics, int width, int height, List<ClientParty.Peer> players, int mouseX, int mouseY) {
@@ -366,7 +381,7 @@ final class PartyPlayerList {
         }
         RenderSystem.disableBlend();
         graphics.setColor(1, 1, 1, 1);
-        for (var cell : cells) renderCell(graphics, cell, visibility, opacity);
+        for (var cell : cells) renderCell(graphics, cell, visibility, opacity, now);
         int pageY = gridY + rows * GRID_STEP + 2;
         boolean paged = pagePlayers.size() > capacity;
         if (paged) SelectionText.centered(graphics, font,
