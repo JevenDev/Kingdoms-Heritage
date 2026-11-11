@@ -37,6 +37,8 @@ final class ClientParty {
         float y(long now) { return Mth.lerp(Mth.clamp((now - received) / 100F, 0, 1), fromY, y); }
     }
     private static final String READY_TOOLTIP = "kingdomsheritage:party_ready_count";
+    static final String WAITING_SPINNER_STYLE = "kingdomsheritage:waiting_spinner";
+    static final String WAITING_SPINNER_SPACE = "\u00a0\u00a0\u00a0";
     private static final ResourceLocation CROSSHAIR = ResourceLocation.fromNamespaceAndPath("kingdomsheritage", "textures/gui/party_crosshair.png");
     private static final ToucanPlayerSkinResolver SKINS = new ToucanPlayerSkinResolver(128, 30000);
     private static final Map<UUID, Peer> PLAYERS = new LinkedHashMap<>();
@@ -318,8 +320,11 @@ final class ClientParty {
     static Component waitingNames() {
         var names = Component.empty();
         for (var player : readiness(snapshot()).waiting()) {
-            if (!names.getString().isEmpty()) names.append(", ");
-            names.append(text("waiting_member", player.name(), text("stage_" + player.stage().ordinal())));
+            if (!names.getSiblings().isEmpty()) names.append(", ");
+            if (player.stage() == HeritageParty.Stage.LOADING) {
+                names.append(player.name()).append(Component.literal(WAITING_SPINNER_SPACE)
+                        .withStyle(style -> style.withInsertion(WAITING_SPINNER_STYLE)));
+            } else names.append(text("waiting_member", player.name(), text("stage_" + player.stage().ordinal())));
         }
         return text("waiting_for", names);
     }
@@ -683,7 +688,7 @@ final class ClientParty {
 
     private static void openMenu(UUID id, int x, int y, boolean keyboard) {
         var player = PLAYERS.get(id);
-        if (player == null) return;
+        if (player == null || onPartySide(id)) return;
         closeMenu();
         menuPlayer = id;
         menuX = x;
@@ -713,8 +718,8 @@ final class ClientParty {
     }
 
     private static List<Component> playerTooltip(Peer player) {
-        var lines = new ArrayList<>(playerInfo(player));
-        lines.add(text(onPartySide(player.id()) ? "details" : "more").copy().withStyle(ChatFormatting.GRAY, ChatFormatting.ITALIC));
+        var lines = playerInfo(player);
+        if (!onPartySide(player.id())) lines.add(text("more").copy().withStyle(ChatFormatting.GRAY, ChatFormatting.ITALIC));
         return lines;
     }
 
@@ -741,13 +746,8 @@ final class ClientParty {
 
     private static void refreshMenu() {
         var player = PLAYERS.get(menuPlayer);
-        if (player == null) {
-            MENU.clear();
-            menuPlayer = null;
-            return;
-        }
-        if (onPartySide(player.id())) {
-            MENU.clear();
+        if (player == null || onPartySide(player.id())) {
+            closeMenu();
             return;
         }
         boolean incoming = invitedBy(player.id(), Util.getMillis());

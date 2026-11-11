@@ -17,6 +17,10 @@ final class LoadingIndicator {
         render(graphics, centerX, centerY, now, opacity, 4, 1);
     }
 
+    static void renderInline(GuiGraphics graphics, int centerX, int centerY, long now, int opacity) {
+        render(graphics, centerX, centerY, now, opacity, 2, 1);
+    }
+
     private static void render(GuiGraphics graphics, int centerX, int centerY, long now, int opacity, int size, int gap) {
         if (opacity < 4) return;
         float head = (now % 960) / 120F;

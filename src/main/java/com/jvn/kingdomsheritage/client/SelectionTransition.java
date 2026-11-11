@@ -3,6 +3,7 @@ package com.jvn.kingdomsheritage.client;
 import com.google.gson.JsonObject;
 import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.ConnectScreen;
@@ -15,8 +16,11 @@ import net.minecraft.client.gui.screens.ReceivingLevelScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.Style;
 import net.minecraft.network.chat.contents.TranslatableContents;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.FormattedCharSequence;
+import net.minecraft.util.FormattedCharSink;
 import net.minecraft.util.Mth;
 import net.neoforged.bus.api.EventPriority;
 import net.neoforged.bus.api.ICancellableEvent;
@@ -176,8 +180,7 @@ final class SelectionTransition {
             var font = Minecraft.getInstance().font;
             var lines = font.split(ClientParty.waitingNames(), Math.max(1, graphics.guiWidth() - 40));
             for (int i = 0; i < Math.min(3, lines.size()); i++) {
-                SelectionText.centered(graphics, font, lines.get(i), graphics.guiWidth() / 2,
-                        graphics.guiHeight() / 2 + 32 + i * font.lineHeight, alpha << 24 | 0xcccccc);
+                renderWaitingLine(graphics, font, lines.get(i), graphics.guiHeight() / 2 + 32 + i * font.lineHeight, now, alpha);
             }
         }
         if (waiting()) {
@@ -192,6 +195,28 @@ final class SelectionTransition {
         }
         graphics.flush();
         graphics.pose().popPose();
+    }
+
+    private static void renderWaitingLine(GuiGraphics graphics, Font font, FormattedCharSequence line, int y, long now, int alpha) {
+        int x = graphics.guiWidth() / 2 - font.width(line) / 2;
+        SelectionText.draw(graphics, font, line, x, y, alpha << 24 | 0xcccccc);
+        int spinnerOffset = font.width(ClientParty.WAITING_SPINNER_SPACE) / 2;
+        var splitter = font.getSplitter();
+        line.accept(new FormattedCharSink() {
+            private float advance;
+            private boolean insideSpinner;
+
+            @Override
+            public boolean accept(int index, Style style, int codePoint) {
+                boolean spinner = ClientParty.WAITING_SPINNER_STYLE.equals(style.getInsertion());
+                if (spinner && !insideSpinner) {
+                    LoadingIndicator.renderInline(graphics, x + Math.round(advance) + spinnerOffset, y + font.lineHeight / 2, now, alpha);
+                }
+                insideSpinner = spinner;
+                advance += splitter.stringWidth(FormattedCharSequence.codepoint(codePoint, style));
+                return true;
+            }
+        });
     }
 
     private static void screen(ScreenEvent.Render.Post event) {

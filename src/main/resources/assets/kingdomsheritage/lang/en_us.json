@@ -124,7 +124,6 @@
   "screen.kingdomsheritage.party_join": "Join",
   "screen.kingdomsheritage.party_decline": "Decline",
   "screen.kingdomsheritage.party_more": "Click for party options",
-  "screen.kingdomsheritage.party_details": "Click to pin player details",
   "screen.kingdomsheritage.party_player_count": "%s players in the select screen",
   "screen.kingdomsheritage.party_player_count_single": "%s player in the select screen",
   "screen.kingdomsheritage.party_list_hint": "Click or press %s to view players",
