@@ -60,15 +60,11 @@ final class SelectionFinalization {
             for (var member : members) {
                 var player = member.player();
                 var state = SelectionManager.state(player);
-                var original = state.copy();
-                rollback.accept(() -> restore(state, original));
-                state.putBoolean("complete", true);
-                state.putBoolean("pending", false);
+                markComplete(state, rollback);
                 state.putString("spawn_choice", member.spawn().id().toString());
                 state.putString("kit_choice", member.kit().id().toString());
                 state.putString("homeland_dimension", destination.level().dimension().location().toString());
                 state.putLong("homeland", destination.position().asLong());
-                state.remove("reset");
                 if (HeritageConfig.HOMELAND_RESPAWN.get()) {
                     var dimension = player.getRespawnDimension();
                     var position = player.getRespawnPosition();
@@ -77,16 +73,29 @@ final class SelectionFinalization {
                     rollback.accept(() -> player.setRespawnPosition(dimension, position, angle, forced, false));
                     player.setRespawnPosition(destination.level().dimension(), destination.position(), state.getFloat("yaw"), true, false);
                 }
-                var mode = GameType.byId(state.getInt("mode"));
-                if (player.gameMode.getGameModeForPlayer() != mode && !player.setGameMode(mode)) {
-                    throw new HeritageException("restore_mode", "The original game mode could not be restored");
-                }
-                player.getAbilities().loadSaveData(state);
-                player.onUpdateAbilities();
-                player.setNoGravity(state.getBoolean("no_gravity"));
+                restorePlayer(player, state);
             }
         });
         for (var member : members) SelectionSteps.complete(member.player(), member.decisions());
+    }
+
+    static void markComplete(CompoundTag state, Consumer<Runnable> rollback) {
+        var original = state.copy();
+        rollback.accept(() -> restore(state, original));
+        state.putBoolean("complete", true);
+        state.remove("reset");
+        // the game mode guard blocks changes while selection is pending
+        state.putBoolean("pending", false);
+    }
+
+    static void restorePlayer(ServerPlayer player, CompoundTag state) {
+        var mode = GameType.byId(state.getInt("mode"));
+        if (player.gameMode.getGameModeForPlayer() != mode && !player.setGameMode(mode)) {
+            throw new HeritageException("restore_mode", "The original game mode could not be restored");
+        }
+        player.getAbilities().loadSaveData(state);
+        player.onUpdateAbilities();
+        player.setNoGravity(state.getBoolean("no_gravity"));
     }
 
     static void run(Consumer<Consumer<Runnable>> changes) {
