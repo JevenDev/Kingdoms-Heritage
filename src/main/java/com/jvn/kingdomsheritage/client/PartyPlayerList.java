@@ -29,6 +29,8 @@ final class PartyPlayerList {
     private static final ResourceLocation EMPTY_SLOT = texture("empty_slot");
     private static final ResourceLocation SEND_REQUEST = texture("send_request");
     private static final ResourceLocation INVITED = texture("invited");
+    private static final ResourceLocation SEARCH = texture("search");
+    private static final ResourceLocation READY = texture("ready");
     private final PartyListBlur blur = new PartyListBlur();
     private final List<Cell> cells = new ArrayList<>();
     private final List<EmptySlot> emptySlots = new ArrayList<>();
@@ -367,18 +369,29 @@ final class PartyPlayerList {
             graphics.renderTooltip(font, hovered.getMessage(), mouseX, mouseY);
     }
 
-    private static void renderProgress(GuiGraphics graphics, ClientParty.Peer player, int x, int y, int opacity) {
-        graphics.fill(x, y, x + 11, y + 11, opacity);
-        if (player.stage() == 4) {
-            graphics.fill(x + 2, y + 5, x + 4, y + 7, opacity | 0x55ff55);
-            graphics.fill(x + 4, y + 7, x + 6, y + 9, opacity | 0x55ff55);
-            graphics.fill(x + 6, y + 5, x + 8, y + 7, opacity | 0x55ff55);
-            graphics.fill(x + 8, y + 3, x + 10, y + 5, opacity | 0x55ff55);
-        } else {
+    private static void renderProgress(GuiGraphics graphics, ClientParty.Peer player, int right, int bottom,
+                                       float visibility, int opacity) {
+        boolean choosingSpawn = player.stage() == HeritageParty.Stage.SPAWN.ordinal();
+        boolean choosingKit = player.stage() == HeritageParty.Stage.KIT.ordinal();
+        if (choosingSpawn || choosingKit) {
+            renderCornerBadge(graphics, SEARCH, 12, 12, right, bottom, visibility);
             var font = Minecraft.getInstance().font;
-            SelectionText.centered(graphics, font, Component.translatable("screen.kingdomsheritage.party_stage_short_" + player.stage()),
-                    x + 6, y + 2, opacity | (player.stage() == 1 ? 0x55ffff : 0xffff55));
+            var letter = Component.translatable("screen.kingdomsheritage.party_stage_short_" + player.stage());
+            SelectionText.centered(graphics, font, letter, right + 3, bottom - 1,
+                    opacity | (choosingKit ? 0x55ffff : 0xffff55));
+            return;
         }
+
+        if (player.stage() == HeritageParty.Stage.READY.ordinal()) {
+            renderCornerBadge(graphics, READY, 9, 8, right, bottom, visibility);
+            return;
+        }
+
+        int x = right - 12, y = bottom - 12;
+        graphics.fill(x, y, x + 11, y + 11, opacity);
+        var font = Minecraft.getInstance().font;
+        SelectionText.centered(graphics, font, Component.translatable("screen.kingdomsheritage.party_stage_short_" + player.stage()),
+                x + 6, y + 2, opacity | 0xffff55);
     }
 
     private static InviteBadge inviteBadge(UUID player, long now) {
@@ -386,12 +399,12 @@ final class PartyPlayerList {
         return ClientParty.inviteSentTo(player) ? InviteBadge.OUTGOING : null;
     }
 
-    private static void renderInviteBadge(GuiGraphics graphics, InviteBadge badge, int right, int bottom, float visibility) {
-        int size = badge.size;
+    private static void renderCornerBadge(GuiGraphics graphics, ResourceLocation texture, int width, int height,
+                                          int right, int bottom, float visibility) {
         graphics.setColor(1, 1, 1, visibility);
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
-        graphics.blit(badge.texture, right - size / 2, bottom - size / 2, 0, 0, size, size, size, size);
+        graphics.blit(texture, right - width / 2, bottom - height / 2, 0, 0, width, height, width, height);
         RenderSystem.disableBlend();
         graphics.setColor(1, 1, 1, 1);
     }
@@ -399,13 +412,14 @@ final class PartyPlayerList {
     private void renderCell(GuiGraphics graphics, Cell cell, int x, int y, float visibility, int opacity, boolean present) {
         boolean loading = cell.player.stage() == HeritageParty.Stage.LOADING.ordinal();
         ClientParty.head(graphics, cell.player, x, y, PORTRAIT_SIZE, loading, visibility);
-        if (cell.party) {
+        if (cell.party)
             graphics.renderOutline(x - 1, y - 1, PORTRAIT_SIZE + 2, PORTRAIT_SIZE + 2, opacity | cell.color);
-            if (!loading) renderProgress(graphics, cell.player, x + PORTRAIT_SIZE - 12, y + PORTRAIT_SIZE - 12, opacity);
-        }
         if (present && cell.player.id().equals(selected()))
             graphics.renderOutline(x - 2, y - 2, PORTRAIT_SIZE + 4, PORTRAIT_SIZE + 4, opacity | 0xffffff);
-        if (cell.badge != null) renderInviteBadge(graphics, cell.badge, x + PORTRAIT_SIZE, y + PORTRAIT_SIZE, visibility);
+        int right = x + PORTRAIT_SIZE, bottom = y + PORTRAIT_SIZE;
+        if (cell.party && !loading) renderProgress(graphics, cell.player, right, bottom, visibility, opacity);
+        if (cell.badge != null)
+            renderCornerBadge(graphics, cell.badge.texture, cell.badge.size, cell.badge.size, right, bottom, visibility);
     }
 
     private SlotKey slotKey(Cell cell) {
