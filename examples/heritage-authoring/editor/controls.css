@@ -7,8 +7,8 @@
   font-size:15px;
   line-height:1.5;
 }
-:where(.intro-editor,.kit-editor,.assembler) :not(:is(h1,h2,h3,h4,h5,h6,:is(h1,h2,h3,h4,h5,h6) *,.mc-inventory,.mc-inventory *,.mc-drag-stack,.mc-drag-stack *,.item-choice)) { font-size:15px !important; }
-:is(#pack-workspace,#author-workspace,body > dialog) :is(button,.file-button,.handoff,.field-actions a,.library-edit):not(:where(.mc-inventory *,.item-choice,.content-search-result,.timeline-handle,.flow-hit,.pack-steps *,.location-sections [data-location-section-button],.author-steps *,.inventory-modes *,.location-list *,.location-summary > li > button,#author-entries *,#export-errors *)) {
+:where(.intro-editor,.kit-editor,.assembler) :not(:is(h1,h2,h3,h4,h5,h6,:is(h1,h2,h3,h4,h5,h6) *,.mc-inventory,.mc-inventory *,.mc-drag-stack,.mc-drag-stack *,.item-choice,.shop-tray,.shop-tray *)) { font-size:15px !important; }
+:is(#pack-workspace,#author-workspace,body > dialog) :is(button,.file-button,.handoff,.field-actions a,.library-edit):not(:where(.mc-inventory *,.shop-tray *,.item-choice,.content-search-result,.timeline-handle,.flow-hit,.pack-steps *,.location-sections [data-location-section-button],.author-steps *,.inventory-modes *,.location-list *,.location-summary > li > button,#author-entries *,#export-errors *)) {
   display:inline-flex;
   align-items:center;
   justify-content:center;
@@ -26,12 +26,12 @@
   white-space:nowrap;
   cursor:pointer;
 }
-:is(#pack-workspace,#author-workspace,body > dialog) :is(button,.file-button,.handoff,.field-actions a,.library-edit):not(:where(.mc-inventory *,.item-choice,.content-search-result,.timeline-handle,.flow-hit,.pack-steps *,.location-sections [data-location-section-button],.author-steps *,.inventory-modes *,.location-list *,.location-summary > li > button,#author-entries *,#export-errors *)):hover:not(:disabled):not([aria-disabled=true]) { background:var(--panel-2); color:var(--text); }
+:is(#pack-workspace,#author-workspace,body > dialog) :is(button,.file-button,.handoff,.field-actions a,.library-edit):not(:where(.mc-inventory *,.shop-tray *,.item-choice,.content-search-result,.timeline-handle,.flow-hit,.pack-steps *,.location-sections [data-location-section-button],.author-steps *,.inventory-modes *,.location-list *,.location-summary > li > button,#author-entries *,#export-errors *)):hover:not(:disabled):not([aria-disabled=true]) { background:var(--panel-2); color:var(--text); }
 :is(#pack-workspace,#author-workspace,body > dialog) button.primary { font-weight:600; }
 :is(#pack-workspace,#author-workspace,body > dialog) button.primary:not(:where(.document-file-actions *)):not(:disabled) { border-color:var(--text); background:var(--text); color:var(--site-background); }
 :is(#pack-workspace,#author-workspace,body > dialog) button.primary:not(:where(.document-file-actions *)):hover:not(:disabled) { background:var(--muted); border-color:var(--muted); color:var(--site-background); }
 :is(#pack-workspace,#author-workspace,body > dialog) :is(.quiet,.author-tools button) { background:transparent; color:var(--muted); }
-:is(#pack-workspace,#author-workspace,body > dialog) :is(button[aria-pressed=true],button:active:not(:disabled)):not(:where(.mc-inventory *,.item-choice,.flow-hit)) { background:var(--panel-3); }
+:is(#pack-workspace,#author-workspace,body > dialog) :is(button[aria-pressed=true],button:active:not(:disabled)):not(:where(.mc-inventory *,.shop-tray *,.item-choice,.flow-hit)) { background:var(--panel-3); }
 :is(#pack-workspace,#author-workspace,body > dialog) :is(button:disabled,[aria-disabled=true]):not(:where(.mc-inventory *,.item-choice,.flow-hit)) { opacity:.45; cursor:default; }
 :is(#pack-workspace,#author-workspace,body > dialog) :is(#delete-location,#delete-kit,#delete-intro,#delete-selected,#clear-slot,#clear-inventory,#delete-carried,#confirm-delete,#confirm-delete-location,#confirm-delete-draft,[data-remove-lore],[data-remove-destination],.equipment-entry button[aria-label="Remove equipment slot"],.slot-layout-row > button) { color:var(--ui-error); }
 :is(#pack-workspace,#author-workspace,body > dialog) :is(input,select):not(:where([type=checkbox],[type=range],[type=file],[type=color],.mc-inventory *)) {

@@ -27,6 +27,18 @@ const view=new V.Inventory($('inventory'),{
   onControl:control=>preview.control(control)
 });
 const preview=new HeritageEquipmentEditor({getDocument:()=>documentState,getSelection:()=>selected,onSelect:selectSlot,onUpdate:(saveHistory=false)=>{display();if(saveHistory)record();else scheduleSave();},notice,canSwitch:()=>{if(errorState?.target==='count'){notice('Fix the count before changing inventory views.');return false;}return true;}});
+const shopStage=()=>document.body.dataset.authorStage==='shop';
+const shopEditor=HeritageShopEditor.create({
+  getKit:()=>documentState,
+  commit,
+  lockedReason:()=>{
+    if(rawInvalid||errorState?.validation&&errorState.path?.[0]==='shop')return {invalid:true,message:'Fix the shop JSON before editing offers.'};
+    if(documentState.enabled===false)return {invalid:true,message:'Enable this kit in JSON to edit its shop.'};
+    if(carried)return {message:'Return the held item in Items & equipment before editing offers.'};
+    if(errorState&&!errorState.validation)return {message:'Fix the highlighted field before editing offers.'};
+    return null;
+  }
+});
 const fingerprint=stack=>JSON.stringify(stack?[K.normalize(stack.id),stack.components??{}]:null);
 const source=()=>$('kit-json').value,code=new HeritageJsonEditor($('kit-json'),$('line-count'));
 const snapshot=()=>({source:source(),document:K.copy(documentState),validDocument:K.copy(validDocument),cursor:K.copy(carried),selected,selection:[...selectedSlots],selectionMode,drafts:K.copy([...drafts]),loreSources:K.copy([...loreSources]),error:errorState?K.copy(errorState):null,preview:preview.snapshot()});
@@ -84,7 +96,7 @@ function activateKit(id) {
     const entry=workspace.get(id);M.cursor(entry.state.cursor);
     workspace.capture(snapshot(),history,historyIndex);workspace.select(id);
     history=entry.history;historyIndex=entry.historyIndex;history[historyIndex]=entry.state;
-    restore(0);notice('');saveDraft();draftOptions();
+    restore(0);shopEditor.reset();notice('');saveDraft();draftOptions();
   });
 }
 function openKit(raw=JSON.stringify({title:'My kit',items:[]},null,2)) {
@@ -162,7 +174,7 @@ function feedback() {
   $('deselect-slots').disabled=!selectedSlots.size&&!selectionMode;
   $('delete-selected').hidden=$('deselect-slots').hidden=!selectedSlots.size&&!selectionMode;
   $('clear-inventory').disabled=locked||!(documentState.items?.length||drafts.size||carried);
-  propertiesEditor?.setLocked(locked||!view.entry(selected)||!!carried);draftOptions();
+  propertiesEditor?.setLocked(locked||!view.entry(selected)||!!carried);if(shopStage())shopEditor.render();draftOptions();
 }
 function slotFields() {
   const stack=view.entry(selected)?.item,draft=drafts.get(selected);
@@ -388,6 +400,7 @@ function clearSlots(all=false) {
   }else deleteSlots(target);
 }
 function libraryClick(id,event={}) {
+  if(shopStage()){shopEditor.add(id);return;}
   attempt(()=>{
     if(!canEdit())return;
     if(carried&&event.middle){notice('Place or return the held stack before picking up another stack.');return;}
@@ -474,13 +487,15 @@ function equipment() {
 }
 function markSelectedItem() {
   activeItemButton?.setAttribute('aria-pressed','false');
-  const id=view.entry(selected)?.item.id;activeItemButton=id?itemButtons.get(K.normalize(id)):null;
+  const id=shopStage()?null:view.entry(selected)?.item.id;activeItemButton=id?itemButtons.get(K.normalize(id)):null;
   if(activeItemButton?.isConnected)activeItemButton.setAttribute('aria-pressed','true');
 }
 function browser() {
   V.hideTooltip();
   const terms=$('search-items').value.toLowerCase().trim().split(/\s+/).filter(Boolean),category=$('item-category').value;
-  const used=category==='used'&&new Set((Array.isArray(documentState.items)?documentState.items:[]).filter(entry=>entry?.item?.id).map(entry=>K.normalize(entry.item.id)));
+  const source=shopStage()?documentState.shop?.offers:documentState.items;
+  const used=category==='used'&&new Set((Array.isArray(source)?source:[]).filter(entry=>entry?.item?.id).map(entry=>K.normalize(entry.item.id)));
+  $('item-category').querySelector('[value=used]').textContent=shopStage()?'In this shop':'In this kit';
   const filtered=!terms.length&&category==='all'?searchIndex:searchIndex.filter(({item,search})=>terms.every(term=>search.includes(term))&&(category==='all'||category==='blocks'&&item.block||category==='items'&&!item.block||category==='armor'&&item.armor||category==='modded'&&item.loadIcon||used&&used.has(item.id)));
   const size=pageSize,total=Math.max(1,Math.ceil(filtered.length/size));pageCount=total;page=Math.max(0,Math.min(page,total-1));
   $('item-count').textContent=filtered.length.toLocaleString()+' item'+(filtered.length===1?'':'s');
@@ -501,8 +516,8 @@ function browser() {
   host.replaceChildren(...nodes);host.scrollTop=0;
   if(!nodes.length) {
     const empty=document.createElement('div');empty.className='item-empty';
-    const text=document.createElement('p');text.textContent=category==='used'?'No items in this kit match your search.':'No matching items.';
-    const button=document.createElement('button');button.type='button';button.textContent='Enter an item ID';button.addEventListener('click',()=>{$('item-id').focus();$('item-id').select();});empty.append(text,button);$('item-browser').append(empty);
+    const text=document.createElement('p');text.textContent=category==='used'?'No items in this '+(shopStage()?'shop':'kit')+' match your search.':'No matching items.';
+    const button=document.createElement('button');button.type='button';button.textContent='Enter an item ID';button.addEventListener('click',()=>{const field=$(shopStage()?'shop-item-id':'item-id');field.focus();field.select();});empty.append(text,button);$('item-browser').append(empty);
   }
   markSelectedItem();
 }
@@ -521,7 +536,7 @@ $('item-browser').addEventListener('wheel',event=>{
   wheelPageTime=performance.now();page=(page+Math.sign(event.deltaY)+pageCount)%pageCount;browser();
 },{passive:false});
 $('item-browser').addEventListener('click',event=>{
-  const button=event.target.closest('[data-item]');if(button&&!event.detail)libraryClick(button.dataset.item,event);
+  const button=event.target.closest('[data-item]');if(button&&(shopStage()||!event.detail))libraryClick(button.dataset.item,event);
 });
 let importingMods=false;
 async function importMods(files) {
@@ -565,13 +580,13 @@ library.addEventListener('drop',event=>{
   event.preventDefault();library.classList.remove('mod-drag-over');importMods([...event.dataTransfer.files]);
 });
 library.addEventListener('click',event=>{
-  if(!carried||event.shiftKey||event.target.closest('[data-item],input,select,textarea,button,a,summary,details'))return;
+  if(shopStage()||!carried||event.shiftKey||event.target.closest('[data-item],input,select,textarea,button,a,summary,details'))return;
   clearSlot(selected,true);
 });
 $('item-browser').addEventListener('contextmenu',event=>{if(event.target.closest('[data-item]'))event.preventDefault();});
 $('item-browser').addEventListener('auxclick',event=>{if(event.button===1&&event.target.closest('[data-item]'))event.preventDefault();});
 $('item-browser').addEventListener('pointerdown',event=>{
-  const button=event.target.closest('[data-item]');if(!button)return;
+  const button=event.target.closest('[data-item]');if(!button||shopStage())return;
   if(event.button===1){event.preventDefault();libraryClick(button.dataset.item,{middle:true});return;}
   V.dragStart(event,{item:{id:button.dataset.item}},destination=>place(button.dataset.item,destination),{buttons:[0,2],onTap:()=>libraryClick(button.dataset.item,{button:event.button===2?1:0,shiftKey:event.shiftKey,ctrlKey:event.ctrlKey,metaKey:event.metaKey})});
 });
@@ -579,7 +594,8 @@ for(const [id,name] of Object.entries({'json-tab':'braces','details-tab':'slider
 $('redo').querySelector('svg').style.transform='scaleX(-1)';
 for(let slot=0;slot<9;slot++){const option=document.createElement('option');option.value=slot;option.textContent='Hotbar '+(slot+1);$('selected-slot').append(option);}
 for(const sample of HeritageKitExamples){const option=document.createElement('option');option.value=sample.id;option.textContent=sample.kit.title;$('example').append(option);}
-function tab(which) {if(author)author.show(which==='json'?'json':'details');}
+const trailExample=document.createElement('option');trailExample.value='trail-kit';trailExample.textContent='Trail Kit (shop)';$('example').append(trailExample);
+function tab(which) {author?.show(which);}
 $('kit-json').addEventListener('input',()=>parse());
 $('ignore-stack-limits').addEventListener('change',()=>{
   if(rawInvalid||carried)return;
@@ -591,8 +607,8 @@ $('undo').addEventListener('click',()=>restore(-1));$('redo').addEventListener('
 document.addEventListener('keydown',event=>{
   if(document.querySelector('dialog[open]'))return;
   const modifier=event.ctrlKey||event.metaKey,field=event.target.closest('input,textarea,select,[contenteditable=true]'),slot=event.target.closest('.mc-slot');
-  if(modifier&&event.key.toLowerCase()==='f'){event.preventDefault();author?.show('inventory');$('search-items').focus();$('search-items').select();return;}
-  if(modifier&&!event.altKey&&['z','y'].includes(event.key.toLowerCase())&&(!field||field.closest('#lore-lines')||['kit-json','title','description','order','tags','count'].includes(field.id))){
+  if(modifier&&event.key.toLowerCase()==='f'){event.preventDefault();if(!shopStage())author?.show('inventory');$('search-items').focus();$('search-items').select();return;}
+  if(modifier&&!event.altKey&&['z','y'].includes(event.key.toLowerCase())&&(!field||field.closest('#lore-lines,#shop-panel')||['kit-json','title','description','order','tags','count'].includes(field.id))){
     event.preventDefault();restore(event.key.toLowerCase()==='y'||event.shiftKey?1:-1);return;
   }
   if(author?.current!=='inventory')return;
@@ -684,6 +700,8 @@ $('add-equipment').addEventListener('click',()=>{
   while(next.items.some(entry=>entry.inventory==='curios'&&entry.slot==='ring'&&entry.index===equipmentIndex))equipmentIndex++;
   next.items.push({inventory:'curios',slot:'ring',index:equipmentIndex,item:{id:'minecraft:compass'}});commit(next,'equipment');
 });
+$('shop-browse-items').addEventListener('click',()=>$('search-items').focus());
+$('shop-edit-offers').addEventListener('click',()=>$('shop-heading').focus());
 $('search-items').addEventListener('input',()=>{page=0;browser();});$('item-category').addEventListener('change',()=>{page=0;browser();});
 $('clear-search').addEventListener('click',()=>{$('search-items').value='';page=0;browser();$('search-items').focus();});
 $('previous').addEventListener('click',()=>{page--;browser();});$('next').addEventListener('click',()=>{page++;browser();});
@@ -699,7 +717,21 @@ $('apply-name').addEventListener('click',()=>attempt(()=>{
 },'item-name'));
 $('item-name').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();$('apply-name').click();}});
 $('new-kit').addEventListener('click',()=>{openKit();tab('details');$('title').focus();$('title').select();});
-$('example').addEventListener('change',()=>{const sample=HeritageKitExamples.find(sample=>sample.id===$('example').value);if(sample)openKit(JSON.stringify(sample.kit,null,2));$('example').value='';});
+$('example').addEventListener('change',async()=>{
+  const id=$('example').value;$('example').value='';
+  if(id==='trail-kit'){
+    $('example').disabled=true;
+    try{
+      const response=await fetch('templates/trail-kit.json');
+      if(!response.ok)throw new Error('Trail Kit could not load.');
+      openKit(await response.text());tab('shop');
+    }catch(error){notice(error.message);}
+    finally{$('example').disabled=false;}
+    return;
+  }
+  const sample=HeritageKitExamples.find(sample=>sample.id===id);
+  if(sample)openKit(JSON.stringify(sample.kit,null,2));
+});
 $('import').addEventListener('change',async()=>{
   const file=$('import').files[0];if(!file)return;
   try{openKit(await file.text());tab('json');notice(rawInvalid?'Fix the imported JSON to continue.':'Imported '+file.name+'.');}
@@ -754,7 +786,7 @@ if(linked!==null){
   window.history.replaceState(null,'',location.pathname+location.hash);
 }
 function authorIssue(){
-  if(rawInvalid)return {stage:'json',field:'kit-json',message:errorState?.message||'Fix the kit JSON before continuing.'};
+  if(rawInvalid||errorState?.validation&&errorState.path?.[0]==='shop')return {stage:'json',field:'kit-json',message:errorState?.message||'Fix the kit JSON before continuing.'};
   if(errorState){const property=errorState.path?.[0],details=['title','description','order','tags','selected_slot'];return {stage:details.includes(errorState.target)||details.includes(property)?'details':'inventory',field:errorState.target==='kit-json'?(details.includes(property)?property==='selected_slot'?'selected-slot':property:'item-id'):errorState.target,message:errorState.message};}
   if(carried)return {stage:'inventory',field:'return-carried',message:'Place or return the held item before using this kit.'};
   if(drafts.size)return {stage:'inventory',field:'go-to-draft',message:'Apply or revert the pending item edits before using this kit.'};
@@ -762,13 +794,13 @@ function authorIssue(){
   return null;
 }
 author=HeritageAuthoring.create({kind:'kit',active:()=>workspace.active,
-  stages:[{id:'details',label:'details',heading:'Name your kit',help:'Give players a clear name and description for this choice.'},{id:'inventory',label:'items & equipment',heading:'Build the starting inventory',help:'Choose items, place them in slots and adjust the selected item.'},{id:'review',label:'review',heading:'Review this kit',help:'Check the inventory, then use it in your pack or create another kit.'}],
-  entries:()=>[...workspace.entries].map(([id,entry])=>{const value=id===workspace.active?documentState:entry.state.document;return {id,name:typeof value.title==='string'?value.title:value.title_key||'Untitled kit',detail:(value.items?.length??0)+' item stacks'};}),
+  stages:[{id:'details',label:'details',heading:'Name your kit',help:'Give players a clear name and description for this choice.'},{id:'inventory',label:'items & equipment',heading:'Build the starting inventory',help:'Choose items, place them in slots and adjust the selected item.'},{id:'shop',label:'shop',heading:'Edit shop offers',help:'Set the budget and offers for this kit.'},{id:'review',label:'review',heading:'Review this kit',help:'Check the inventory, then use it in your pack or create another kit.'}],
+  entries:()=>[...workspace.entries].map(([id,entry])=>{const value=id===workspace.active?documentState:entry.state.document;return {id,name:typeof value.title==='string'?value.title:value.title_key||'Untitled kit',detail:Array.isArray(value.shop?.offers)?value.shop.offers.length+' shop offers':(value.items?.length??0)+' item stacks'};}),
   adopt:entry=>{workspace.entries.set(entry.id,{state:K.copy(entry.state),history:[K.copy(entry.state)],historyIndex:0});activateKit(entry.id);},
   select:activateKit,newEntry:()=>openKit(),issue:authorIssue,persist:()=>{saveDraft();return !saveBlocked&&!saveUnavailable;},
   prepare:()=>{if(rawInvalid||errorState||drafts.size||carried||saveBlocked)return false;saveDraft();return !saveBlocked&&!saveUnavailable;},
-  summary:()=>({title:typeof documentState.title==='string'?documentState.title:documentState.title_key||'Untitled kit',description:typeof documentState.description==='string'?documentState.description:'',lines:[(documentState.items?.length??0)+' item stacks',...(documentState.items??[]).map(entry=>(entry.item.count??1)+' × '+T.name(entry.item)), 'Starting slot: Hotbar '+((documentState.selected_slot??0)+1)]}),
-  stageChanged:()=>{code.syncScroll();requestAnimationFrame(fitBrowser);}
+  summary:()=>({title:typeof documentState.title==='string'?documentState.title:documentState.title_key||'Untitled kit',description:typeof documentState.description==='string'?documentState.description:'',lines:[...(Array.isArray(documentState.shop?.offers)?['Shop: '+documentState.shop.budget+' points, '+documentState.shop.offers.length+' offer'+(documentState.shop.offers.length===1?'':'s')]:[]),(documentState.items?.length??0)+' item stacks',...(documentState.items??[]).map(entry=>(entry.item.count??1)+' × '+T.name(entry.item)), 'Starting slot: Hotbar '+((documentState.selected_slot??0)+1)]}),
+  stageChanged:stage=>{if(stage==='shop')shopEditor.render();code.syncScroll();browser();requestAnimationFrame(fitBrowser);}
 });
 V.assets().then(()=>{
   display();
