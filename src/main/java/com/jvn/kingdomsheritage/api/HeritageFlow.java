@@ -77,6 +77,9 @@ public final class HeritageFlow {
         active = ScreenStep.sorted(REGISTRY.values().stream().map(Registration::step).filter(step -> !excluded.contains(step.id()))
                 .map(step -> step.order(orders.getOrDefault(step.id(), step.order()))).toList());
         disabled = Set.copyOf(excluded);
+        if (com.jvn.kingdomsheritage.data.CatalogPayload.size(manifest().toString()) > 64_000) {
+            throw new IllegalArgumentException("Heritage selection flow exceeds the 64000 byte manifest limit");
+        }
         running = true;
     }
 

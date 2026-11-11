@@ -402,13 +402,12 @@ final class KitShopScreen extends Screen {
             problem = HeritageException.component(error);
         }
         int aimX = mouseX, aimY = mouseY;
-        var shown = new ArrayList<ItemStack>(KitShop.MAX_PICKS);
         preview.render(() -> {
             InventoryScreen.renderEntityInInventoryFollowsMouse(graphics, inv + 26, top + 8, inv + 75, top + 78,
                     30, 0.0625F, aimX, aimY, selection.player());
-            for (int slot = 0; slot < KitShop.MAX_PICKS; slot++) shown.add(selection.player().getInventory().getItem(slot).copy());
             graphics.flush();
         });
+        var shown = IntStream.range(0, KitShop.MAX_PICKS).mapToObj(preview::item).toList();
         for (int slot = 0; slot < shown.size(); slot++) {
             int x = slotX(slot), y = slotY(slot);
             var stack = shown.get(slot);

@@ -1,15 +1,13 @@
 package com.jvn.kingdomsheritage.server;
 
-import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.jvn.kingdomsheritage.HeritageConfig;
 import com.jvn.kingdomsheritage.KingdomsHeritage;
 import com.jvn.kingdomsheritage.compat.EquipmentCompat;
+import com.jvn.kingdomsheritage.data.CatalogPayload;
 import com.jvn.kingdomsheritage.data.HeritageCatalog;
-import com.jvn.kingdomsheritage.data.KitDefinition;
 import com.jvn.kingdomsheritage.data.HeritageException;
 import com.jvn.kingdomsheritage.network.HeritageNetwork;
-import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -24,7 +22,6 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.stats.Stats;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.bus.api.ICancellableEvent;
@@ -42,24 +39,6 @@ import net.neoforged.neoforge.network.registration.NetworkRegistry;
 public final class SelectionManager {
     private record Preparation(ServerPlayer player, HeritageNetwork.Choose request, SpawnResolver.Search search, boolean review) {}
     private record Review(UUID token, Preparation preparation) {}
-    private record InventoryBackup(ServerPlayer player, List<ItemStack> items, int selected,
-                                   List<EquipmentCompat.Slot> slots, List<ItemStack> equipment) {
-        static InventoryBackup capture(ServerPlayer player) {
-            var inventory = player.getInventory();
-            var slots = EquipmentCompat.slots(player);
-            return new InventoryBackup(player, java.util.stream.IntStream.range(0, inventory.getContainerSize())
-                    .mapToObj(index -> inventory.getItem(index).copy()).toList(), inventory.selected,
-                    slots, slots.stream().map(slot -> slot.get().get().copy()).toList());
-        }
-
-        void restore() {
-            for (int index = 0; index < items.size(); index++) player.getInventory().setItem(index, items.get(index));
-            player.getInventory().selected = selected;
-            for (int index = 0; index < slots.size(); index++) slots.get(index).set().accept(equipment.get(index));
-            player.getInventory().setChanged();
-            player.inventoryMenu.sendAllDataToRemote();
-        }
-    }
     private static final Map<UUID, Preparation> PREPARATIONS = new LinkedHashMap<>();
     private static final Map<UUID, Review> REVIEWS = new HashMap<>();
     private static final String KEY = KingdomsHeritage.MOD_ID;
@@ -68,7 +47,7 @@ public final class SelectionManager {
 
     private SelectionManager() {}
 
-    private static CompoundTag state(Player player) {
+    static CompoundTag state(Player player) {
         CompoundTag persistent = player.getPersistentData();
         if (!persistent.contains(Player.PERSISTED_NBT_TAG)) persistent.put(Player.PERSISTED_NBT_TAG, new CompoundTag());
         CompoundTag retained = persistent.getCompound(Player.PERSISTED_NBT_TAG);
@@ -136,7 +115,7 @@ public final class SelectionManager {
         }
     }
 
-    private static void hold(ServerPlayer player) {
+    static void hold(ServerPlayer player) {
         var level = player.server.overworld();
         BlockPos spawn = level.getSharedSpawnPos();
         double y = level.getMaxBuildHeight() + 1000;
@@ -333,100 +312,59 @@ public final class SelectionManager {
                 return;
             }
             var members = SelectionParty.members(player);
-            var requests = new LinkedHashMap<ServerPlayer, HeritageNetwork.Choose>();
-            var loadouts = new LinkedHashMap<ServerPlayer, List<KitDefinition.StackEntry>>();
+            var deliveries = new java.util.ArrayList<SelectionFinalization.Member>();
             for (var member : members) {
                 if (SelectionDebug.isBot(member)) continue;
-                var request = SelectionParty.grouped(player) ? REVIEWS.get(member.getUUID()).preparation().request() : preparation.request();
-                if (!member.isAlive() || !pending(member) || request.revision() != HeritageCatalog.revision()) {
+                var review = REVIEWS.get(member.getUUID());
+                var request = SelectionParty.grouped(player) ? review == null ? null : review.preparation().request() : preparation.request();
+                if (request == null || !member.isAlive() || !pending(member) || request.revision() != HeritageCatalog.revision()
+                        || !SelectionParty.allows(member, request.spawn())) {
                     throw new HeritageException("party_changed", "The party changed. Please review your choices again");
                 }
                 SelectionSteps.requireComplete(member, request.spawn(), request.kit());
+                var spawn = HeritageCatalog.spawns().get(ResourceLocation.parse(request.spawn()));
                 var kit = HeritageCatalog.kits().get(ResourceLocation.parse(request.kit()));
-                var stacks = kit.loadout(member, inventoryPolicy(member), request.offers());
-                if (inventoryPolicy(member) != HeritageConfig.InventoryPolicy.PRESERVE) EquipmentCompat.validate(member, stacks);
-                requests.put(member, request);
-                loadouts.put(member, stacks);
+                var policy = inventoryPolicy(member);
+                deliveries.add(SelectionFinalization.plan(member, spawn, kit, kit.loadout(member, policy, request.offers()),
+                        policy, preparation.search()));
             }
             KingdomsHeritage.LOGGER.debug("Prepared Heritage location {} in {} ms of server work",
                     preparation.request().spawn(), preparation.search().workMillis());
-            try {
-                for (var member : requests.keySet()) teleport(member, destination, state(member).getFloat("yaw"));
-            } catch (IllegalArgumentException error) {
-                requests.keySet().forEach(SelectionManager::hold);
-                throw error;
-            }
-            var backups = requests.size() > 1 ? requests.keySet().stream().map(InventoryBackup::capture).toList() : List.<InventoryBackup>of();
-            var intros = new LinkedHashMap<ServerPlayer, JsonObject>();
-            try {
-                for (var entry : requests.entrySet()) {
-                    var member = entry.getKey();
-                    var kit = HeritageCatalog.kits().get(ResourceLocation.parse(entry.getValue().kit()));
-                    var intro = SpawnIntro.prepare(preparation.search().definition(), destination);
-                    var loadout = loadouts.get(member);
-                    intro.add("dialogue_context", DialogueContexts.create(member,
-                            HeritageCatalog.spawns().get(ResourceLocation.parse(entry.getValue().spawn())), kit, inventoryPolicy(member),
-                            !loadout.isEmpty()).json());
-                    intros.put(member, intro);
-                    KitService.apply(member, kit, loadout, inventoryPolicy(member));
-                }
-            } catch (RuntimeException error) {
-                backups.forEach(InventoryBackup::restore);
-                requests.keySet().forEach(SelectionManager::hold);
-                throw error;
-            }
-            for (var entry : requests.entrySet()) SelectionSteps.capture(entry.getKey(), entry.getValue().spawn(), entry.getValue().kit());
-            for (var entry : requests.entrySet()) apply(entry.getKey(), entry.getValue(), preparation.search(), intros.get(entry.getKey()));
+            for (var delivery : deliveries) sendProgress(delivery.player(), "applying");
+            SelectionFinalization.apply(deliveries, destination);
             SelectionParty.finished(player);
             for (var member : members) {
                 if (SelectionDebug.isBot(member)) state(member).putBoolean("pending", false);
                 REVIEWS.remove(member.getUUID());
                 SelectionParty.remove(member);
             }
-            for (var member : members) SelectionLifecycle.complete(member);
-        } catch (IllegalArgumentException error) {
-            if (SelectionParty.grouped(player)) {
-                SelectionParty.refresh(player);
-                for (var member : SelectionParty.members(player)) {
-                    if (!SelectionDebug.isBot(member)) sendChoices(member, HeritageException.component(error));
+            for (var delivery : deliveries) SelectionFinalization.arrive(delivery, preparation.search().definition());
+            for (var member : members) {
+                try {
+                    SelectionLifecycle.complete(member);
+                } catch (RuntimeException error) {
+                    KingdomsHeritage.LOGGER.error("A Heritage completion listener failed for {}", member.getGameProfile().getName(), error);
                 }
-            } else {
-                hold(player);
-                sendChoices(player, HeritageException.component(error));
+            }
+        } catch (RuntimeException error) {
+            if (!(error instanceof IllegalArgumentException) || error.getSuppressed().length > 0) {
+                KingdomsHeritage.LOGGER.error("Heritage could not prepare a selection for {}", player.getGameProfile().getName(), error);
+            }
+            var message = error instanceof IllegalArgumentException invalid ? HeritageException.component(invalid)
+                    : Component.translatableWithFallback("error.kingdomsheritage.preparation_failed",
+                            "The selection could not be prepared. Try again or contact an administrator.");
+            try {
+                if (SelectionParty.grouped(player)) SelectionParty.refresh(player);
+                else cancelPreparation(player.getUUID());
+                for (var member : SelectionParty.members(player)) {
+                    if (!SelectionDebug.isBot(member) && pending(member)) sendChoices(member, message);
+                }
+            } catch (RuntimeException recovery) {
+                KingdomsHeritage.LOGGER.error("Could not refresh Heritage selection after a failure", recovery);
             }
         } finally {
             if (!PREPARATIONS.containsKey(player.getUUID()) && !REVIEWS.containsKey(player.getUUID())) SelectionParty.release(preparation.search());
         }
-    }
-
-    private static void apply(ServerPlayer player, HeritageNetwork.Choose request, SpawnResolver.Search search, JsonObject intro) {
-        var spawn = HeritageCatalog.spawns().get(ResourceLocation.parse(request.spawn()));
-        var kit = HeritageCatalog.kits().get(ResourceLocation.parse(request.kit()));
-        var destination = search.destination();
-        var arrival = search.definition();
-        sendProgress(player, "applying");
-        CompoundTag state = state(player);
-        state.putBoolean("complete", true);
-        state.putBoolean("pending", false);
-        state.putString("spawn_choice", spawn.id().toString());
-        state.putString("kit_choice", kit.id().toString());
-        state.putString("homeland_dimension", destination.level().dimension().location().toString());
-        state.putLong("homeland", destination.position().asLong());
-        if (HeritageConfig.HOMELAND_RESPAWN.get()) {
-            player.setRespawnPosition(destination.level().dimension(), destination.position(), state.getFloat("yaw"), true, false);
-        }
-        state.remove("reset");
-        player.setGameMode(GameType.byId(state.getInt("mode")));
-        player.getAbilities().loadSaveData(state);
-        player.onUpdateAbilities();
-        player.setNoGravity(state.getBoolean("no_gravity"));
-        player.closeContainer();
-        player.fallDistance = 0;
-        player.invulnerableTime = 100;
-        intro.addProperty("outcome", "completed");
-        intro.addProperty("session", SelectionLifecycle.state(player).sessionId().toString());
-        SpawnIntro.begin(player, arrival.intro(), intro);
-        player.inventoryMenu.sendAllDataToRemote();
     }
 
     static boolean busy(ServerPlayer player) {
@@ -445,7 +383,7 @@ public final class SelectionManager {
         if (review != null) SelectionParty.release(review.preparation().search());
     }
 
-    private static void teleport(ServerPlayer player, SpawnResolver.Destination destination, float yaw) {
+    static void teleport(ServerPlayer player, SpawnResolver.Destination destination, float yaw) {
         BlockPos position = destination.position();
         player.teleportTo(destination.level(), position.getX() + 0.5, position.getY(), position.getZ() + 0.5,
                 java.util.Set.of(), yaw, 0);
@@ -528,62 +466,35 @@ public final class SelectionManager {
         json.addProperty("error", error.getString());
         json.addProperty("error_component", Component.Serializer.toJson(error, player.registryAccess()));
         json.addProperty("inventory_policy", inventoryPolicy(player).name());
-        if (HeritageCatalog.guiScale() > 0) json.addProperty("gui_scale", HeritageCatalog.guiScale());
-        json.addProperty("kit_preview", HeritageCatalog.kitPreview().name().toLowerCase(java.util.Locale.ROOT));
-        JsonArray spawns = new JsonArray();
-        for (var spawn : HeritageCatalog.spawns().values()) {
-            JsonObject choice = new JsonObject();
-            choice.addProperty("id", spawn.id().toString());
-            choice.addProperty("title", spawn.title());
-            choice.addProperty("subtitle", spawn.subtitle());
-            choice.addProperty("outline", spawn.outline());
-            choice.addProperty("description", spawn.description());
-            choice.addProperty("image", spawn.image().toString());
-            choice.addProperty("title_key", spawn.titleKey());
-            choice.addProperty("subtitle_key", spawn.subtitleKey());
-            choice.addProperty("description_key", spawn.descriptionKey());
-            JsonArray allowed = new JsonArray();
-            HeritageCatalog.kits().values().stream().filter(spawn::allows).forEach(kit -> allowed.add(kit.id().toString()));
-            choice.add("kits", allowed);
-            spawns.add(choice);
-        }
-        json.add("spawns", spawns);
-        JsonArray kits = new JsonArray();
-        for (var kit : HeritageCatalog.kits().values()) {
-            JsonObject choice = new JsonObject();
-            choice.addProperty("id", kit.id().toString());
-            choice.addProperty("title", kit.title());
-            choice.addProperty("description", kit.description());
-            choice.addProperty("title_key", kit.titleKey());
-            choice.addProperty("description_key", kit.descriptionKey());
-            choice.addProperty("selected_slot", kit.selectedSlot());
-            JsonArray items = new JsonArray();
-            for (var entry : kit.entries()) {
-                JsonObject item = new JsonObject();
-                item.addProperty("inventory", entry.inventory());
-                item.addProperty("slot", entry.slot());
-                item.addProperty("index", entry.index());
-                item.addProperty("cosmetic", entry.cosmetic());
-                item.add("item", entry.item());
-                items.add(item);
-            }
-            choice.add("items", items);
-            if (kit.shop() != null) choice.add("shop", kit.shop().json());
+        HeritageCatalog.payload().entrySet().forEach(entry -> json.add(entry.getKey(), entry.getValue()));
+        var kits = json.getAsJsonArray("kits");
+        var policy = inventoryPolicy(player);
+        for (var element : kits) {
+            var choice = element.getAsJsonObject();
+            var kit = HeritageCatalog.kits().get(ResourceLocation.parse(choice.get("id").getAsString()));
             try {
                 var decoded = kit.decode(player.registryAccess());
                 kit.decodeOffers(player.registryAccess());
-                if (inventoryPolicy(player) != HeritageConfig.InventoryPolicy.PRESERVE) EquipmentCompat.validate(player, decoded);
+                if (policy != HeritageConfig.InventoryPolicy.PRESERVE) EquipmentCompat.validate(player, decoded);
                 choice.addProperty("problem", "");
             } catch (IllegalArgumentException failure) {
                 choice.addProperty("problem", failure.getMessage());
                 choice.addProperty("problem_component", Component.Serializer.toJson(
                         HeritageException.component(failure), player.registryAccess()));
             }
-            kits.add(choice);
         }
-        json.add("kits", kits);
         String payload = json.toString();
-        if (payload.getBytes(StandardCharsets.UTF_8).length > 900000) {
+        if (CatalogPayload.size(payload) > CatalogPayload.MAX_BYTES) {
+            json.remove("error_component");
+            if (!error.getString().isEmpty()) json.addProperty("error", "Selection could not be prepared. Check the server log.");
+            for (var element : kits) {
+                var kit = element.getAsJsonObject();
+                kit.remove("problem_component");
+                if (!kit.get("problem").getAsString().isEmpty()) kit.addProperty("problem", "Invalid kit or unavailable equipment.");
+            }
+            payload = json.toString();
+        }
+        if (CatalogPayload.size(payload) > CatalogPayload.MAX_BYTES) {
             player.connection.disconnect(Component.translatable("error.kingdomsheritage.catalog_limit"));
             return;
         }

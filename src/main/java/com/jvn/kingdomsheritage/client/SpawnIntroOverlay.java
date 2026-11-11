@@ -119,6 +119,10 @@ public final class SpawnIntroOverlay {
         if (age >= intro.textStartTicks()) blip(minecraft, visible(age - intro.textStartTicks()));
     }
 
+    static void cancelArrival() {
+        if (active() && !standalone) finish();
+    }
+
     private static void finish() {
         UUID finished = token;
         clear();

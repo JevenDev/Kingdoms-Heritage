@@ -97,7 +97,7 @@ public final class SelectionSteps {
         return step.partyPolicy().leaderDecides() || state.ready.contains(player.getUUID());
     }
 
-    private static void validateChoices(ServerPlayer player, String spawn, String kit) {
+    private static void validateChoices(String spawn, String kit) {
         var spawnId = ResourceLocation.tryParse(spawn);
         var definition = spawnId == null ? null : HeritageCatalog.spawns().get(spawnId);
         if (!spawn.isEmpty() && definition == null) throw new IllegalArgumentException("The chosen homeland is unavailable");
@@ -130,7 +130,7 @@ public final class SelectionSteps {
             return;
         }
         try {
-            validateChoices(player, request.spawn(), request.kit());
+            validateChoices(request.spawn(), request.kit());
             if (request.action() == HeritageNetwork.FlowAction.NAVIGATE) {
                 if (Objects.equals(session.spawn, request.spawn()) && Objects.equals(session.kit, request.kit())) return;
                 var from = session.spawn.equals(request.spawn()) ? ScreenStep.Placement.AFTER_KIT : ScreenStep.Placement.AFTER_SPAWN;
@@ -175,7 +175,7 @@ public final class SelectionSteps {
             var progress = PROGRESS.computeIfAbsent(scope, ignored -> new Progress());
             if (request.action() == HeritageNetwork.FlowAction.ENTER) {
                 session.entered = scope;
-                send(player, step, progress, scope, "");
+                send(player, step, progress);
                 return;
             }
             if (!scope.equals(session.entered)) throw new IllegalArgumentException("Reopen the Heritage screen before submitting");
@@ -212,7 +212,7 @@ public final class SelectionSteps {
             } else throw new IllegalArgumentException("Unknown Heritage flow action");
             for (var member : members(player)) {
                 var recipient = SESSIONS.get(member.getUUID());
-                if (recipient != null && scope.equals(recipient.entered)) send(member, step, progress, scope, "");
+                if (recipient != null && scope.equals(recipient.entered)) send(member, step, progress);
             }
         } catch (IllegalArgumentException error) {
             sendError(player, request.step(), error.getMessage() == null ? "Invalid Heritage decision" : error.getMessage());
@@ -240,7 +240,7 @@ public final class SelectionSteps {
         PacketDistributor.sendToPlayer(player, new HeritageNetwork.Catalog(message.toString()));
     }
 
-    private static void send(ServerPlayer player, ScreenStep step, Progress progress, Scope scope, String error) {
+    private static void send(ServerPlayer player, ScreenStep step, Progress progress) {
         var result = new JsonObject();
         result.addProperty("id", step.id().toString());
         result.addProperty("token", session(player).token.toString());
@@ -256,7 +256,7 @@ public final class SelectionSteps {
         result.addProperty("ready_count", members(player).stream().filter(member -> progress.ready.contains(member.getUUID())).count());
         result.addProperty("members", members(player).size());
         result.addProperty("complete", complete(player, step, progress));
-        result.addProperty("error", error);
+        result.addProperty("error", "");
         var message = new JsonObject();
         message.add("flow_update", result);
         PacketDistributor.sendToPlayer(player, new HeritageNetwork.Catalog(message.toString()));
@@ -270,14 +270,18 @@ public final class SelectionSteps {
         }
     }
 
-    static void capture(ServerPlayer player, String spawn, String kit) {
+    static Map<ResourceLocation, JsonObject> decisions(ServerPlayer player, String spawn, String kit) {
         var decisions = new LinkedHashMap<ResourceLocation, JsonObject>();
         for (var step : HeritageFlow.steps()) {
             var progress = PROGRESS.get(scope(player, step, spawn, kit));
             UUID owner = step.partyPolicy().leaderDecides() ? leader(player) : player.getUUID();
             if (complete(player, step, progress) && progress.values.containsKey(owner)) decisions.put(step.id(), progress.values.get(owner).deepCopy());
         }
-        COMPLETED.put(player.getUUID(), Map.copyOf(decisions));
+        return Map.copyOf(decisions);
+    }
+
+    static void complete(ServerPlayer player, Map<ResourceLocation, JsonObject> decisions) {
+        COMPLETED.put(player.getUUID(), decisions);
     }
 
     public static java.util.Optional<JsonObject> decision(ServerPlayer player, ResourceLocation id) {

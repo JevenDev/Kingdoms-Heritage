@@ -17,9 +17,9 @@ import net.neoforged.neoforge.event.AddReloadListenerEvent;
 public final class HeritageCatalog {
     record Snapshot(Map<ResourceLocation, SpawnDefinition> spawns,
                     Map<ResourceLocation, KitDefinition> kits, Map<ResourceLocation, IntroDefinition> cinematics,
-                    SelectionSettings selection) {}
+                    SelectionSettings selection, JsonObject payload) {}
     private static final ResourceLocation SELECTION = ResourceLocation.fromNamespaceAndPath("kingdomsheritage", "selection");
-    private static Snapshot current = new Snapshot(Map.of(), Map.of(), Map.of(), SelectionSettings.DEFAULT);
+    private static Snapshot current = new Snapshot(Map.of(), Map.of(), Map.of(), SelectionSettings.DEFAULT, new JsonObject());
     private static long revision;
 
     private HeritageCatalog() {}
@@ -30,6 +30,7 @@ public final class HeritageCatalog {
     public static long revision() { return revision; }
     public static int guiScale() { return current.selection.guiScale(); }
     public static SelectionSettings.KitPreview kitPreview() { return current.selection.kitPreview(); }
+    public static JsonObject payload() { return current.payload.deepCopy(); }
 
     public static void register(AddReloadListenerEvent event) {
         event.addListener(new Loader());
@@ -82,8 +83,10 @@ public final class HeritageCatalog {
         Map<ResourceLocation, KitDefinition> sortedKits = new LinkedHashMap<>();
         kits.values().stream().sorted(Comparator.comparingInt(KitDefinition::order).thenComparing(KitDefinition::id))
                 .forEach(value -> sortedKits.put(value.id(), value));
+        var payload = CatalogPayload.definitions(sortedSpawns, sortedKits, selection);
+        CatalogPayload.validate(payload);
         return new Snapshot(java.util.Collections.unmodifiableMap(sortedSpawns), java.util.Collections.unmodifiableMap(sortedKits),
-                java.util.Collections.unmodifiableMap(cinematics), selection);
+                java.util.Collections.unmodifiableMap(cinematics), selection, payload);
     }
 
     private static final class Loader extends SimplePreparableReloadListener<Snapshot> {

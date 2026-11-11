@@ -2,6 +2,7 @@ package com.jvn.kingdomsheritage.network;
 
 import com.jvn.kingdomsheritage.KingdomsHeritage;
 import com.jvn.kingdomsheritage.server.SelectionManager;
+import com.jvn.kingdomsheritage.data.CatalogPayload;
 import com.jvn.kingdomsheritage.data.KitShop;
 import java.util.ArrayList;
 import java.util.List;
@@ -24,8 +25,8 @@ public final class HeritageNetwork {
     public record Catalog(String json) implements CustomPacketPayload {
         public static final Type<Catalog> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(KingdomsHeritage.MOD_ID, "catalog"));
         public static final StreamCodec<RegistryFriendlyByteBuf, Catalog> CODEC = StreamCodec.of(
-                (buffer, value) -> buffer.writeUtf(value.json, 900000),
-                buffer -> new Catalog(buffer.readUtf(900000)));
+                (buffer, value) -> buffer.writeUtf(value.json, CatalogPayload.MAX_BYTES),
+                buffer -> new Catalog(buffer.readUtf(CatalogPayload.MAX_BYTES)));
         @Override public Type<Catalog> type() { return TYPE; }
     }
 

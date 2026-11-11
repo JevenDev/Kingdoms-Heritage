@@ -35,7 +35,7 @@ final class FinalConfirmationScreen extends Screen {
     private Button back;
     private Button disconnect;
 
-    FinalConfirmationScreen(JsonObject catalog, JsonObject review) {
+    FinalConfirmationScreen(JsonObject review) {
         super(Component.translatable("screen.kingdomsheritage.review_title"));
         token = UUID.fromString(review.get("token").getAsString());
         var narration = SelectionNarration.create(DialogueText.context(review));

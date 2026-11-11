@@ -30,6 +30,7 @@ import org.lwjgl.glfw.GLFW;
 
 final class SelectionTransition {
     private static final int DURATION_MILLIS = 300;
+    private static final int ARRIVAL_TIMEOUT_MILLIS = 15000;
     private enum Phase { IDLE, JOINING, FADING_OUT, WAITING, ARRIVING, REVEALING }
     private static Phase phase = Phase.IDLE;
     private static long started;
@@ -125,6 +126,11 @@ final class SelectionTransition {
             clear();
             return;
         }
+        if (phase == Phase.ARRIVING && Util.getMillis() - started >= ARRIVAL_TIMEOUT_MILLIS) {
+            SpawnIntroOverlay.cancelArrival();
+            endArrival();
+            return;
+        }
         if (phase == Phase.ARRIVING && terrainReady()) {
             if (minecraft.screen instanceof ArrivalScreen) minecraft.setScreen(null);
             if (!SpawnIntroOverlay.active()) reveal();
@@ -138,6 +144,15 @@ final class SelectionTransition {
             onBlack = null;
             action.run();
         }
+    }
+
+    static void endArrival() {
+        if (phase != Phase.ARRIVING) return;
+        var minecraft = Minecraft.getInstance();
+        if (minecraft.screen instanceof ArrivalScreen) minecraft.setScreen(null);
+        dimension = null;
+        destination = null;
+        reveal();
     }
 
     static void clear() {

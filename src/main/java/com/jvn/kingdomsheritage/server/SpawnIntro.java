@@ -143,7 +143,7 @@ public final class SpawnIntro {
         if (!player.isAlive() || !hold.dimension.equals(player.level().dimension().location())
                 || player.server.overworld().getGameTime() >= hold.deadline) {
             release(player);
-            PacketDistributor.sendToPlayer(player, new HeritageNetwork.Catalog(hold.standalone ? "{\"cinematic\":true}" : "{}"));
+            PacketDistributor.sendToPlayer(player, new HeritageNetwork.Catalog(hold.standalone ? "{\"cinematic\":true}" : "{\"end_arrival\":true}"));
             return;
         }
         if (!hold.locked) return;

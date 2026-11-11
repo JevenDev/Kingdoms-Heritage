@@ -139,7 +139,7 @@ public final class HeritageScreens {
                     for (int candidate = target; candidate <= index; candidate++) {
                         if (ClientSteps.managed(steps.get(candidate).id())) { invalidate = steps.get(candidate).id(); break; }
                     }
-                    ClientSteps.back(this, invalidate);
+                    ClientSteps.back(invalidate);
                 }
             });
         }

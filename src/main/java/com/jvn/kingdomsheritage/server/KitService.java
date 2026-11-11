@@ -4,15 +4,12 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.jvn.kingdomsheritage.compat.EquipmentCompat;
-import com.jvn.kingdomsheritage.HeritageConfig.InventoryPolicy;
-import com.jvn.kingdomsheritage.data.KitDefinition;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.serialization.JsonOps;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.StandardOpenOption;
-import java.util.List;
 import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.RegistryOps;
@@ -23,10 +20,6 @@ import net.neoforged.neoforge.event.RegisterCommandsEvent;
 
 public final class KitService {
     private KitService() {}
-
-    public static void apply(ServerPlayer player, KitDefinition kit, List<KitDefinition.StackEntry> entries, InventoryPolicy policy) {
-        com.jvn.kingdomsheritage.data.KitLoadout.apply(player, kit, entries, policy);
-    }
 
     public static void commands(RegisterCommandsEvent event) {
         event.getDispatcher().register(Commands.literal("heritage")

@@ -176,7 +176,7 @@ final class ClientSteps {
                 context.kitId().map(ResourceLocation::toString).orElse(""), value.toString(), version));
     }
 
-    static void back(HeritageScreens.Context context, ResourceLocation target) {
+    static void back(ResourceLocation target) {
         if (token != null && managed(target)) {
             invalidating = target;
             sendInvalidation();

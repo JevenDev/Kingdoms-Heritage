@@ -63,6 +63,9 @@ public final class ClientSelection {
                 Minecraft.getInstance().setScreen(null);
                 SpawnIntroOverlay.start(next);
             } else SpawnIntroOverlay.clear();
+        } else if (next.has("end_arrival")) {
+            SpawnIntroOverlay.cancelArrival();
+            SelectionTransition.endArrival();
         } else if (next.has("flow_update")) ClientSteps.receive(next.getAsJsonObject("flow_update"));
         else if (next.has("flow_reset")) ClientSteps.reset(next.getAsJsonObject("flow_reset"));
         else if (next.has("party")) ClientParty.receive(next.getAsJsonObject("party"));
@@ -96,7 +99,7 @@ public final class ClientSelection {
         }
         progress = "";
         if (kits != null) kits.close();
-        finalReview = new FinalConfirmationScreen(catalog, review);
+        finalReview = new FinalConfirmationScreen(review);
         minecraft.setScreen(finalReview);
         SelectionTransition.reveal();
     }
