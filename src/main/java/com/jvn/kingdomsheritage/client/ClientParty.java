@@ -865,26 +865,18 @@ final class ClientParty {
                 event.setCanceled(true);
                 return;
             }
-            int direction = key == org.lwjgl.glfw.GLFW.GLFW_KEY_LEFT ? -1
-                    : key == org.lwjgl.glfw.GLFW.GLFW_KEY_RIGHT ? 1
-                    : key == org.lwjgl.glfw.GLFW.GLFW_KEY_TAB
-                    ? (event.getModifiers() & org.lwjgl.glfw.GLFW.GLFW_MOD_SHIFT) != 0 ? -1 : 1 : 0;
-            if (direction != 0) {
-                if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_TAB && leave != null
-                        && (direction > 0 ? roster.getLast() : roster.getFirst()).id().equals(PLAYER_LIST.focused())) {
+            if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_TAB) {
+                int direction = (event.getModifiers() & org.lwjgl.glfw.GLFW.GLFW_MOD_SHIFT) != 0 ? -1 : 1;
+                if (leave != null && (direction > 0 ? roster.getLast() : roster.getFirst()).id().equals(PLAYER_LIST.focused())) {
                     leave.setFocused(true);
                     PLAYER_LIST.focusHeader();
                 } else PLAYER_LIST.moveFocus(roster, direction);
                 SelectionSounds.HOVER.play();
-            } else if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_UP || key == org.lwjgl.glfw.GLFW.GLFW_KEY_DOWN) {
-                int vertical = key == org.lwjgl.glfw.GLFW.GLFW_KEY_UP ? -1 : 1;
-                UUID focused = PLAYER_LIST.focused();
-                if (focused == null) PLAYER_LIST.moveFocus(roster, vertical);
-                else {
-                    var panel = onPartySide(focused) ? roster.stream().filter(player -> onPartySide(player.id())).toList() : otherPlayers();
-                    PLAYER_LIST.moveVertical(panel, vertical);
-                }
-                SelectionSounds.HOVER.play();
+            } else if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_UP || key == org.lwjgl.glfw.GLFW.GLFW_KEY_DOWN
+                    || key == org.lwjgl.glfw.GLFW.GLFW_KEY_LEFT || key == org.lwjgl.glfw.GLFW.GLFW_KEY_RIGHT) {
+                boolean vertical = key == org.lwjgl.glfw.GLFW.GLFW_KEY_UP || key == org.lwjgl.glfw.GLFW.GLFW_KEY_DOWN;
+                int direction = key == org.lwjgl.glfw.GLFW.GLFW_KEY_UP || key == org.lwjgl.glfw.GLFW.GLFW_KEY_LEFT ? -1 : 1;
+                if (PLAYER_LIST.moveDirectional(roster, direction, vertical)) SelectionSounds.HOVER.play();
             } else if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_PAGE_UP || key == org.lwjgl.glfw.GLFW.GLFW_KEY_PAGE_DOWN) {
                 PLAYER_LIST.changePage(otherPlayers(), key == org.lwjgl.glfw.GLFW.GLFW_KEY_PAGE_UP ? -1 : 1);
                 SelectionSounds.HOVER.play();

@@ -185,10 +185,40 @@ final class PartyPlayerList {
         if (otherIndex >= 0) page = otherIndex / capacity;
     }
 
-    void moveVertical(List<ClientParty.Peer> players, int direction) {
-        int index = indexOf(players, focused);
-        int next = index + direction * columns;
-        if (index >= 0 && next >= 0 && next < players.size()) moveFocus(players, next - index);
+    boolean moveDirectional(List<ClientParty.Peer> players, int direction, boolean vertical) {
+        UUID selected = keyboard ? focused : hovered != null ? hovered : focused;
+        if (selected == null) {
+            if (cells.isEmpty()) moveFocus(players, direction);
+            else focus((direction < 0 ? cells.getLast() : cells.getFirst()).player.id());
+            return focused != null;
+        }
+        Cell origin = null;
+        for (var cell : cells) {
+            if (cell.player.id().equals(selected)) {
+                origin = cell;
+                break;
+            }
+        }
+        if (origin == null) return false;
+
+        Cell target = null;
+        int nearestRow = Integer.MAX_VALUE;
+        int nearestColumn = Integer.MAX_VALUE;
+        for (var cell : cells) {
+            int dx = cell.x - origin.x;
+            int dy = cell.y - origin.y;
+            if (vertical ? cell.party != origin.party || dy * direction <= 0 : dx * direction <= 0) continue;
+            int rowDistance = Math.abs(dy);
+            int columnDistance = Math.abs(dx);
+            if (rowDistance < nearestRow || rowDistance == nearestRow && columnDistance < nearestColumn) {
+                target = cell;
+                nearestRow = rowDistance;
+                nearestColumn = columnDistance;
+            }
+        }
+        if (target == null) return false;
+        focus(target.player.id());
+        return true;
     }
 
     private static int indexOf(List<ClientParty.Peer> players, UUID id) {
