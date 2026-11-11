@@ -28,9 +28,11 @@ final class KitSelectionView {
     private long confirmationStarted;
     private float frameConfirmation;
     private boolean capturingPreview;
-    private boolean neighboringPreview;
+    private float previewLook = 1;
     private float previewYaw = Float.NaN;
     private float previewPitch = Float.NaN;
+    private float previewYawFrom;
+    private float previewPitchFrom;
     private float previewMouseX;
     private float previewMouseY;
     private float previewResponse;
@@ -91,15 +93,15 @@ final class KitSelectionView {
     static float previewAngle(net.minecraft.world.entity.LivingEntity entity, float angle, float center, boolean horizontal) {
         KitSelectionView view = current();
         if (view == null || entity != view.model.player() || !isInventory(Minecraft.getInstance().screen)) return angle;
-        if (view.neighboringPreview) return 0;
+        if (view.previewLook == 0) return 0;
         float mouse = horizontal ? view.previewMouseX : view.previewMouseY;
         float target = (float) Math.atan((center - mouse) / 40);
         if (view.capturingPreview) target *= 1 - view.frameConfirmation;
-        float previous = horizontal ? view.previewYaw : view.previewPitch;
+        float previous = horizontal ? view.previewYawFrom : view.previewPitchFrom;
         float current = Float.isNaN(previous) ? target : Mth.lerp(view.previewResponse, previous, target);
         if (horizontal) view.previewYaw = current;
         else view.previewPitch = current;
-        return current;
+        return current * view.previewLook;
     }
 
     void updateButtons() {
@@ -190,6 +192,8 @@ final class KitSelectionView {
         long now = net.minecraft.Util.getMillis();
         float delta = Mth.clamp((now - view.previewRenderedAt) / 1000F, 0, 0.05F);
         view.previewRenderedAt = now;
+        view.previewYawFrom = view.previewYaw;
+        view.previewPitchFrom = view.previewPitch;
         view.previewResponse = 1 - (float) Math.exp(-delta * 12);
         view.previewMouseX = event.getMouseX();
         view.previewMouseY = event.getMouseY();
@@ -214,10 +218,10 @@ final class KitSelectionView {
         return carousel.last(net.minecraft.Util.getMillis(), model.choices().size());
     }
 
-    private void renderPreview(Screen screen, GuiGraphics graphics, int index,
+    private void renderPreview(Screen screen, GuiGraphics graphics, int index, float look,
                                int mouseX, int mouseY, float partialTick, boolean tooltips) {
         capturingPreview = true;
-        neighboringPreview = index != model.index();
+        previewLook = look;
         try {
             model.renderNeighbor(index, () -> {
                 try {
@@ -234,7 +238,7 @@ final class KitSelectionView {
             });
         } finally {
             capturingPreview = false;
-            neighboringPreview = false;
+            previewLook = 1;
         }
     }
 
@@ -268,7 +272,7 @@ final class KitSelectionView {
         long now = net.minecraft.Util.getMillis();
         boolean moving = carousel.moving(now);
         carousel.render(graphics, bounds, screen.width, model, event.getMouseX(), event.getMouseY(), now, 1, true,
-                index -> renderPreview(screen, graphics, index,
+                (index, look) -> renderPreview(screen, graphics, index, look,
                         index == model.index() && !moving ? event.getMouseX() : -10000,
                         index == model.index() && !moving ? event.getMouseY() : -10000, event.getPartialTick(), true));
         for (Button button : List.of(previous, next, back, confirm, disconnect)) {
@@ -365,7 +369,7 @@ final class KitSelectionView {
         long now = net.minecraft.Util.getMillis();
         SelectionBackground.render(graphics, screen.width, screen.height);
         carousel.render(graphics, bounds, screen.width, model, -10000, -10000, now, 1 - progress, false,
-                index -> renderPreview(screen, graphics, index, -10000, -10000, event.getPartialTick(), true));
+                (index, look) -> renderPreview(screen, graphics, index, look, -10000, -10000, event.getPartialTick(), true));
         float targetScale = confirmationScale(screen);
         float scale = Mth.lerp(progress, 1, targetScale);
         float phase = (now % 20000L) / 20000F * Mth.TWO_PI;
@@ -375,7 +379,7 @@ final class KitSelectionView {
                 - Mth.sin(phase * 5) * 2.5F * progress * scale;
         float tilt = Mth.sin(phase * 4) * 0.35F * progress;
         confirmationPreview.render(graphics, bounds, x, y, scale, tilt,
-                () -> renderPreview(screen, graphics, model.index(), bounds.getX() + 50, bounds.getY() + 43, event.getPartialTick(), false));
+                () -> renderPreview(screen, graphics, model.index(), 1, bounds.getX() + 50, bounds.getY() + 43, event.getPartialTick(), false));
         graphics.pose().pushPose();
         graphics.pose().translate(0, 0, 500);
         if (progress < 1) {

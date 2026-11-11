@@ -4,7 +4,6 @@ import com.jvn.kingdomsheritage.data.DefinitionJson;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.function.IntConsumer;
 import java.util.stream.IntStream;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -76,7 +75,7 @@ final class KitCarousel {
     }
 
     void render(GuiGraphics graphics, Rect2i bounds, int width, KitSelection model, int mouseX, int mouseY,
-                long now, float visibility, boolean includeSelected, IntConsumer drawInventory) {
+                long now, float visibility, boolean includeSelected, PreviewRenderer drawInventory) {
         if (visibility <= 0) {
             hovered = -1;
             return;
@@ -96,16 +95,18 @@ final class KitCarousel {
                 .sorted(Comparator.comparingDouble((Integer index) -> Math.abs(index - position)).reversed()).toList();
         for (int index : order) {
             if (!includeSelected && index == selected) continue;
-            Pose pose = pose(index, bounds, width, now);
+            Pose pose = pose(index, bounds, width, position);
             if (pose.opacity <= 0) continue;
             if (index == selected && !moving(now)) {
-                drawInventory.accept(index);
+                drawInventory.render(index, 1);
                 continue;
             }
             Frame frame = frames.computeIfAbsent(index, ignored -> new Frame());
-            if (index == selected || now - frame.captured >= 120 || frame.captured == 0) {
-                frame.preview.capture(graphics, () -> drawInventory.accept(index));
+            boolean looking = pose.look > 0;
+            if (index == selected || looking || frame.looking || now - frame.captured >= 120 || frame.captured == 0) {
+                frame.preview.capture(graphics, () -> drawInventory.render(index, pose.look));
                 frame.captured = now;
+                frame.looking = looking;
             }
             float response = 1 - (float) Math.exp(-Math.min(0.05F, (now - frame.rendered) / 1000F) * 14);
             frame.hover = Mth.lerp(response, frame.hover, index == hovered ? 1 : 0);
@@ -134,7 +135,7 @@ final class KitCarousel {
         var order = IntStream.rangeClosed(first, last).boxed()
                 .sorted(Comparator.comparingDouble(index -> Math.abs(index - position))).toList();
         for (int index : order) {
-            Pose pose = pose(index, bounds, width, now);
+            Pose pose = pose(index, bounds, width, position);
             if (pose.opacity > 0 && x >= pose.x && x < pose.x + bounds.getWidth() * pose.scale
                     && y >= pose.y && y < pose.y + bounds.getHeight() * pose.scale) {
                 return index == selected ? -1 : index;
@@ -143,8 +144,8 @@ final class KitCarousel {
         return -1;
     }
 
-    private Pose pose(int index, Rect2i bounds, int width, long now) {
-        float distance = index - position(now);
+    private Pose pose(int index, Rect2i bounds, int width, float position) {
+        float distance = index - position;
         float depth = Math.min(1, Math.abs(distance));
         float scale = Mth.lerp(depth, 1, 0.68F);
         float step = Math.max(bounds.getWidth() * 0.58F,
@@ -152,17 +153,22 @@ final class KitCarousel {
         float x = bounds.getX() + bounds.getWidth() / 2F + distance * step - bounds.getWidth() * scale / 2;
         float y = bounds.getY() + (bounds.getHeight() - bounds.getHeight() * scale) / 2;
         float opacity = Mth.lerp(depth, 1, 0.32F) * Mth.clamp(2 - Math.abs(distance), 0, 1);
-        return new Pose(x, y, scale, opacity);
+        return new Pose(x, y, scale, opacity, 1 - (float) Mth.smoothstep(depth));
+    }
+
+    interface PreviewRenderer {
+        void render(int index, float look);
     }
 
     private record Motion(float position, float velocity) {}
 
-    private record Pose(float x, float y, float scale, float opacity) {}
+    private record Pose(float x, float y, float scale, float opacity, float look) {}
 
     private static final class Frame {
         final KitConfirmationPreview preview = new KitConfirmationPreview();
         long captured;
         long rendered;
         float hover;
+        boolean looking;
     }
 }
