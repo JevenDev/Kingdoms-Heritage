@@ -24,6 +24,8 @@ public final class SelectionParty {
         long lastAction = -100;
         long lastCursor = -100;
         long lastStage = -100;
+        long lastKit = -100;
+        String kit = "";
         HeritageNetwork.Cursor cursor;
         final JsonArray feedback = new JsonArray();
         Participant(ServerPlayer player) { this.player = player; }
@@ -32,6 +34,7 @@ public final class SelectionParty {
         final UUID leader;
         final Set<UUID> members = new LinkedHashSet<>();
         final Set<UUID> ready = new LinkedHashSet<>();
+        final Map<UUID, String> suggestions = new LinkedHashMap<>();
         long generation;
         String spawn = "";
         SpawnResolver.Search search;
@@ -56,6 +59,7 @@ public final class SelectionParty {
             removeInvites(invite -> invite.sender().equals(player.getUUID()) || invite.recipient().equals(player.getUUID()));
         }
         if (participant != null && participant.stage != stage) {
+            if (stage == 0) participant.kit = "";
             participant.stage = stage;
             participant.cursor = null;
             dirty = true;
@@ -127,6 +131,17 @@ public final class SelectionParty {
         if (party != null) party.ready.remove(player.getUUID());
     }
 
+    static void choices(ServerPlayer player, net.minecraft.resources.ResourceLocation spawn, net.minecraft.resources.ResourceLocation kit) {
+        var participant = PLAYERS.get(player.getUUID());
+        var party = PARTIES.get(player.getUUID());
+        if (participant == null || party == null) return;
+        String selected = spawn != null && party.spawn.equals(spawn.toString()) && kit != null ? kit.toString() : "";
+        if (!participant.kit.equals(selected)) {
+            participant.kit = selected;
+            dirty = true;
+        }
+    }
+
     static void refresh(ServerPlayer player) {
         refresh(player, com.jvn.kingdomsheritage.api.ScreenStep.Placement.BEFORE_SPAWN);
     }
@@ -137,7 +152,10 @@ public final class SelectionParty {
         if (party != null) {
             party.generation++;
             party.ready.clear();
-            for (var member : members) SelectionManager.cancelPreparation(member.getUUID());
+            for (var member : members) {
+                if (from.compareTo(com.jvn.kingdomsheritage.api.ScreenStep.Placement.BEFORE_KIT) <= 0) PLAYERS.get(member.getUUID()).kit = "";
+                SelectionManager.cancelPreparation(member.getUUID());
+            }
             if (party.search != null) party.search.close();
             party.search = null;
         }
@@ -163,6 +181,22 @@ public final class SelectionParty {
             else if (request.spawn().equals("spawn") && !SelectionManager.busy(player)) stage(player, 0);
             return;
         }
+        if (action == HeritageNetwork.PartyAction.KIT) {
+            long kitTick = player.server.overworld().getGameTime();
+            var party = PARTIES.get(player.getUUID());
+            if (party == null || party.spawn.isEmpty() || request.revision() != HeritageCatalog.revision()
+                    || kitTick - self.lastKit < 2 || SelectionManager.busy(player)) return;
+            self.lastKit = kitTick;
+            var spawn = HeritageCatalog.spawns().get(net.minecraft.resources.ResourceLocation.tryParse(party.spawn));
+            var id = net.minecraft.resources.ResourceLocation.tryParse(request.spawn());
+            var kit = id == null ? null : HeritageCatalog.kits().get(id);
+            if (!request.spawn().isEmpty() && (spawn == null || kit == null || !spawn.allows(kit))) return;
+            if (!self.kit.equals(request.spawn())) {
+                self.kit = request.spawn();
+                dirty = true;
+            }
+            return;
+        }
         long tick = player.server.overworld().getGameTime();
         if (action != HeritageNetwork.PartyAction.ACCEPT && action != HeritageNetwork.PartyAction.DECLINE) {
             if (tick - self.lastAction < 5) return;
@@ -175,13 +209,23 @@ public final class SelectionParty {
             if (id == null || !HeritageCatalog.spawns().containsKey(id) || SelectionManager.busy(player)) return;
             if (action == HeritageNetwork.PartyAction.SUGGEST) {
                 if (party == null || party.leader.equals(player.getUUID()) || !party.spawn.isEmpty()) return;
-                var message = new JsonObject();
-                message.addProperty("suggestion", request.spawn());
-                message.addProperty("sender", player.getGameProfile().getName());
-                PacketDistributor.sendToPlayer(PLAYERS.get(party.leader).player, new HeritageNetwork.Catalog(message.toString()));
+                boolean added = suggest(party.suggestions, player.getUUID(), request.spawn());
+                dirty = true;
+                if (added) {
+                    var message = new JsonObject();
+                    message.addProperty("suggestion", request.spawn());
+                    message.addProperty("sender", player.getGameProfile().getName());
+                    PacketDistributor.sendToPlayer(PLAYERS.get(party.leader).player, new HeritageNetwork.Catalog(message.toString()));
+                }
             } else if (party != null && party.leader.equals(player.getUUID())) {
                 if (party.spawn.equals(request.spawn())) return;
                 party.spawn = request.spawn();
+                for (var suggestion : party.suggestions.entrySet()) {
+                    if (!suggestion.getValue().equals(party.spawn)) continue;
+                    feedback(player.getUUID(), suggestion.getKey(), "suggestion_followed");
+                    feedback(suggestion.getKey(), player.getUUID(), "suggestion_selected");
+                }
+                party.suggestions.clear();
                 removeInvites(invite -> party.members.contains(invite.sender()));
                 for (var member : members(player)) SelectionLifecycle.choices(member, id, null);
                 refresh(player, com.jvn.kingdomsheritage.api.ScreenStep.Placement.AFTER_SPAWN);
@@ -228,6 +272,12 @@ public final class SelectionParty {
         }
     }
 
+    static boolean suggest(Map<UUID, String> suggestions, UUID player, String spawn) {
+        if (spawn.equals(suggestions.remove(player))) return false;
+        suggestions.put(player, spawn);
+        return true;
+    }
+
     public static void cursor(ServerPlayer player, HeritageNetwork.Cursor cursor) {
         var self = PLAYERS.get(player.getUUID());
         if (self == null || self.stage != 0 || !player.isAlive() || !SelectionManager.pending(player)) return;
@@ -259,10 +309,14 @@ public final class SelectionParty {
             participant.feedback.add(feedback);
         }
         removeInvites(invite -> invite.sender().equals(party.leader));
-        for (var member : members) SelectionManager.cancelPreparation(member.getUUID());
+        for (var member : members) {
+            PLAYERS.get(member.getUUID()).kit = "";
+            SelectionManager.cancelPreparation(member.getUUID());
+        }
         if (party.search != null) party.search.close();
         party.search = null;
         party.ready.clear();
+        party.suggestions.remove(player.getUUID());
         party.generation++;
         PARTIES.remove(player.getUUID());
         party.members.remove(player.getUUID());
@@ -337,6 +391,7 @@ public final class SelectionParty {
             INVITES.clear();
             for (var party : Set.copyOf(PARTIES.values())) {
                 party.spawn = "";
+                party.suggestions.values().removeIf(id -> !HeritageCatalog.spawns().containsKey(net.minecraft.resources.ResourceLocation.parse(id)));
                 refresh(PLAYERS.get(party.leader).player);
             }
             dirty = true;
@@ -365,6 +420,29 @@ public final class SelectionParty {
             var members = new JsonArray();
             if (party != null) for (var id : party.members) members.add(id.toString());
             state.add("members", members);
+            var choices = new JsonArray();
+            if (party != null) for (var id : party.members) {
+                var member = PLAYERS.get(id);
+                var kitId = net.minecraft.resources.ResourceLocation.tryParse(member.kit);
+                var kit = kitId == null ? null : HeritageCatalog.kits().get(kitId);
+                var choice = new JsonObject();
+                choice.addProperty("id", id.toString());
+                choice.addProperty("kit", kit == null ? "" : kit.id().toString());
+                if (kit != null) {
+                    choice.addProperty("title", kit.title());
+                    choice.addProperty("title_key", kit.titleKey());
+                }
+                choices.add(choice);
+            }
+            state.add("choices", choices);
+            var suggestions = new JsonArray();
+            if (party != null) for (var vote : party.suggestions.entrySet()) {
+                var suggestion = new JsonObject();
+                suggestion.addProperty("player", vote.getKey().toString());
+                suggestion.addProperty("spawn", vote.getValue());
+                suggestions.add(suggestion);
+            }
+            state.add("suggestions", suggestions);
             var invites = new JsonArray();
             var outgoing = new JsonArray();
             for (var invite : INVITES) {

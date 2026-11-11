@@ -5,7 +5,10 @@ import com.jvn.kingdomsheritage.data.DefinitionJson;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.math.Axis;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Tooltip;
@@ -52,23 +55,98 @@ public final class SpawnSelectScreen extends Screen {
     private double descriptionScroll;
     private boolean submitted;
     private long renderedAt;
+    private final SpawnSuggestions suggestions = new SpawnSuggestions();
+    private final Map<UUID, ClientParty.Peer> suggestionPlayers = new LinkedHashMap<>();
+    private List<SpawnSuggestions.Marker> suggestionMarkers = List.of();
     private Component suggestion;
-    private String suggestionSender;
-    private long suggestionUntil;
+    private UUID suggestionPlayer;
+    private JsonObject suggestedSpawn;
+    private boolean suggestionHovered;
 
     int page() { return navigation.page(); }
 
     void suggestion(String spawn, String player) {
-        var choice = choices.stream().filter(value -> value.get("id").getAsString().equals(spawn)).findFirst().orElse(null);
-        if (choice == null) return;
-        suggestion = Component.translatable("screen.kingdomsheritage.party_suggestion", player, DefinitionJson.component(choice, "title"));
-        suggestionSender = player;
-        suggestionUntil = net.minecraft.Util.getMillis() + 5000;
+        ClientParty.suggested(spawn, player);
+    }
+
+    private void updateSuggestions(long now) {
+        var votes = ClientParty.suggestions();
+        suggestions.sync(votes, now);
+        for (var vote : votes) {
+            var player = ClientParty.player(vote.player());
+            if (player != null) suggestionPlayers.put(player.id(), player);
+        }
+        suggestionMarkers = suggestions.markers(now);
+        suggestionPlayers.keySet().removeIf(id -> suggestionMarkers.stream().noneMatch(marker -> marker.player().equals(id)));
+        if (!votes.isEmpty()) {
+            var vote = votes.getLast();
+            var player = suggestionPlayers.get(vote.player());
+            var choice = choices.stream().filter(value -> value.get("id").getAsString().equals(vote.spawn())).findFirst().orElse(null);
+            if (player != null && choice != null) {
+                if (suggestion != null && player.id().equals(suggestionPlayer) && choice == suggestedSpawn) return;
+                suggestionPlayer = player.id();
+                suggestedSpawn = choice;
+                suggestion = Component.translatable("screen.kingdomsheritage.party_suggestion", player.name(), DefinitionJson.component(choice, "title"));
+                return;
+            }
+        }
+        if (suggestionMarkers.stream().noneMatch(marker -> marker.player().equals(suggestionPlayer) && marker.opacity() > 0)) {
+            suggestion = null;
+            suggestedSpawn = null;
+            suggestionPlayer = null;
+        }
+    }
+
+    private float suggestionOpacity() {
+        if (suggestedSpawn == null) return 0;
+        String id = suggestedSpawn.get("id").getAsString();
+        for (var marker : suggestionMarkers) {
+            if (marker.player().equals(suggestionPlayer) && marker.spawn().equals(id)) return marker.opacity();
+        }
+        return 0;
+    }
+
+    boolean overSuggestion(double mouseX, double mouseY) {
+        return canJumpToSuggestion() && suggestion != null
+                && mouseX >= Math.max(4, (width - font.width(suggestion)) / 2 - 4)
+                && mouseX < Math.min(width - 4, (width + font.width(suggestion)) / 2 + 4)
+                && mouseY >= height - 58 && mouseY < height - 45;
     }
 
     ClientParty.Peer suggestionAt(int mouseX, int mouseY) {
-        return mouseX >= width / 2 - 5 && mouseX < width / 2 + 5 && mouseY >= height - 55 && mouseY < height - 45
-                && net.minecraft.Util.getMillis() < suggestionUntil ? ClientParty.player(suggestionSender) : null;
+        if (confirming || submitted) return null;
+        for (var card : cards) {
+            if (!card.visible || card.layout.opacity < 0.1F) continue;
+            String id = card.choice.get("id").getAsString();
+            for (var marker : suggestionMarkers) {
+                if (!marker.active() || marker.opacity() < 0.1F || !marker.spawn().equals(id)) continue;
+                int x = Math.round(card.layout.x + card.layout.width * card.layout.scale / 2 + marker.offset()) - 4;
+                int y = Math.round(card.layout.y + (CARD_HEIGHT - card.lift) * card.layout.scale) + 4;
+                if (mouseX >= x - 1 && mouseX < x + 9 && mouseY >= y - 1 && mouseY < y + 9) return suggestionPlayers.get(marker.player());
+            }
+        }
+        return null;
+    }
+
+    private boolean canJumpToSuggestion() {
+        return !ClientParty.blocksInput() && suggestedSpawn != null && !confirming && confirmationProgress(net.minecraft.Util.getMillis()) == 0
+                && !submitted && !SelectionTransition.active() && ClientParty.suggestions().contains(
+                        new SpawnSuggestions.Vote(suggestionPlayer, suggestedSpawn.get("id").getAsString()));
+    }
+
+    private boolean jumpToSuggestion() {
+        if (!canJumpToSuggestion()) return false;
+        if (expanded != null) {
+            expanded = null;
+            descriptionScroll = 0;
+            description.setMessage(Component.translatable("screen.kingdomsheritage.expand"));
+            layoutCards(true);
+        }
+        int previousPage = page();
+        navigation.focus(choices.indexOf(suggestedSpawn));
+        showNavigatedChoice(previousPage);
+        SelectionSounds.CLICK.play();
+        return true;
     }
 
     public SpawnSelectScreen(JsonObject catalog) {
@@ -289,6 +367,8 @@ public final class SpawnSelectScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        updateSuggestions(net.minecraft.Util.getMillis());
+        if (button == 0 && overSuggestion(mouseX, mouseY) && jumpToSuggestion()) return true;
         if (description.mouseClicked(mouseX, mouseY, button)) return true;
         Card card = cardAt(mouseX, mouseY);
         if (card != null && card.active && button == 0) {
@@ -403,8 +483,13 @@ public final class SpawnSelectScreen extends Screen {
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        if (ClientParty.blocksHover(mouseX, mouseY) || ClientParty.hoveredName(this, mouseX, mouseY) != null) mouseX = mouseY = -10000;
         long now = net.minecraft.Util.getMillis();
+        updateSuggestions(now);
+        int pointerX = mouseX, pointerY = mouseY;
+        boolean overSuggestion = overSuggestion(mouseX, mouseY);
+        if (overSuggestion && !suggestionHovered) SelectionSounds.HOVER.play();
+        suggestionHovered = overSuggestion;
+        if (ClientParty.blocksHover(mouseX, mouseY) || ClientParty.hoveredName(this, mouseX, mouseY) != null || overSuggestion) mouseX = mouseY = -10000;
         float confirmation = confirmationProgress(now);
         positionConfirmation(confirmation);
         for (Card card : cards) card.sample(now);
@@ -454,17 +539,37 @@ public final class SpawnSelectScreen extends Screen {
             setTooltipForNextRenderPass(hovered.getTooltip(), DefaultTooltipPositioner.INSTANCE, true);
         }
         if (expanded == null && choices.size() > PAGE_SIZE && confirmation == 0) {
-            Card last = cards.getLast();
             SelectionText.centered(graphics, font, Component.literal((page() + 1) + " / " + ((choices.size() + PAGE_SIZE - 1) / PAGE_SIZE)),
-                    Math.round(last.layout.x + last.layout.width * last.layout.scale / 2),
-                    Math.round(last.layout.y + CARD_HEIGHT * last.layout.scale) + 8, 0xffffff);
+                    width / 2, height - 22, 0xffffff);
         }
-        if (suggestion != null && now < suggestionUntil) {
+        float suggestionOpacity = suggestionOpacity();
+        if (suggestion != null && suggestionOpacity > 0) {
             graphics.pose().pushPose();
             graphics.pose().translate(0, 0, (cards.size() + 1) * 10);
-            SelectionText.centered(graphics, font, suggestion, width / 2, height - 66, 0xfff2cd83);
-            var player = ClientParty.player(suggestionSender);
-            if (player != null) ClientParty.head(graphics, player, width / 2 - 4, height - 54, 8, false);
+            int alpha = Math.max(4, Math.round(suggestionOpacity * 255)) << 24;
+            SelectionText.centered(graphics, font, suggestion, width / 2, height - 56, alpha | (suggestionHovered ? 0xffff55 : 0xf2cd83));
+
+            graphics.flush();
+            graphics.pose().popPose();
+        }
+        if (confirmation < 1 && !submitted) {
+            graphics.pose().pushPose();
+            graphics.pose().translate(0, 0, (cards.size() + 1) * 10);
+            var hoveredSuggestion = suggestionAt(pointerX, pointerY);
+            for (var card : cards) {
+                if (!card.visible || card.layout.opacity < 0.1F) continue;
+                String id = card.choice.get("id").getAsString();
+                for (var marker : suggestionMarkers) {
+                    var player = suggestionPlayers.get(marker.player());
+                    if (player == null || marker.opacity() <= 0 || !marker.spawn().equals(id)) continue;
+                    int x = Math.round(card.layout.x + card.layout.width * card.layout.scale / 2 + marker.offset()) - 4;
+                    int y = Math.round(card.layout.y + (CARD_HEIGHT - card.lift) * card.layout.scale) + 4;
+                    float opacity = marker.opacity() * card.layout.opacity * (1 - confirmation);
+                    ClientParty.head(graphics, player, x, y, 8, false, opacity);
+                    if (hoveredSuggestion != null && hoveredSuggestion.id().equals(marker.player()) && marker.active())
+                        graphics.renderOutline(x - 2, y - 2, 12, 12, Math.round(opacity * 255) << 24 | 0xffffff);
+                }
+            }
             graphics.flush();
             graphics.pose().popPose();
         }

@@ -3,6 +3,7 @@ package com.jvn.kingdomsheritage.client;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.jvn.kingdomsheritage.KingdomsHeritage;
+import com.jvn.kingdomsheritage.data.DefinitionJson;
 import com.jvn.kingdomsheritage.network.HeritageNetwork;
 import java.util.List;
 import net.minecraft.client.Minecraft;
@@ -173,11 +174,20 @@ public final class ClientSelection {
 
     static void choicesChanged(String spawn, String kit) {
         ClientSteps.navigate(spawn, kit);
+        ClientParty.kitChanged(spawn, kit);
         ClientSelectionEvents.choices(spawn == null ? null : net.minecraft.resources.ResourceLocation.parse(spawn),
                 kit == null ? null : net.minecraft.resources.ResourceLocation.parse(kit));
     }
 
     static JsonObject catalogCopy() { return catalog.deepCopy(); }
+
+    static Component spawnTitle(String id) {
+        if (catalog != null) for (var value : catalog.getAsJsonArray("spawns")) {
+            var choice = value.getAsJsonObject();
+            if (choice.get("id").getAsString().equals(id)) return DefinitionJson.component(choice, "title");
+        }
+        return Component.literal(id);
+    }
 
     static void showSelection() {
         if (!HeritageScreens.finished()) {

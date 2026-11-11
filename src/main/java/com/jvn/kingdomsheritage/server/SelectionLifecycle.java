@@ -48,6 +48,7 @@ final class SelectionLifecycle {
         var next = previous.choices(HeritageCatalog.revision(), spawn, kit);
         if (next.equals(previous)) return;
         STATES.put(player.getUUID(), next);
+        SelectionParty.choices(player, spawn, kit);
         NeoForge.EVENT_BUS.post(new SelectionEvent.ChoicesChanged(player, previous, next));
     }
 

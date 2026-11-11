@@ -73,7 +73,7 @@ public final class HeritageNetwork {
     }
 
     public record PartyAction(int action, java.util.UUID target, String spawn, long revision) implements CustomPacketPayload {
-        public static final int INVITE = 0, ACCEPT = 1, DECLINE = 2, LEAVE = 3, SELECT = 4, SUGGEST = 5, STAGE = 6;
+        public static final int INVITE = 0, ACCEPT = 1, DECLINE = 2, LEAVE = 3, SELECT = 4, SUGGEST = 5, STAGE = 6, KIT = 7;
         public static final Type<PartyAction> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(KingdomsHeritage.MOD_ID, "party_action"));
         public static final StreamCodec<RegistryFriendlyByteBuf, PartyAction> CODEC = StreamCodec.of(
                 (buffer, value) -> {

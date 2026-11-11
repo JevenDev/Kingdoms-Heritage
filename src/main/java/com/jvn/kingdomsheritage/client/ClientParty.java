@@ -43,6 +43,8 @@ final class ClientParty {
     private static final Map<UUID, Invitation> INVITES = new LinkedHashMap<>();
     private static final Set<UUID> OUTGOING = new LinkedHashSet<>();
     private static final Map<UUID, RemoteCursor> CURSORS = new HashMap<>();
+    private static final Map<UUID, Component> KITS = new HashMap<>();
+    private static final Map<UUID, String> SUGGESTIONS = new LinkedHashMap<>();
     private static final List<Button> CONTROLS = new ArrayList<>();
     private static final Map<String, Button> BUTTONS = new HashMap<>();
     private static List<Peer> peers = List.of();
@@ -59,6 +61,7 @@ final class ClientParty {
     private static UUID hovered;
     private static Button leave;
     private static Peer headerHovered;
+    private static Component summaryHovered;
     private static UUID noticePlayer;
     private static boolean noticeHovered;
     private static int noticeX, noticeY, noticeWidth;
@@ -117,6 +120,20 @@ final class ClientParty {
         leader = leaderId.isEmpty() ? null : UUID.fromString(leaderId);
         MEMBERS.clear();
         for (var value : state.getAsJsonArray("members")) MEMBERS.add(UUID.fromString(value.getAsString()));
+        KITS.clear();
+        if (state.has("choices")) for (var value : state.getAsJsonArray("choices")) {
+            var choice = value.getAsJsonObject();
+            UUID id = UUID.fromString(choice.get("id").getAsString());
+            if (MEMBERS.contains(id) && choice.has("kit") && !choice.get("kit").getAsString().isEmpty())
+                KITS.put(id, com.jvn.kingdomsheritage.data.DefinitionJson.component(choice, "title"));
+        }
+        if (state.has("suggestions") || !previousMembers.equals(MEMBERS)) SUGGESTIONS.clear();
+        if (state.has("suggestions")) for (var value : state.getAsJsonArray("suggestions")) {
+            var vote = value.getAsJsonObject();
+            UUID id = UUID.fromString(vote.get("player").getAsString());
+            if (MEMBERS.contains(id) && PLAYERS.containsKey(id)) SUGGESTIONS.put(id, vote.get("spawn").getAsString());
+        }
+        SUGGESTIONS.keySet().retainAll(PLAYERS.keySet());
         peers = orderedPlayers(List.copyOf(PLAYERS.values()), MEMBERS, self());
         if (!previousMembers.equals(MEMBERS)) {
             if (!MEMBERS.isEmpty()) SelectionSounds.CONFIRMATION.play();
@@ -159,6 +176,27 @@ final class ClientParty {
                 spawn, ClientSelection.revision()));
     }
 
+    static void kitChanged(String location, String kit) {
+        if (!grouped() || spawn.isEmpty() || !spawn.equals(location)) return;
+        action(HeritageNetwork.PartyAction.KIT, null, kit == null ? "" : kit);
+    }
+
+    static List<SpawnSuggestions.Vote> suggestions() {
+        return SUGGESTIONS.entrySet().stream().map(entry -> new SpawnSuggestions.Vote(entry.getKey(), entry.getValue())).toList();
+    }
+
+    static void suggested(String spawn, String name) {
+        var player = player(name);
+        if (player == null) return;
+        SUGGESTIONS.remove(player.id());
+        if (!spawn.isEmpty()) SUGGESTIONS.put(player.id(), spawn);
+    }
+
+    static Peer player(UUID id) { return PLAYERS.get(id); }
+
+    static Component kitChoice(UUID player) { return KITS.getOrDefault(player, text("choosing_kit")); }
+    static Component spawnChoice() { return text("spawn_choice", spawn.isEmpty() ? text("choosing_spawn") : ClientSelection.spawnTitle(spawn)); }
+
     static void select(String location) {
         action(follower() ? HeritageNetwork.PartyAction.SUGGEST : HeritageNetwork.PartyAction.SELECT, null, location);
         SelectionSounds.NOTICE.play();
@@ -179,6 +217,10 @@ final class ClientParty {
         if (!reportedStage.equals(stage) || ticks % 10 == 0) {
             reportedStage = stage;
             action(HeritageNetwork.PartyAction.STAGE, null, stage);
+        }
+        if (grouped() && !spawn.isEmpty() && ticks % 10 == 0) {
+            var kits = ClientSelection.kits();
+            kitChanged(spawn, kits != null && kits.spawnId().equals(spawn) ? kits.kitId() : null);
         }
         if (ticks % 2 != 0 || !(minecraft.screen instanceof SpawnSelectScreen screen) || SelectionTransition.active()) return;
         double scale = minecraft.getWindow().getGuiScale();
@@ -213,11 +255,14 @@ final class ClientParty {
         pendingSpawn = null;
         generation = -1;
         SKINS.clear();
+        KITS.clear();
+        SUGGESTIONS.clear();
         leader = null;
         spawn = reportedStage = "";
         menuPlayer = hovered = null;
         leave = null;
         headerHovered = null;
+        summaryHovered = null;
         noticePlayer = null;
         noticeHovered = false;
         overlayScreen = null;
@@ -258,9 +303,27 @@ final class ClientParty {
         return PLAYERS.values().stream().filter(player -> player.name().equals(name)).findFirst().orElse(null);
     }
 
+    static void face(GuiGraphics graphics, Peer player, int x, int y, int size, float opacity) {
+        if (opacity <= 0) return;
+        graphics.setColor(1, 1, 1, opacity);
+        RenderSystem.enableBlend();
+        RenderSystem.defaultBlendFunc();
+        try {
+            PlayerFaceRenderer.draw(graphics, skin(player), x, y, size);
+        } finally {
+            RenderSystem.disableBlend();
+            graphics.setColor(1, 1, 1, 1);
+        }
+    }
+
     static void head(GuiGraphics graphics, Peer player, int x, int y, int size, boolean status) {
-        graphics.fill(x - 1, y - 1, x + size + 1, y + size + 1, 0xff000000);
-        PlayerFaceRenderer.draw(graphics, skin(player), x, y, size);
+        head(graphics, player, x, y, size, status, 1);
+    }
+
+    static void head(GuiGraphics graphics, Peer player, int x, int y, int size, boolean status, float opacity) {
+        if (opacity <= 0) return;
+        graphics.fill(x - 1, y - 1, x + size + 1, y + size + 1, Math.round(opacity * 255) << 24);
+        face(graphics, player, x, y, size, opacity);
         if (status && player.stage() != 0) graphics.fill(x, y, x + size, y + size, 0xaa343434);
         if (status && player.stage() == 2) {
             graphics.pose().pushPose();
@@ -349,14 +412,21 @@ final class ClientParty {
         graphics.pose().pushPose();
         graphics.pose().translate(0, slide, 0);
         graphics.fill(left - 1, y - 1, left + 17, y + 17, opacity);
-        graphics.setColor(1, 1, 1, visibility);
-        PlayerFaceRenderer.draw(graphics, skin(player), left, y, 16);
-        graphics.setColor(1, 1, 1, 1);
+        face(graphics, player, left, y, 16, visibility);
         SelectionText.draw(graphics, font, fitLabel(font, text("leader_name", player.name()).getString(), textWidth), left + 22, y - 1, opacity | 0xffff55);
         SelectionText.draw(graphics, font, fitLabel(font, text("member_count", MEMBERS.size(), waitingSummary()).getString(), textWidth), left + 22, y + 10, opacity | 0xcccccc);
+        int summaryWidth = 22 + textWidth + 12 + leaveWidth;
+        var spawnSummary = spawnChoice();
+        var ownKit = text("your_kit", kitChoice(self()));
+        SelectionText.draw(graphics, font, fitLabel(font, spawnSummary.getString(), summaryWidth), left, y + 25, opacity | 0xf2cd83);
+        SelectionText.draw(graphics, font, fitLabel(font, ownKit.getString(), summaryWidth), left, y + 36, opacity | 0xcccccc);
         graphics.flush();
         graphics.pose().popPose();
         int screenY = y + Math.round(slide);
+        if (PLAYER_LIST.open() && visibility > 0.65F && mouseX >= left && mouseX < left + summaryWidth) {
+            if (mouseY >= screenY + 25 && mouseY < screenY + 25 + font.lineHeight) summaryHovered = spawnSummary;
+            if (mouseY >= screenY + 36 && mouseY < screenY + 36 + font.lineHeight) summaryHovered = ownKit;
+        }
         if (PLAYER_LIST.open() && visibility > 0.65F && mouseX >= left - 1 && mouseX < left + 17 && mouseY >= screenY - 1 && mouseY < screenY + 17) {
             headerHovered = player;
             graphics.renderOutline(left - 2, screenY - 2, 20, 20, opacity | 0xffffff);
@@ -413,6 +483,7 @@ final class ClientParty {
         long now = Util.getMillis();
         CONTROLS.clear();
         headerHovered = null;
+        summaryHovered = null;
         leave = null;
         graphics.flush();
         graphics.pose().pushPose();
@@ -466,6 +537,8 @@ final class ClientParty {
         } else if (leave != null && leave.isHoveredOrFocused()) {
             graphics.renderTooltip(minecraft.font, text(follower() ? "leave_hint" : "leave_leader_hint"),
                     leave.isFocused() ? leave.getX() : mouseX, leave.isFocused() ? leave.getY() : mouseY);
+        } else if (summaryHovered != null) {
+            graphics.renderTooltip(minecraft.font, summaryHovered, mouseX, mouseY);
         } else if (headerHovered != null) {
             graphics.renderComponentTooltip(minecraft.font, playerInfo(headerHovered), mouseX, mouseY);
         } else if (hovered != null) {
@@ -473,6 +546,8 @@ final class ClientParty {
             if (player != null) graphics.renderComponentTooltip(minecraft.font, playerTooltip(player),
                     PLAYER_LIST.keyboardFocused() ? PLAYER_LIST.menuX() : mouseX,
                     PLAYER_LIST.keyboardFocused() ? PLAYER_LIST.menuY() : mouseY);
+        } else if (minecraft.screen instanceof SpawnSelectScreen selection && selection.overSuggestion(mouseX, mouseY)) {
+            graphics.renderTooltip(minecraft.font, text("suggestion_jump"), mouseX, mouseY);
         } else if (minecraft.screen instanceof SpawnSelectScreen selection) {
             var player = hoveredName(selection, mouseX, mouseY);
             if (player != null) graphics.renderTooltip(minecraft.font, Component.literal(player.name()).withStyle(ChatFormatting.YELLOW), mouseX, mouseY);
@@ -573,6 +648,7 @@ final class ClientParty {
         var lines = new ArrayList<Component>();
         lines.add(Component.literal(player.name()).withStyle(member(player.id()) ? ChatFormatting.YELLOW : ChatFormatting.WHITE));
         lines.add(text("stage_" + player.stage()).copy().withStyle(ChatFormatting.GRAY));
+        if (member(player.id())) lines.add(text("kit_choice", kitChoice(player.id())).copy().withStyle(ChatFormatting.GRAY));
         if (player.id().equals(self())) lines.add(text("you").copy().withStyle(ChatFormatting.GRAY));
         if (player.id().equals(leader)) lines.add(text("leader").copy().withStyle(ChatFormatting.GOLD));
         else if (MEMBERS.contains(player.id())) lines.add(text("member").copy().withStyle(ChatFormatting.GREEN));
