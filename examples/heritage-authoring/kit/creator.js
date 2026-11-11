@@ -599,7 +599,8 @@ for(const [id,name] of Object.entries({'json-tab':'braces','details-tab':'slider
 $('redo').querySelector('svg').style.transform='scaleX(-1)';
 for(let slot=0;slot<9;slot++){const option=document.createElement('option');option.value=slot;option.textContent='Hotbar '+(slot+1);$('selected-slot').append(option);}
 for(const sample of HeritageKitExamples){const option=document.createElement('option');option.value=sample.id;option.textContent=sample.kit.title;$('example').append(option);}
-const trailExample=document.createElement('option');trailExample.value='trail-kit';trailExample.textContent='Trail Kit (shop)';$('example').append(trailExample);
+const shopExamples=new Map([['trail-kit','Trail Kit (shop)'],['trail-scout-kit','Trail Scout (starting gear + shop)']]);
+for(const [id,title] of shopExamples)$('example').append(new Option(title,id));
 function tab(which) {author?.show(which);}
 $('kit-json').addEventListener('input',()=>parse());
 $('ignore-stack-limits').addEventListener('change',()=>{
@@ -724,11 +725,11 @@ $('item-name').addEventListener('keydown',event=>{if(event.key==='Enter'){event.
 $('new-kit').addEventListener('click',()=>{openKit();tab('details');$('title').focus();$('title').select();});
 $('example').addEventListener('change',async()=>{
   const id=$('example').value;$('example').value='';
-  if(id==='trail-kit'){
+  if(shopExamples.has(id)){
     $('example').disabled=true;
     try{
-      const response=await fetch('templates/trail-kit.json');
-      if(!response.ok)throw new Error('Trail Kit could not load.');
+      const response=await fetch('templates/'+id+'.json');
+      if(!response.ok)throw new Error(shopExamples.get(id)+' could not load.');
       openKit(await response.text());tab('shop');
     }catch(error){notice(error.message);}
     finally{$('example').disabled=false;}

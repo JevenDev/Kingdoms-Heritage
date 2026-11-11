@@ -1,0 +1,25 @@
+{
+  "title": "Trail Scout",
+  "description": "Start with a wooden axe, four bread, and a leather tunic. Spend 8 points on extra gear and supplies.",
+  "selected_slot": 0,
+  "items": [
+    { "index": 0, "item": { "id": "minecraft:wooden_axe" } },
+    { "index": 1, "item": { "id": "minecraft:bread", "count": 4 } },
+    { "index": 38, "item": { "id": "minecraft:leather_chestplate" } }
+  ],
+  "shop": {
+    "budget": 8,
+    "sections": [
+      { "id": "gear", "name": "Gear", "icon": "minecraft:shield" },
+      { "id": "supplies", "name": "Supplies", "icon": "minecraft:torch" }
+    ],
+    "offers": [
+      { "section": "gear", "cost": 4, "item": { "id": "minecraft:shield" } },
+      { "section": "gear", "cost": 3, "item": { "id": "minecraft:stone_pickaxe" } },
+      { "section": "gear", "cost": 2, "item": { "id": "minecraft:compass" } },
+      { "section": "supplies", "cost": 1, "limit": 2, "item": { "id": "minecraft:torch", "count": 8 } },
+      { "section": "supplies", "cost": 2, "item": { "id": "minecraft:cooked_beef", "count": 4 } },
+      { "section": "supplies", "cost": 3, "item": { "id": "minecraft:white_bed" } }
+    ]
+  }
+}
