@@ -5,10 +5,12 @@ import net.neoforged.neoforge.common.ModConfigSpec;
 
 public final class HeritageConfig {
     public enum InventoryPolicy { REPLACE, MERGE, PRESERVE }
+    public enum SelectionMusicMode { ALTERNATE, ORIGINAL, SOLACE }
 
     public static final ModConfigSpec SPEC;
     public static final ModConfigSpec CLIENT_SPEC;
     public static final ModConfigSpec.BooleanValue SELECTION_MUSIC;
+    public static final ModConfigSpec.EnumValue<SelectionMusicMode> SELECTION_MUSIC_MODE;
     public static final ModConfigSpec.EnumValue<InventoryPolicy> INVENTORY_POLICY;
     public static final ModConfigSpec.BooleanValue EXEMPT_EXISTING_PLAYERS;
     public static final ModConfigSpec.BooleanValue HOMELAND_RESPAWN;
@@ -33,6 +35,8 @@ public final class HeritageConfig {
         SPEC = builder.build();
         var client = new ModConfigSpec.Builder();
         SELECTION_MUSIC = client.define("selectionMusic", true);
+        SELECTION_MUSIC_MODE = client.comment("ALTERNATE switches tracks on each new character creation session. ORIGINAL and SOLACE always play that track.")
+                .defineEnum("selectionMusicMode", SelectionMusicMode.ALTERNATE);
         CLIENT_SPEC = client.build();
     }
 

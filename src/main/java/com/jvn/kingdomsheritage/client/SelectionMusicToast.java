@@ -10,7 +10,12 @@ import net.minecraft.world.item.Items;
 
 final class SelectionMusicToast implements Toast {
     private final ItemStack icon = new ItemStack(Items.JUKEBOX);
+    private final Component trackTitle;
     private boolean hidden;
+
+    SelectionMusicToast(String titleKey) {
+        trackTitle = Component.translatable(titleKey);
+    }
 
     void hide() {
         hidden = true;
@@ -26,7 +31,7 @@ final class SelectionMusicToast implements Toast {
                 .append(Component.translatable("toast.kingdomsheritage.now_playing")).append("</rainbow>"));
         ToucanTextRenderer.renderOutlinedLine(graphics, font, title.getVisualOrderText(), 30, 7,
                 0xffffffff, (int) (timeSinceLastVisible / 50));
-        SelectionText.draw(graphics, font, Component.translatable("music.kingdomsheritage.selection"), 30, 18, 0xffffffff);
+        SelectionText.draw(graphics, font, trackTitle, 30, 18, 0xffffffff);
         return timeSinceLastVisible < 5000 * toasts.getNotificationDisplayTimeMultiplier() ? Visibility.SHOW : Visibility.HIDE;
     }
 }

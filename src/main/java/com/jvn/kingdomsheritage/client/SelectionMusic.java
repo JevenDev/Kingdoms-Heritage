@@ -1,6 +1,7 @@
 package com.jvn.kingdomsheritage.client;
 
 import com.jvn.kingdomsheritage.HeritageConfig;
+import com.jvn.kingdomsheritage.KingdomsHeritage;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.resources.sounds.AbstractTickableSoundInstance;
 import net.minecraft.client.resources.sounds.SoundInstance;
@@ -13,14 +14,40 @@ import net.neoforged.neoforge.client.event.SelectMusicEvent;
 import net.neoforged.neoforge.common.NeoForge;
 
 public final class SelectionMusic {
-    private static final SoundEvent MUSIC = SoundEvent.createVariableRangeEvent(
-            ResourceLocation.fromNamespaceAndPath("kingdomsheritage", "selection_music"));
+    private enum Song {
+        ORIGINAL("selection_music", "music.kingdomsheritage.selection"),
+        SOLACE("selection_music_solace", "music.kingdomsheritage.solace");
+
+        private final SoundEvent sound;
+        private final String titleKey;
+
+        Song(String sound, String titleKey) {
+            this.sound = SoundEvent.createVariableRangeEvent(ResourceLocation.fromNamespaceAndPath(KingdomsHeritage.MOD_ID, sound));
+            this.titleKey = titleKey;
+        }
+    }
+
+    private static Song nextSong = Song.ORIGINAL;
+    private static Song song;
     private static Track track;
 
     private SelectionMusic() {}
 
     static void register() {
         NeoForge.EVENT_BUS.addListener(EventPriority.LOWEST, SelectionMusic::select);
+    }
+
+    static void beginSession() {
+        stop();
+        song = switch (HeritageConfig.SELECTION_MUSIC_MODE.get()) {
+            case ORIGINAL -> Song.ORIGINAL;
+            case SOLACE -> Song.SOLACE;
+            case ALTERNATE -> {
+                var current = nextSong;
+                nextSong = current == Song.ORIGINAL ? Song.SOLACE : Song.ORIGINAL;
+                yield current;
+            }
+        };
     }
 
     static void tick(boolean selecting, boolean ducked) {
@@ -38,7 +65,7 @@ public final class SelectionMusic {
         }
         if (track == null && playing) {
             minecraft.getMusicManager().stopPlaying();
-            track = new Track();
+            track = new Track(song.sound);
             minecraft.getSoundManager().play(track);
         }
         if (track != null) {
@@ -46,7 +73,7 @@ public final class SelectionMusic {
             track.ducked = ducked;
             if (!playing && track.toast != null) track.toast.hide();
             if (playing && track.toast == null && track.getVolume() > 0) {
-                track.toast = new SelectionMusicToast();
+                track.toast = new SelectionMusicToast(song.titleKey);
                 SelectionToasts.add(track.toast);
             }
         }
@@ -72,8 +99,8 @@ public final class SelectionMusic {
         private float duck = 1;
         private float fade;
 
-        private Track() {
-            super(MUSIC, SoundSource.MUSIC, SoundInstance.createUnseededRandom());
+        private Track(SoundEvent sound) {
+            super(sound, SoundSource.MUSIC, SoundInstance.createUnseededRandom());
             looping = true;
             delay = 0;
             relative = true;

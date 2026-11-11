@@ -138,7 +138,10 @@ public final class ClientSelection {
         SelectionGuiScale.configure(next);
         ClientSelectionEvents.catalog(next);
         var flowReset = ClientSteps.catalog(next);
-        if (newSession) HeritageScreens.begin();
+        if (newSession) {
+            SelectionMusic.beginSession();
+            HeritageScreens.begin();
+        }
         selection = new SpawnSelectScreen(catalog);
         selection.restoreSelection(spawnId);
         if (!HeritageScreens.valid(catalog)) HeritageScreens.cancel();
