@@ -2,6 +2,9 @@ package com.jvn.kingdomsheritage.server;
 
 import com.jvn.kingdomsheritage.client.ArrivalRegression;
 import com.jvn.kingdomsheritage.data.CatalogRegression;
+import java.util.ArrayList;
+import java.util.List;
+import net.minecraft.core.BlockPos;
 
 public final class SelectionRegression {
     private SelectionRegression() {}
@@ -10,7 +13,26 @@ public final class SelectionRegression {
         CatalogRegression.run();
         ArrivalRegression.run();
         rollsBackAfterSecondMemberFailure();
+        spacesPartyArrivalsWhenTerrainAllows();
         System.out.println("Heritage selection regression checks passed");
+    }
+
+    private static void spacesPartyArrivalsWhenTerrainAllows() {
+        var anchor = new BlockPos(40, 64, -12);
+        var assigned = new ArrayList<>(List.of(anchor));
+        for (int i = 1; i < 8; i++) {
+            var next = SpawnResolver.partyPosition(anchor, assigned, pos -> pos.getY() == 65 && pos.getX() >= 40);
+            if (next.getX() < 40 || next.getY() != 65 || assigned.stream().anyMatch(pos -> {
+                int dx = pos.getX() - next.getX(), dz = pos.getZ() - next.getZ();
+                return dx * dx + dz * dz < 9;
+            })) throw new AssertionError("Party arrival ignored spacing or safe terrain");
+            assigned.add(next);
+        }
+        var tight = anchor.east();
+        if (!SpawnResolver.partyPosition(anchor, List.of(anchor), tight::equals).equals(tight)
+                || !SpawnResolver.partyPosition(anchor, List.of(anchor), pos -> false).equals(anchor)) {
+            throw new AssertionError("Party arrival did not fall back to the nearest safe space or anchor");
+        }
     }
 
     private static void rollsBackAfterSecondMemberFailure() {

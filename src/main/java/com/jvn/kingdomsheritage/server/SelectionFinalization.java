@@ -20,21 +20,21 @@ final class SelectionFinalization {
     record Member(ServerPlayer player, SpawnDefinition spawn, KitDefinition kit,
                   List<KitDefinition.StackEntry> entries, HeritageConfig.InventoryPolicy policy,
                   KitLoadout.Snapshot inventory, KitLoadout.Snapshot planned,
-                  Map<ResourceLocation, JsonObject> decisions, JsonObject intro) {}
+                  Map<ResourceLocation, JsonObject> decisions, SpawnResolver.Destination arrival, JsonObject intro) {}
 
     private SelectionFinalization() {}
 
     static Member plan(ServerPlayer player, SpawnDefinition spawn, KitDefinition kit,
                        List<KitDefinition.StackEntry> entries, HeritageConfig.InventoryPolicy policy,
-                       SpawnResolver.Search search) {
+                       SpawnDefinition arrivalDefinition, SpawnResolver.Destination arrival) {
         var inventory = policy == HeritageConfig.InventoryPolicy.PRESERVE ? null : KitLoadout.capture(player, true);
         var planned = inventory == null ? null : KitLoadout.plan(inventory, player.getInventory().items.size(), kit, entries, policy);
-        var intro = SpawnIntro.prepare(search.definition(), search.destination());
+        var intro = SpawnIntro.prepare(arrivalDefinition, arrival);
         intro.add("dialogue_context", DialogueContexts.create(player, spawn, kit, policy, !entries.isEmpty()).json());
         intro.addProperty("outcome", "completed");
         intro.addProperty("session", SelectionLifecycle.state(player).sessionId().toString());
         return new Member(player, spawn, kit, entries, policy, inventory, planned,
-                SelectionSteps.decisions(player, spawn.id().toString(), kit.id().toString()), intro);
+                SelectionSteps.decisions(player, spawn.id().toString(), kit.id().toString()), arrival, intro);
     }
 
     static void apply(List<Member> members, SpawnResolver.Destination destination) {
@@ -42,7 +42,7 @@ final class SelectionFinalization {
             for (var member : members) {
                 var player = member.player();
                 rollback.accept(() -> SelectionManager.hold(player));
-                SelectionManager.teleport(player, destination, SelectionManager.state(player).getFloat("yaw"));
+                SelectionManager.teleport(player, member.arrival(), SelectionManager.state(player).getFloat("yaw"));
             }
             for (var member : members) {
                 if (member.planned() == null) continue;

@@ -301,6 +301,7 @@ public final class SelectionManager {
             }
             var members = SelectionParty.members(player);
             var deliveries = new ArrayList<SelectionFinalization.Member>();
+            var assigned = new ArrayList<BlockPos>();
             for (var member : members) {
                 if (SelectionDebug.isBot(member)) continue;
                 var memberSession = SelectionSession.find(member.getUUID());
@@ -313,8 +314,10 @@ public final class SelectionManager {
                 var spawn = HeritageCatalog.spawns().get(ResourceLocation.parse(reviewed.spawn()));
                 var kit = HeritageCatalog.kits().get(ResourceLocation.parse(reviewed.kit()));
                 var policy = inventoryPolicy(member);
+                var arrival = SpawnResolver.partyArrival(destination, search.definition(), assigned);
+                assigned.add(arrival.position());
                 deliveries.add(SelectionFinalization.plan(member, spawn, kit, kit.loadout(member, policy, reviewed.offers()),
-                        policy, search));
+                        policy, search.definition(), arrival));
             }
             KingdomsHeritage.LOGGER.debug("Prepared Heritage location {} in {} ms of server work",
                     request.spawn(), search.workMillis());
