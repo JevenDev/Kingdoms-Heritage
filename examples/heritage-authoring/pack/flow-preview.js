@@ -18,7 +18,12 @@ let musicTick=0,musicFade=0,musicDuck=1,hoverReady=false;
 const backgroundStarted=clock();
 const veil=document.createElement('canvas'),veilContext=veil.getContext('2d'),veilRenderer=new HeritageCanvas(veilContext);veil.setAttribute('aria-hidden','true');Object.assign(veil.style,{position:'absolute',inset:'0',width:'100%',height:'100%',pointerEvents:'none',imageRendering:'pixelated',background:'transparent',border:'0',borderRadius:'0',boxShadow:'none'});$('flow-screen').append(veil);
 let carousel,outgoingCards=[],browseFocus=null,kitFrames=new Map();
-let shopPage=0,shopKit=null;
+let shopPage=0,shopKit=null,shopTrade=null;
+const shopTradeDuration=270,tradeSprite=document.createElement('canvas');
+tradeSprite.width=tradeSprite.height=16;
+const tradeContext=tradeSprite.getContext('2d');
+tradeContext.imageSmoothingEnabled=false;
+const reduceMotion=matchMedia('(prefers-reduced-motion: reduce)');
 const shopInventoryOptions={mode:'player',hideCrafting:true,controlledAim:true,passiveWheel:true};
 let kitYaw=NaN,kitPitch=NaN,kitRenderedAt=0,highlightedCard=null;
 const pictures=new Map(),images=new Map(),buttons=new Map(),sounds=new Set();
@@ -110,8 +115,18 @@ async function loadOverlayShader(source,toast=false){
   const position=gl.getAttribLocation(program,'Position');gl.enableVertexAttribArray(position);gl.vertexAttribPointer(position,2,gl.FLOAT,false,0,0);
   const texture=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,texture);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL,true);
   const progress=gl.getUniformLocation(program,toast?'Time':'Progress'),resolution=gl.getUniformLocation(program,toast?'Size':'Resolution');
-  if(!toast)gl.uniform3f(gl.getUniformLocation(program,'EdgeColor'),.95,.73,.40);
-  const effect=(w,h,value)=>{const width=toast?Math.round(w*viewport.scale):layer.width,height=toast?Math.round(h*viewport.scale):layer.height;if(target.width!==width||target.height!==height){target.width=width;target.height=height;}gl.viewport(0,0,target.width,target.height);gl.uniform1f(progress,value);gl.uniform2f(resolution,w,h);if(!toast)gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,layer);gl.clear(gl.COLOR_BUFFER_BIT);gl.drawArrays(gl.TRIANGLES,0,3);return target;};
+  const edge=toast?null:gl.getUniformLocation(program,'EdgeColor');
+  const effect=(w,h,value,input=layer,white=false)=>{
+    const width=toast?Math.round(w*viewport.scale):input.width,height=toast?Math.round(h*viewport.scale):input.height;
+    if(target.width!==width||target.height!==height){target.width=width;target.height=height;}
+    gl.viewport(0,0,width,height);gl.uniform1f(progress,value);gl.uniform2f(resolution,w,h);
+    if(!toast){
+      if(white)gl.uniform3f(edge,1,1,1);else gl.uniform3f(edge,.95,.73,.40);
+      gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,input);
+    }
+    gl.clear(gl.COLOR_BUFFER_BIT);gl.drawArrays(gl.TRIANGLES,0,3);
+    return target;
+  };
   if(toast)toastBackground=effect;else dissolve=effect;
 }
 async function loadArt(){
@@ -506,7 +521,7 @@ function enter(focus=true){
   if(phase.startsWith('kit')&&!previousPhase.startsWith('kit'))carousel=new HeritagePresentation.KitCarousel(session.kitIndex,now);
   if(phase.startsWith('kit')&&phase!==kitPhase){const progress=kitProgress(now);kitConfirmationFrom=previousPhase.startsWith('kit')?progress:0;kitConfirming=phase==='kit-confirm';kitConfirmationStarted=now;kitPhase=phase;if(!previousPhase.startsWith('kit')){kitYaw=NaN;kitPitch=NaN;}}
   if(phase==='intro'&&previousPhase!=='intro'){arrivalToken=crypto.randomUUID();barSlant=P.sampleSlant(arrivalToken,session.arrival.intro.bar_style??'random');}
-  previousPhase=phase;resize();needsFocus=focus;
+  previousPhase=phase;shopTrade=null;resize();needsFocus=focus;
   if(!partyEnabled()&&partyOpen)toggleParty(false);
   if(!phase.startsWith('location'))partyInvites.clear();
   updateParty();
@@ -714,7 +729,8 @@ function shopStatusText(status,refunding=false){
   if(status.issue)return shopText(status.issue,-status.remaining);
   return shopText('after_purchase',shopPoints(status.remaining));
 }
-function updateShop(message){
+function updateShop(message,pick=null,buying=false){
+  shopTrade=pick&&!reduceMotion.matches?{...pick,buying,started:clock()}:null;
   inventory.set(session.loadout(),shopInventoryOptions);
   $('flow-narration').textContent=message+' '+shopBudget();
 }
@@ -729,14 +745,30 @@ function shopName(value,x,y,maxLines,center=false){
   lines.slice(0,maxLines).forEach((line,index)=>text(line.glyphs,x,y+index*9,{center,outline:false}));
   return lines.length>maxLines;
 }
-function shopScreen(w,h){
+function drawShopTrade(item,x,y,progress){
+  if(progress>=1)return;
+  const icon={...item,count:1},size=tradeSprite.width;
+  if(progress>0&&dissolve){
+    tradeContext.clearRect(0,0,size,size);
+    HeritageInventory.item(tradeContext,icon,0,0,inventory.requestIcon);
+    ctx.drawImage(dissolve(size,size,progress,tradeSprite,true),x,y,size,size);
+  }else{
+    ctx.save();ctx.globalAlpha=1-progress;
+    HeritageInventory.item(ctx,icon,x,y,inventory.requestIcon);
+    ctx.restore();
+  }
+}
+function shopScreen(w,h,now){
+  const progress=shopTrade?P.clamp((now-shopTrade.started)/shopTradeDuration):1;
+  if(progress>=1)shopTrade=null;
+  const shake=shopTrade?Math.round(Math.sin(progress*19)*2.5*(1-progress)):0;
   const {budget,offers}=session.kit.shop,spent=session.spent,shop=images.get('shop');
   const left=Math.trunc((w-shop.width-inventory.layout.width)/2),top=Math.trunc((h-shop.height)/2),inv=left+shop.width,bottom=top+shop.height+4;
   const pages=Math.ceil(offers.length/F.shopPageSize),start=shopPage*F.shopPageSize;
   let detail=null;
   ctx.drawImage(shop,left,top);
   inventory.aim={x:pointer.x-inv-51,y:pointer.y-top-32};
-  inventory.visible=true;inventory.draw();
+  inventory.visible=true;inventory.draw(shopTrade?.buying?shopTrade.slot:null);
   ctx.drawImage(inventory.canvas,inv,top,inventory.layout.width,inventory.layout.height);
 
   const showing=node=>!partyOpen&&node.matches(':hover,:focus-visible');
@@ -745,11 +777,11 @@ function shopScreen(w,h){
     const status=session.shopStatus(index),{offer}=status,name=HeritageItemText.name(offer.item);
     const action=shopText('buy',name,offer.cost),feedback=shopStatusText(status);
     const node=hit('shop-offer-'+index,action+'. '+feedback,x,y,16,16,()=>{
-      if(session.buy(index))updateShop(action+'.');
+      if(session.buy(index))updateShop(action+'.',session.purchases.at(-1),true);
       else $('flow-narration').textContent=shopStatusText(session.shopStatus(index))+'. '+shopBudget();
     });
     ctx.globalAlpha=status.issue ? .45 : 1;
-    HeritageInventory.item(ctx,offer.item,x,y,inventory.requestIcon);
+    HeritageInventory.item(ctx,offer.item,x,y,inventory.requestIcon,shopTrade?.offer===index?-shake:0);
     ctx.globalAlpha=1;
     const price=literal(String(offer.cost),status.issue?0xe0b7ad:0xffe4a1),scale=Math.min(.75,16/width(price));
     text(price,x,y,{scale,outline:false,shadow:true});
@@ -762,12 +794,20 @@ function shopScreen(w,h){
     const x=inv+position.x,y=top+position.y,status=session.shopStatus(offer),name=HeritageItemText.name(status.offer.item);
     const action=shopText('sell',name,status.offer.cost);
     const node=hit('shop-refund-'+slot,action,x,y,16,16,()=>{
-      if(session.refund(slot))updateShop(action+'.');
-      if(keyboard)(buttons.get('shop-offer-'+offer)??buttons.get('next'))?.focus({preventScroll:true});
+      const pick=session.purchases.find(pick=>pick.slot===slot);
+      if(!pick||!session.refund(slot))return;
+      const refundedOffer=offers[pick.offer];
+      updateShop(shopText('sell',HeritageItemText.name(refundedOffer.item),refundedOffer.cost)+'.',pick);
+      if(keyboard)(buttons.get('shop-offer-'+pick.offer)??buttons.get('next'))?.focus({preventScroll:true});
     });
     if(showing(node)){
       outline(x-1,y-1,18,'#ffe4a1');detail={node,status,name,refunding:true};
     }
+  }
+
+  if(shopTrade){
+    const {offer,slot,buying}=shopTrade,position=inventory.layout.slots.find(position=>position.id===slot);
+    drawShopTrade(offers[offer].item,inv+position.x+shake,top+position.y,buying?1-progress:progress);
   }
 
   text(shopText('title'),w/2,top-32,{center:true});
@@ -874,7 +914,7 @@ function render(now){
     ctx.drawImage(image,12,h-25,23,13);
   }
   if(session.phase.startsWith('location'))locationsScreen(w,h,now);
-  else if(session.phase==='kit-shop')shopScreen(w,h);
+  else if(session.phase==='kit-shop')shopScreen(w,h,now);
   else if(session.phase.startsWith('kit'))kitScreen(w,h,now);
   else if(session.phase==='loading'){
     if(elapsed>=50){session.next();enter();transition.reveal(now);}

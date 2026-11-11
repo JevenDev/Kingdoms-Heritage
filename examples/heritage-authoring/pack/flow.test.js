@@ -164,6 +164,7 @@ test('bundled definitions, translations and presentation assets match the curren
   assert.deepEqual(bundled.translations,JSON.parse(fs.readFileSync(path.join(native,'assets/kingdomsheritage/lang/en_us.json'),'utf8')));
   for(const kind of ['spawns','kits'])for(const {id,...entry} of bundled[kind])assert.deepEqual(entry,JSON.parse(fs.readFileSync(path.join(native,'data/kingdomsheritage/heritage',kind,id.split(':')[1]+'.json'),'utf8')));
   const assets=[...['card','card_expanded','card_fallback'].map(name=>[name+'.png','textures/gui/campaign_select_screen/campaign_select_screen_'+name+'.png']),...['default','random','plains','village'].map(name=>[name+'.png','textures/gui/locations/'+name+'.png']),...['click','hover','confirmation','dissolve'].map(name=>[name+'.ogg','sounds/ui/'+name+'.ogg']),...['disconnect','disconnect_highlighted'].map(name=>[name+'.png','textures/gui/sprites/selection/'+name+'.png']),['selection.ogg','sounds/music/selection.ogg'],['selection_background.fsh','shaders/core/selection_background.fsh']];
+  assets.push(['selection_dissolve.fsh','shaders/core/selection_dissolve.fsh']);
   for(const name of ['tab_button','tab_button_selected','empty_slot','send_request'])assets.push([name+'.png','textures/gui/selection/'+name+'.png']);
   for(const [copy,original] of assets){
     const actual=fs.readFileSync(path.join(__dirname,'assets',copy)),expected=fs.readFileSync(path.join(native,'assets/kingdomsheritage',original));

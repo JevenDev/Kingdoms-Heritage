@@ -53,13 +53,13 @@ function icon(id) {
   }
   return node;
 }
-function item(ctx,stack,x,y,onMissing) {
-  const data=K.items.get(K.normalize(stack.id));
-  if(data?.page!==undefined)ctx.drawImage(image('items-'+data.page+'.png'),data.x,data.y,32,32,x,y,16,16);
-  else if(data?.sprite)ctx.drawImage(data.sprite.canvas,x,y,16,16);
+function item(ctx,stack,x,y,onMissing,offsetX=0) {
+  const data=K.items.get(K.normalize(stack.id)),iconX=x+offsetX;
+  if(data?.page!==undefined)ctx.drawImage(image('items-'+data.page+'.png'),data.x,data.y,32,32,iconX,y,16,16);
+  else if(data?.sprite)ctx.drawImage(data.sprite.canvas,iconX,y,16,16);
   else {
     if(data?.loadIcon&&data.sprite===undefined)onMissing?.(data);
-    ctx.fillStyle='#000';ctx.fillRect(x,y,16,16);ctx.fillStyle='#f0f';ctx.fillRect(x,y,8,8);ctx.fillRect(x+8,y+8,8,8);
+    ctx.fillStyle='#000';ctx.fillRect(iconX,y,16,16);ctx.fillStyle='#f0f';ctx.fillRect(iconX,y,8,8);ctx.fillRect(iconX+8,y+8,8,8);
   }
   if((stack.count??1)>1) {const count=String(stack.count);text(ctx,count,x+17-textWidth(count),y+9,'#fff',true);}
 }
@@ -472,22 +472,23 @@ class Inventory {
       }
     }
   }
-  renderBase() {
+  renderBase(hiddenStackSlot) {
     const {width,height,inventoryX,inventoryY,mode}=this.layout,ctx=this.background.getContext('2d');ctx.setTransform(this.scale,0,0,this.scale,0,0);ctx.imageSmoothingEnabled=false;ctx.clearRect(0,0,width,height);
     for(const part of this.layout.blits)this.blit(ctx,part);
     if(this.options.hideCrafting&&mode!=='accessories'){ctx.fillStyle='#c6c6c6';ctx.fillRect(inventoryX+95,inventoryY+4,78,74);}
     else if(mode!=='accessories')text(ctx,'Crafting',inventoryX+97,inventoryY+6,'#404040');
     for(const position of this.layout.slots) {
       const entry=this.entry(position.id);
-      if(entry)item(ctx,entry.item,position.x,position.y,this.requestIcon);
-      else if(position.inventory==='player'&&position.index>=36){const name=({36:'boots',37:'leggings',38:'chestplate',39:'helmet',40:'shield'})[position.index];ctx.drawImage(image('empty_armor_slot_'+name+'.png'),position.x,position.y,16,16);}
+      if(entry){
+        if(position.id!==hiddenStackSlot)item(ctx,entry.item,position.x,position.y,this.requestIcon);
+      }else if(position.inventory==='player'&&position.index>=36){const name=({36:'boots',37:'leggings',38:'chestplate',39:'helmet',40:'shield'})[position.index];ctx.drawImage(image('empty_armor_slot_'+name+'.png'),position.x,position.y,16,16);}
       else if(position.icon)ctx.drawImage(image(position.icon),position.x,position.y,16,16);
       else if(position.inventory!=='player')text(ctx,'?',position.x+Math.floor((17-textWidth('?'))/2),position.y+4,'#555555');
       if(this.editable&&position.inventory==='player'&&position.index===(this.kit.selected_slot??0)){ctx.fillStyle='#ffaa00';ctx.fillRect(position.x,position.y+15,16,1);}
     }
-    this.dirty=false;
+    this.dirty=false;this.renderedHiddenStackSlot=hiddenStackSlot;
   }
-  draw() {
+  draw(hiddenStackSlot=null) {
     if(!this.ready||!this.visible)return;
     const {width,height,inventoryX,inventoryY,playerX}=this.layout,ctx=this.canvas.getContext('2d');ctx.setTransform(this.scale,0,0,this.scale,0,0);ctx.imageSmoothingEnabled=false;ctx.clearRect(0,0,width,height);
     if(this.options.modelOnly){
@@ -495,7 +496,7 @@ class Inventory {
       player(ctx,this.previewKit??this.kit,this.aim,width/2,height/2+scale,scale);
       return;
     }
-    if(this.dirty)this.renderBase();
+    if(this.dirty||this.renderedHiddenStackSlot!==hiddenStackSlot)this.renderBase(hiddenStackSlot);
     ctx.drawImage(this.background,0,0,width,height);
     ctx.save();ctx.beginPath();ctx.rect(inventoryX+26,inventoryY+8,this.layout.mode==='accessories'?124:49,70);ctx.clip();ctx.translate(inventoryX+playerX-51,inventoryY);player(ctx,this.previewKit??this.kit,this.aim);ctx.restore();
     const hovered=this.layout.slots.find(slot=>slot.id===this.hover),selected=this.layout.slots.find(slot=>slot.id===this.selected);
