@@ -24,7 +24,11 @@ public record KitDefinition(ResourceLocation id, String title, String descriptio
     }
 
     public record Entry(String inventory, String slot, int index, boolean cosmetic, JsonObject item) {}
-    public record StackEntry(String inventory, String slot, int index, boolean cosmetic, ItemStack stack) {}
+    public record StackEntry(String inventory, String slot, int index, boolean cosmetic, ItemStack stack, boolean purchase) {
+        public StackEntry(String inventory, String slot, int index, boolean cosmetic, ItemStack stack) {
+            this(inventory, slot, index, cosmetic, stack, false);
+        }
+    }
 
     public static KitDefinition parse(ResourceLocation id, JsonObject json) {
         String title = DefinitionJson.text(json, "title", 120, false);

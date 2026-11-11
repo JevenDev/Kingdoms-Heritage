@@ -84,13 +84,34 @@ test('refunds keep other stacks in place and fixed stacks survive a reset',()=>{
   const source=shopChoices({items:[fixed,helmet]}),session=enterShop(source);
   assert.equal(session.refund(0),false);
   assert.equal(session.buy(0),true);assert.equal(session.buy(0),true);assert.equal(session.buy(1),false);
+  assert.equal(session.buy(2),true);
+  assert.deepEqual(session.loadout().items,[fixed,helmet,{index:1,item:{id:'minecraft:torch',count:32}},{index:36,item:{id:'iron_boots'}}]);
+  assert.equal(session.refund(1),true);
+  assert.deepEqual(session.loadout().items,[fixed,helmet,{index:1,item:{id:'minecraft:torch',count:16}},{index:36,item:{id:'iron_boots'}}]);
   assert.equal(session.refund(1),true);assert.equal(session.refund(1),false);
-  assert.deepEqual(session.loadout().items,[fixed,helmet,{index:2,item:{id:'minecraft:torch',count:16}}]);
   assert.equal(session.buy(1),true);
   assert.equal(session.loadout().items.at(-1).index,40);
   session.resetShop();
   assert.equal(session.spent,0);assert.deepEqual(session.loadout().items,[fixed,helmet]);
   assert.deepEqual(session.kit,source.kits.at(-1));
+});
+test('shop purchases fill fixed stacks, spill, and refund without losing other items',()=>{
+  const source=shopChoices({budget:8,items:[
+    {index:0,item:{id:'minecraft:torch',count:62}},{index:2,item:{id:'minecraft:bread',count:62}}
+  ]});
+  source.kits.at(-1).shop.offers[1]={cost:2,item:{id:'bread',count:4}};
+  const session=enterShop(source);
+  assert.equal(session.buy(0),true);assert.equal(session.buy(1),true);assert.equal(session.buy(0),true);
+  const count=slot=>session.loadout().items.find(entry=>entry.index===slot)?.item.count;
+  assert.deepEqual([count(0),count(1),count(2),count(3)],[64,30,64,2]);
+  assert.deepEqual(session.purchases,[{offer:0,slot:0},{offer:1,slot:2},{offer:0,slot:1}]);
+  assert.equal(session.refund(0),true);
+  assert.deepEqual([count(0),count(1),count(2),count(3)],[64,2,64,14]);
+  assert.deepEqual(session.purchases,[{offer:1,slot:2},{offer:0,slot:0}]);
+  assert.deepEqual(source.kits.at(-1).items.map(entry=>entry.item.count),[62,62]);
+  const restored=new Flow.Session(source);
+  assert.equal(restored.resume(session.snapshot()),true);
+  assert.deepEqual(restored.loadout(),session.loadout());
 });
 test('a full regular inventory still has room for compatible equipment',()=>{
   const items=Array.from({length:36},(_,index)=>({index,item:{id:'minecraft:apple'}}));
@@ -106,7 +127,7 @@ test('shop purchases appear in arrival and survive back navigation and a resumed
   delete source.kits.at(-1).items;
   assert.match(Flow.narration('Alex',Flow.locations(session.spawn),source.kits.at(-1))[2].text,/nothing but your own two hands/);
   session.buy(0);session.buy(0);session.refund(0);session.back();session.next();
-  assert.deepEqual(session.purchases,[{offer:0,slot:1}]);
+  assert.deepEqual(session.purchases,[{offer:0,slot:0}]);
   session.next();session.next();assert.equal(session.phase,'review');
   const names=Flow.context(session.arrival,session.loadout(),'Alex',Flow.locations(session.arrival));
   assert.equal(names.facts.receives_kit,'true');
@@ -114,7 +135,7 @@ test('shop purchases appear in arrival and survive back navigation and a resumed
   const restored=new Flow.Session(source);
   assert.equal(restored.resume(session.snapshot()),true);
   restored.back();assert.equal(restored.phase,'kit-shop');
-  assert.deepEqual(restored.purchases,[{offer:0,slot:1}]);
+  assert.deepEqual(restored.purchases,[{offer:0,slot:0}]);
   restored.back();restored.back();restored.back();restored.choose('pack:home');restored.next();restored.next();
   assert.deepEqual(restored.purchases,[]);
 });

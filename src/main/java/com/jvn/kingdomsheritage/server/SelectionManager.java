@@ -7,6 +7,7 @@ import com.jvn.kingdomsheritage.compat.EquipmentCompat;
 import com.jvn.kingdomsheritage.data.CatalogPayload;
 import com.jvn.kingdomsheritage.data.HeritageCatalog;
 import com.jvn.kingdomsheritage.data.HeritageException;
+import com.jvn.kingdomsheritage.data.KitLoadout;
 import com.jvn.kingdomsheritage.network.HeritageNetwork;
 import java.util.ArrayList;
 import java.util.UUID;
@@ -233,8 +234,12 @@ public final class SelectionManager {
         }
         try {
             SelectionSteps.requireComplete(player, request.spawn(), request.kit());
-            var stacks = kit.loadout(player, inventoryPolicy(player), request.offers());
-            if (inventoryPolicy(player) != HeritageConfig.InventoryPolicy.PRESERVE) EquipmentCompat.validate(player, stacks);
+            var policy = inventoryPolicy(player);
+            var stacks = kit.loadout(player, policy, request.offers());
+            if (policy != HeritageConfig.InventoryPolicy.PRESERVE) {
+                if (request.offers().isEmpty()) EquipmentCompat.validate(player, stacks);
+                else KitLoadout.plan(KitLoadout.capture(player, false), player.getInventory().items.size(), kit, stacks, policy);
+            }
             SelectionLifecycle.choices(player, spawnId, kitId);
             session.begin(player, request, SelectionParty.search(player, spawn));
             sendProgress(player, "queued");

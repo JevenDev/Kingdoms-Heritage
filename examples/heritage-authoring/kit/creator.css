@@ -191,7 +191,7 @@
 .shop-inline-tabs:not([hidden]) + .shop-tray { position: relative; z-index: 1; margin-left: -8px; }
 .shop-inline-tab-icon { position: relative; left: 4px; }
 #author-workspace #shop-inline-tabs .shop-inline-tab[aria-pressed=true]:focus-visible { outline: none; }
-.shop-tray { box-sizing: border-box; flex: 0 0 172px; display: grid; grid-template-columns: repeat(4,36px); grid-template-rows: repeat(8,36px); padding: 22px 14px; width: 172px; height: 332px; background: url("assets/shop.png") center / 172px 332px no-repeat; image-rendering: pixelated; }
+.shop-tray { box-sizing: border-box; flex: 0 0 172px; display: grid; grid-template-columns: repeat(4,36px); grid-template-rows: repeat(8,36px); padding: 22px 14px; width: 172px; height: 332px; background: url("assets/shop.png?v=2") center / 172px 332px no-repeat; image-rendering: pixelated; }
 .shop-tray .shop-cell { position: relative; display: grid; place-items: center; width: 36px; min-width: 0; height: 36px; min-height: 0; padding: 0; border: 0; border-radius: 0; background: transparent; }
 .shop-tray .shop-cell:is(:focus-visible,[aria-pressed=true]) { outline: 2px solid #ffe2a0; outline-offset: -2px; }
 .shop-tray .shop-cell:hover { background: #ffffff36; }

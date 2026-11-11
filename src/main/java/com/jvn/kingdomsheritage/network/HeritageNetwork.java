@@ -136,7 +136,7 @@ public final class HeritageNetwork {
     }
 
     public static void register(RegisterPayloadHandlersEvent event) {
-        var registrar = event.registrar("11");
+        var registrar = event.registrar("12");
         registrar.playToServer(IntroReady.TYPE, IntroReady.CODEC, (packet, context) ->
                 com.jvn.kingdomsheritage.server.SpawnIntro.ready((ServerPlayer) context.player(), packet.token, packet.durationTicks));
         registrar.playToServer(FlowAction.TYPE, FlowAction.CODEC, (packet, context) ->

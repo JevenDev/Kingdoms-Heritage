@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.IntFunction;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 
@@ -100,7 +101,8 @@ public final class KitLoadout {
         original.equipment.forEach((slot, stack) -> equipment.put(slot, replace ? ItemStack.EMPTY : stack.copy()));
         for (var entry : entries) {
             if (entry.inventory().equals("player")) {
-                if (replace || items.get(entry.index()).isEmpty()) items.set(entry.index(), entry.stack().copy());
+                if (entry.purchase()) placePurchase(items, mainSize, entry.index(), entry.stack().copy());
+                else if (replace || items.get(entry.index()).isEmpty()) items.set(entry.index(), entry.stack().copy());
                 else merge(items, mainSize, entry.stack().copy());
             } else {
                 var slot = EquipmentSlot.of(entry);
@@ -116,18 +118,62 @@ public final class KitLoadout {
         return new Snapshot(items, equipment, selected);
     }
 
-    private static void merge(List<ItemStack> items, int mainSize, ItemStack stack) {
+    static int purchaseSlot(IntFunction<ItemStack> items, int mainSize, int equipment, ItemStack stack) {
+        int matching = -1, empty = -1, remaining = stack.getCount();
         for (int slot = 0; slot < mainSize; slot++) {
-            var existing = items.get(slot);
-            if (!existing.isEmpty() && ItemStack.isSameItemSameComponents(existing, stack)) {
-                int count = Math.min(stack.getCount(), existing.getMaxStackSize() - existing.getCount());
-                if (count > 0) {
-                    existing.grow(count);
-                    stack.shrink(count);
-                }
-                if (stack.isEmpty()) return;
+            var current = items.apply(slot);
+            if (current.isEmpty() && empty < 0) empty = slot;
+            int capacity = stackRoom(current, stack);
+            if (capacity > 0) {
+                if (matching < 0) matching = slot;
+                remaining -= capacity;
             }
         }
+        if (matching >= 0 && (remaining <= 0 || empty >= 0)) return matching;
+        if (equipment >= 0 && items.apply(equipment).isEmpty()) return equipment;
+        return empty;
+    }
+
+    static void placePurchase(List<ItemStack> items, int mainSize, int slot, ItemStack stack) {
+        var target = items.get(slot);
+        if (!target.isEmpty() && (slot >= mainSize || stackRoom(target, stack) == 0)) {
+            throw new HeritageException("shop_occupied", "A starter kit slot is already occupied");
+        }
+        if (slot >= mainSize) {
+            items.set(slot, stack);
+            return;
+        }
+        fillStack(target, stack);
+        for (int i = 0; i < mainSize && !stack.isEmpty(); i++) {
+            if (i != slot) fillStack(items.get(i), stack);
+        }
+        if (stack.isEmpty()) return;
+        if (target.isEmpty()) items.set(slot, stack);
+        else putInEmptySlot(items, mainSize, stack);
+    }
+
+    private static int stackRoom(ItemStack current, ItemStack offered) {
+        if (current.isEmpty() || !ItemStack.isSameItemSameComponents(current, offered)) return 0;
+        return Math.max(0, current.getMaxStackSize() - current.getCount());
+    }
+
+    private static void fillStack(ItemStack current, ItemStack incoming) {
+        int count = Math.min(incoming.getCount(), stackRoom(current, incoming));
+        if (count > 0) {
+            current.grow(count);
+            incoming.shrink(count);
+        }
+    }
+
+    private static void merge(List<ItemStack> items, int mainSize, ItemStack stack) {
+        for (int slot = 0; slot < mainSize; slot++) {
+            fillStack(items.get(slot), stack);
+            if (stack.isEmpty()) return;
+        }
+        putInEmptySlot(items, mainSize, stack);
+    }
+
+    private static void putInEmptySlot(List<ItemStack> items, int mainSize, ItemStack stack) {
         for (int slot = 0; slot < mainSize; slot++) {
             if (items.get(slot).isEmpty()) {
                 items.set(slot, stack);
