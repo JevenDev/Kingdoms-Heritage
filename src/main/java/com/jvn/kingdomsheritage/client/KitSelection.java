@@ -220,6 +220,12 @@ public final class KitSelection {
     static boolean isLayoutPicker(Screen screen) { return KitSelectionView.isLayoutPicker(screen); }
     static boolean capturingPreview() { return KitSelectionView.capturingPreview(); }
 
+    public static boolean suppressExternalInventoryLayer(Object adapter) {
+        var screen = Minecraft.getInstance().screen;
+        return ClientSelection.kits() != null && isInventory(screen) && !capturingPreview()
+                && net.neoforged.fml.ModList.get().isLoaded("accessories") && AccessoriesControls.isLayer(screen, adapter);
+    }
+
     public static float previewAngle(net.minecraft.world.entity.LivingEntity entity, float angle, float center, boolean horizontal) {
         return KitSelectionView.previewAngle(entity, angle, center, horizontal);
     }

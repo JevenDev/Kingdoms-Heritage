@@ -2,6 +2,7 @@ package com.jvn.kingdomsheritage.client;
 
 import io.wispforest.owo.ui.core.OwoUIAdapter;
 import io.wispforest.owo.ui.layers.Layers;
+import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.screens.Screen;
 
@@ -47,6 +48,17 @@ final class AccessoriesControls {
             }
         }
         return null;
+    }
+
+    static void renderLayers(Screen screen, GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        var layers = Layers.getInstances(screen);
+        if (layers.isEmpty()) return;
+        graphics.flush();
+        for (var layer : layers) layer.adapter.render(graphics, mouseX, mouseY, partialTick);
+    }
+
+    static boolean isLayer(Screen screen, Object adapter) {
+        return Layers.getInstances(screen).stream().anyMatch(layer -> layer.adapter == adapter);
     }
 
     static boolean isControl(Screen screen, double x, double y) {
