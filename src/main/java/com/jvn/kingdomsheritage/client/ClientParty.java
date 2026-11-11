@@ -15,6 +15,7 @@ import java.util.UUID;
 import net.minecraft.ChatFormatting;
 import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.PlayerFaceRenderer;
@@ -23,6 +24,7 @@ import net.minecraft.client.gui.screens.inventory.tooltip.TooltipRenderUtil;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.util.Mth;
 import net.neoforged.bus.api.EventPriority;
 import net.neoforged.neoforge.client.event.ScreenEvent;
@@ -454,47 +456,55 @@ final class ClientParty {
         SelectionSounds.CLICK.play();
     }
 
-    static void renderPartySummary(GuiGraphics graphics, int center, int titleY, int width, int summaryY,
-                                   int mouseX, int mouseY, float visibility, float slide) {
-        var font = Minecraft.getInstance().font;
-        int opacity = Math.max(4, Math.round(visibility * 255)) << 24;
+    static Component partyTitle() {
         String count = (grouped() ? MEMBERS.size() : 1) + " / " + HeritageNetwork.MAX_PARTY_SIZE;
-        var title = text("your_party").copy().append(Component.literal("  " + count).withStyle(style -> style.withColor(0xf2cd83)));
+        return text("your_party").copy().append(Component.literal("  " + count).withStyle(style -> style.withColor(0xf2cd83)));
+    }
+
+    record PartySummary(Readiness status, Component ready, Component text, List<FormattedCharSequence> lines, int lineStep) {
+        private static final int BUTTON_HEIGHT = 16;
+
+        int lineCount() { return Math.min(2, lines.size()); }
+        int buttonOffset() { return lineCount() * lineStep + 3; }
+        int height() { return buttonOffset() + BUTTON_HEIGHT; }
+    }
+
+    static PartySummary partySummary(Font font, int width) {
+        var status = readiness(snapshot());
+        var ready = waitingSummary(status);
+        var summary = Component.empty().append(spawnChoice().copy().withStyle(style -> style.withColor(0xf2cd83)))
+                .append("  ·  ").append(text("your_kit", kitChoice(self()))).append("  ·  ")
+                .append(ready.copy().withStyle(style -> style.withInsertion(READY_TOOLTIP)));
+        return new PartySummary(status, ready, summary, font.split(summary, Math.max(1, width - 24)), font.lineHeight + 2);
+    }
+
+    static void renderPartySummary(GuiGraphics graphics, Font font, PartySummary summary, int width, int summaryY,
+                                   int mouseX, int mouseY, float visibility, float slide) {
+        int opacity = Math.max(4, Math.round(visibility * 255)) << 24;
+        int screenY = summaryY + Math.round(slide);
+        boolean canHover = PLAYER_LIST.open() && visibility > 0.65F;
         graphics.pose().pushPose();
         graphics.pose().translate(0, slide, 0);
-        SelectionText.centered(graphics, font, title, center, titleY, opacity | 0xf4f1e8);
-        if (grouped()) {
-            var status = readiness(snapshot());
-            var ready = waitingSummary(status);
-            var summary = Component.empty().append(spawnChoice().copy().withStyle(style -> style.withColor(0xf2cd83)))
-                    .append("  ·  ").append(text("your_kit", kitChoice(self()))).append("  ·  ")
-                    .append(ready.copy().withStyle(style -> style.withInsertion(READY_TOOLTIP)));
-            var lines = font.split(summary, Math.max(1, width - 24));
-            int lineStep = font.lineHeight + 2;
-            int lineCount = Math.min(2, lines.size());
-            int screenY = summaryY + Math.round(slide);
-            boolean canHover = PLAYER_LIST.open() && visibility > 0.65F;
-            for (int i = 0; i < lineCount; i++) {
-                var line = lines.get(i);
-                int lineWidth = font.width(line);
-                int x = width / 2 - lineWidth / 2;
-                int y = i * lineStep;
-                SelectionText.draw(graphics, font, line, x, summaryY + y, opacity | 0xcccccc);
-                if (canHover && mouseX >= x && mouseX < x + lineWidth && mouseY >= screenY + y && mouseY < screenY + y + font.lineHeight) {
-                    var style = font.getSplitter().componentStyleAtWidth(line, mouseX - x);
-                    if (style != null && READY_TOOLTIP.equals(style.getInsertion()) && !status.waiting().isEmpty()) {
-                        summaryTooltip = readinessTooltip(status, ready);
-                    } else if (lines.size() > lineCount) summaryTooltip = List.of(summary);
-                }
+        for (int i = 0; i < summary.lineCount(); i++) {
+            var line = summary.lines().get(i);
+            int lineWidth = font.width(line);
+            int x = width / 2 - lineWidth / 2;
+            int y = i * summary.lineStep();
+            SelectionText.draw(graphics, font, line, x, summaryY + y, opacity | 0xcccccc);
+            if (canHover && mouseX >= x && mouseX < x + lineWidth && mouseY >= screenY + y && mouseY < screenY + y + font.lineHeight) {
+                var style = font.getSplitter().componentStyleAtWidth(line, mouseX - x);
+                if (style != null && READY_TOOLTIP.equals(style.getInsertion()) && !summary.status().waiting().isEmpty()) {
+                    summaryTooltip = readinessTooltip(summary.status(), summary.ready());
+                } else if (summary.lines().size() > summary.lineCount()) summaryTooltip = List.of(summary.text());
             }
-            int buttonWidth = Math.min(width, font.width(text("leave")) + 12);
-            leave = control("leave", (width - buttonWidth) / 2, screenY + lineCount * lineStep + 3, buttonWidth, 16,
-                    text("leave"), PLAYER_LIST.open() && visibility > 0.65F, () -> action(HeritageNetwork.PartyAction.LEAVE, null, ""));
-            leave.setAlpha(visibility);
-            if (!PLAYER_LIST.keyboardFocused()) leave.setFocused(false);
         }
         graphics.flush();
         graphics.pose().popPose();
+        int buttonWidth = Math.min(width, font.width(text("leave")) + 12);
+        leave = control("leave", (width - buttonWidth) / 2, screenY + summary.buttonOffset(), buttonWidth, PartySummary.BUTTON_HEIGHT,
+                text("leave"), canHover, () -> action(HeritageNetwork.PartyAction.LEAVE, null, ""));
+        leave.setAlpha(visibility);
+        if (!PLAYER_LIST.keyboardFocused()) leave.setFocused(false);
     }
 
     private static void renderInvitation(GuiGraphics graphics, int width, int mouseX, int mouseY, long now) {

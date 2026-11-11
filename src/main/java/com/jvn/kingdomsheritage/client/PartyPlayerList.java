@@ -17,6 +17,9 @@ final class PartyPlayerList {
     private static final float BACKDROP_OPACITY = 0.94F;
     private static final int PORTRAIT_SIZE = 24;
     private static final int GRID_STEP = 36;
+    private static final int HEADER_TO_GRID = 20;
+    private static final int TOP_MARGIN = 28;
+    private static final int FOOTER_MARGIN = 20;
     private static final float RESPONSE = 14;
     private static final ResourceLocation TAB = texture("tab_button");
     private static final ResourceLocation SELECTED = texture("tab_button_selected");
@@ -52,6 +55,10 @@ final class PartyPlayerList {
 
     private static boolean overPortrait(double mouseX, double mouseY, int x, int y) {
         return mouseX >= x - 1 && mouseX < x + PORTRAIT_SIZE + 1 && mouseY >= y - 1 && mouseY < y + PORTRAIT_SIZE + 1;
+    }
+
+    private static int portraitSpan(int count) {
+        return PORTRAIT_SIZE + 2 + (count - 1) * GRID_STEP;
     }
 
     private int portraitX(int center, int index, int count) {
@@ -328,28 +335,51 @@ final class PartyPlayerList {
         blur.render(graphics, visibility);
         SelectionBackground.render(graphics, width, height, BACKDROP_OPACITY * visibility);
 
-        int top = Math.max(32, (height - 192) / 2);
+        var font = Minecraft.getInstance().font;
+        var partyTitle = ClientParty.partyTitle();
+        var otherTitle = Component.translatable("screen.kingdomsheritage.party_other_players");
+        var noOthers = Component.translatable("screen.kingdomsheritage.party_no_other_players");
+        var summary = ClientParty.grouped() ? ClientParty.partySummary(font, width) : null;
+        int summaryHeight = summary == null ? 0 : summary.height();
+        int pageGap = summary == null ? 15 : 20;
         int sectionWidth = Math.max(1, (Math.min(width - 24, 372) - 14) / 2);
-        int partyCenter = (width - sectionWidth - 14) / 2;
-        int otherCenter = width - partyCenter;
-        int gridY = top + 20;
+        int slotCount = HeritageNetwork.MAX_PARTY_SIZE;
         slide = (1 - visibility) * 10;
 
         var partyPlayers = players.stream().filter(player -> ClientParty.onPartySide(player.id())).toList();
         pagePlayers = players.stream().filter(player -> !ClientParty.onPartySide(player.id())).toList();
         columns = Mth.clamp((sectionWidth + GRID_STEP - PORTRAIT_SIZE - 4) / GRID_STEP, 1, 4);
-        int rows = Mth.clamp((height - gridY - 76) / GRID_STEP, 1, 3);
+        int gridHeight = height - TOP_MARGIN - FOOTER_MARGIN - HEADER_TO_GRID - 2 - pageGap - summaryHeight;
+        int rows = Mth.clamp(gridHeight / GRID_STEP, 1, 3);
         capacity = columns * rows;
+        boolean paged = pagePlayers.size() > capacity;
         if (focused != null && indexOf(players, focused) < 0) focus(null);
         int focusedIndex = indexOf(pagePlayers, focused);
         if (focusedIndex >= 0) page = focusedIndex / capacity;
         page = Mth.clamp(page, 0, Math.max(0, (pagePlayers.size() - 1) / capacity));
         int first = page * capacity;
         int last = Math.min(pagePlayers.size(), first + capacity);
+        String pageLabel = (page + 1) + " / " + ((pagePlayers.size() + capacity - 1) / capacity);
+
+        int partySpan = Math.max(font.width(partyTitle), portraitSpan(Math.min(columns, slotCount)));
+        int otherSpan = pagePlayers.isEmpty() ? font.width(noOthers) : portraitSpan(Math.min(columns, pagePlayers.size()));
+        otherSpan = Math.max(otherSpan, font.width(otherTitle));
+        if (paged) otherSpan = Math.max(otherSpan, font.width(pageLabel) + 56);
+        int centerGap = sectionWidth + 14;
+        int partyCenter = (width - centerGap + (partySpan - otherSpan) / 2) / 2;
+        int otherCenter = partyCenter + centerGap;
+
+        int lastRow = (Math.max(slotCount, Math.min(pagePlayers.size(), capacity)) - 1) / columns;
+        int gridBottom = HEADER_TO_GRID + lastRow * GRID_STEP + PORTRAIT_SIZE + 1;
+        int pageOffset = HEADER_TO_GRID + rows * GRID_STEP + 2;
+        int groupHeight = gridBottom + (summary == null ? 0 : 9 + summaryHeight);
+        if (paged) groupHeight = Math.max(groupHeight, pageOffset + pageGap + summaryHeight);
+        int top = Math.max(TOP_MARGIN, (height - groupHeight) / 2);
+        int gridY = top + HEADER_TO_GRID;
+        int pageY = top + pageOffset;
 
         cells.clear();
         emptySlots.clear();
-        int slotCount = HeritageNetwork.MAX_PARTY_SIZE;
         for (int index = 0; index < slotCount; index++) {
             int x = portraitX(partyCenter, index, slotCount);
             int y = gridY + index / columns * GRID_STEP;
@@ -366,13 +396,11 @@ final class PartyPlayerList {
         if (nextHovered != null && !nextHovered.equals(hovered)) SelectionSounds.HOVER.play();
         hovered = nextHovered;
         int opacity = Math.max(4, Math.round(visibility * 255)) << 24;
-        var font = Minecraft.getInstance().font;
         graphics.pose().pushPose();
         graphics.pose().translate(0, slide, 0);
-        SelectionText.centered(graphics, font, Component.translatable("screen.kingdomsheritage.party_other_players"),
-                otherCenter, top, opacity | 0xf4f1e8);
-        if (pagePlayers.isEmpty()) SelectionText.centered(graphics, font, Component.translatable("screen.kingdomsheritage.party_no_other_players"),
-                otherCenter, gridY, opacity | 0xaaaaaa);
+        SelectionText.centered(graphics, font, partyTitle, partyCenter, top, opacity | 0xf4f1e8);
+        SelectionText.centered(graphics, font, otherTitle, otherCenter, top, opacity | 0xf4f1e8);
+        if (pagePlayers.isEmpty()) SelectionText.centered(graphics, font, noOthers, otherCenter, gridY, opacity | 0xaaaaaa);
         graphics.setColor(1, 1, 1, visibility);
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
@@ -382,19 +410,13 @@ final class PartyPlayerList {
         RenderSystem.disableBlend();
         graphics.setColor(1, 1, 1, 1);
         for (var cell : cells) renderCell(graphics, cell, visibility, opacity, now);
-        int pageY = gridY + rows * GRID_STEP + 2;
-        boolean paged = pagePlayers.size() > capacity;
-        if (paged) SelectionText.centered(graphics, font,
-                Component.literal((page + 1) + " / " + ((pagePlayers.size() + capacity - 1) / capacity)),
-                otherCenter, pageY, opacity | 0xcccccc);
+        if (paged) SelectionText.centered(graphics, font, pageLabel, otherCenter, pageY, opacity | 0xcccccc);
         graphics.flush();
         graphics.pose().popPose();
         SelectionText.centered(graphics, font, Component.translatable("screen.kingdomsheritage.party_list_controls"),
                 width / 2, height - 12, opacity | 0xcccccc);
-        int lastRow = (Math.max(slotCount, last - first) - 1) / columns;
-        int summaryY = gridY + lastRow * GRID_STEP + PORTRAIT_SIZE + 10;
-        if (paged) summaryY = Math.max(summaryY, pageY + 20);
-        ClientParty.renderPartySummary(graphics, partyCenter, top, width, summaryY, mouseX, mouseY, visibility, slide);
+        if (summary != null) ClientParty.renderPartySummary(graphics, font, summary, width, top + groupHeight - summaryHeight,
+                mouseX, mouseY, visibility, slide);
         if (paged) {
             renderPageArrows(graphics, otherCenter, pageY + Math.round(slide), mouseX, mouseY, visibility);
         } else {
