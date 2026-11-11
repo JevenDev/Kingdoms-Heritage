@@ -2,6 +2,9 @@ package com.jvn.kingdomsheritage.network;
 
 import com.jvn.kingdomsheritage.KingdomsHeritage;
 import com.jvn.kingdomsheritage.server.SelectionManager;
+import com.jvn.kingdomsheritage.data.KitShop;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.function.Consumer;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
@@ -33,14 +36,34 @@ public final class HeritageNetwork {
         @Override public Type<JoinState> type() { return TYPE; }
     }
 
-    public record Choose(String spawn, String kit, long revision) implements CustomPacketPayload {
+    public record Choose(String spawn, String kit, long revision, List<Integer> offers) implements CustomPacketPayload {
+        public Choose {
+            offers = List.copyOf(offers);
+            if (offers.size() > KitShop.MAX_PICKS) throw new IllegalArgumentException("Too many starter kit offers");
+        }
+
+        public Choose(String spawn, String kit, long revision) {
+            this(spawn, kit, revision, List.of());
+        }
+
         public static final Type<Choose> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(KingdomsHeritage.MOD_ID, "choose"));
         public static final StreamCodec<RegistryFriendlyByteBuf, Choose> CODEC = StreamCodec.of(
                 (buffer, value) -> {
                     buffer.writeUtf(value.spawn, 256);
                     buffer.writeUtf(value.kit, 256);
                     buffer.writeLong(value.revision);
-                }, buffer -> new Choose(buffer.readUtf(256), buffer.readUtf(256), buffer.readLong()));
+                    buffer.writeVarInt(value.offers.size());
+                    for (int offer : value.offers) buffer.writeVarInt(offer);
+                }, buffer -> {
+                    String spawn = buffer.readUtf(256);
+                    String kit = buffer.readUtf(256);
+                    long revision = buffer.readLong();
+                    int count = buffer.readVarInt();
+                    if (count < 0 || count > KitShop.MAX_PICKS) throw new io.netty.handler.codec.DecoderException("Invalid starter kit offer count");
+                    var offers = new ArrayList<Integer>(count);
+                    for (int index = 0; index < count; index++) offers.add(buffer.readVarInt());
+                    return new Choose(spawn, kit, revision, offers);
+                });
         @Override public Type<Choose> type() { return TYPE; }
     }
 
@@ -119,7 +142,7 @@ public final class HeritageNetwork {
     }
 
     public static void register(RegisterPayloadHandlersEvent event) {
-        var registrar = event.registrar("8");
+        var registrar = event.registrar("9");
         registrar.playToServer(IntroReady.TYPE, IntroReady.CODEC, (packet, context) ->
                 com.jvn.kingdomsheritage.server.SpawnIntro.ready((ServerPlayer) context.player(), packet.token, packet.durationTicks));
         registrar.playToServer(FlowAction.TYPE, FlowAction.CODEC, (packet, context) ->

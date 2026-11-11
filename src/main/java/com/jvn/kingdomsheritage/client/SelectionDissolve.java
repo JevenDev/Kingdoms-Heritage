@@ -42,8 +42,16 @@ public final class SelectionDissolve {
     }
 
     static void render(GuiGraphics graphics, float progress, Runnable cards) {
+        render(graphics, progress, false, cards);
+    }
+
+    static void white(GuiGraphics graphics, float progress, Runnable drawing) {
+        render(graphics, progress, true, drawing);
+    }
+
+    private static void render(GuiGraphics graphics, float progress, boolean white, Runnable drawing) {
         if (progress <= 0) {
-            cards.run();
+            drawing.run();
             return;
         }
         if (progress >= 1) return;
@@ -58,7 +66,7 @@ public final class SelectionDissolve {
             }
             target.clear(Minecraft.ON_OSX);
             target.bindWrite(true);
-            cards.run();
+            drawing.run();
             graphics.flush();
         } finally {
             main.bindWrite(true);
@@ -70,6 +78,7 @@ public final class SelectionDissolve {
         try {
             if (shader != null) {
                 shader.safeGetUniform("Progress").set(progress);
+                shader.safeGetUniform("EdgeColor").set(white ? 1F : 0.95F, white ? 1F : 0.73F, white ? 1F : 0.40F);
                 shader.safeGetUniform("Resolution").set((float) graphics.guiWidth(), (float) graphics.guiHeight());
                 RenderSystem.setShader(() -> shader);
                 RenderSystem.setShaderColor(1, 1, 1, 1);

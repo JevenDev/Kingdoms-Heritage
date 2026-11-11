@@ -19,8 +19,9 @@
     }
   },
   "else": {
-    "required": [
-      "items"
+    "anyOf": [
+      { "required": ["items"] },
+      { "required": ["shop"] }
     ],
     "properties": {
       "title": {
@@ -61,6 +62,26 @@
         },
         "default": []
       },
+      "shop": {
+        "type": "object",
+        "required": ["budget", "offers"],
+        "properties": {
+          "budget": { "type": "integer", "minimum": 0, "maximum": 1000000 },
+          "offers": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 256,
+            "items": {
+              "type": "object",
+              "required": ["cost", "item"],
+              "properties": {
+                "cost": { "type": "integer", "minimum": 0, "maximum": 1000000 },
+                "item": { "$ref": "#/$defs/stack" }
+              }
+            }
+          }
+        }
+      },
       "items": {
         "type": "array",
         "maxItems": 256,
@@ -96,6 +117,27 @@
     ]
   },
   "$defs": {
+    "stack": {
+      "type": "object",
+      "required": [
+        "id"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^(?:[a-z0-9_.-]+:)?[a-z0-9/._-]+$"
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1
+        },
+        "components": {
+          "type": "object"
+        }
+      },
+      "description": "Minecraft 1.21.1 item data. The game checks the item components and stack limit."
+    },
     "itemEntry": {
       "type": "object",
       "required": [
@@ -131,27 +173,7 @@
           "type": "boolean",
           "default": false
         },
-        "item": {
-          "type": "object",
-          "required": [
-            "id"
-          ],
-          "properties": {
-            "id": {
-              "type": "string",
-              "pattern": "^(?:[a-z0-9_.-]+:)?[a-z0-9/._-]+$"
-            },
-            "count": {
-              "type": "integer",
-              "minimum": 1,
-              "default": 1
-            },
-            "components": {
-              "type": "object"
-            }
-          },
-          "description": "Minecraft 1.21.1 item data. The game checks the item components and stack limit."
-        }
+        "item": { "$ref": "#/$defs/stack" }
       },
       "if": {
         "properties": {

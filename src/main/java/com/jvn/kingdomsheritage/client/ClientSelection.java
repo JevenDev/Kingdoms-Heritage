@@ -108,7 +108,8 @@ public final class ClientSelection {
         boolean confirmed = progress.equals("applying");
         progress = "";
         String spawnId = kits != null ? kits.spawnId() : selection == null ? null : selection.selectedId();
-        String kitId = kits == null ? null : kits.kitId();
+        KitSelection previousKits = kits;
+        String kitId = previousKits == null ? null : previousKits.kitId();
         if (kits != null && minecraft.player != null) minecraft.player.closeContainer();
         closeKits();
         if (!next.has("spawns")) {
@@ -137,9 +138,10 @@ public final class ClientSelection {
         selection.restoreSelection(spawnId);
         if (!HeritageScreens.valid(catalog)) HeritageScreens.cancel();
         if (minecraft.level != null && minecraft.player != null && !interrupted()) {
-            if (kitId != null && selection.selectedId() != null && allowedKits(catalog, spawnId).size() > 1) {
+            if (kitId != null && selection.selectedId() != null && !allowedKits(catalog, spawnId).isEmpty()) {
                 kits = new KitSelection(catalog, spawnId);
                 kits.restoreSelection(kitId);
+                if (!newSession) kits.resumeShop(previousKits);
             }
             if (!newSession && flowReset != null) resetExtensions(flowReset);
             else showSelection();
@@ -229,18 +231,22 @@ public final class ClientSelection {
                 HeritageScreens.Placement.AFTER_KIT, spawn, kit, () -> requestReview(spawn, kit)));
     }
 
-    static void review(String spawn, String kit) {
+    static void review(String spawn, String kit, List<Integer> offers) {
         choicesChanged(spawn, kit);
         SelectionTransition.fadeOut(() -> {
             if (kits != null) kits.close();
             Minecraft.getInstance().player.closeContainer();
             HeritageScreens.open(HeritageScreens.Placement.AFTER_KIT, HeritageScreens.Placement.AFTER_KIT,
-                    spawn, kit, () -> requestReview(spawn, kit));
+                    spawn, kit, () -> requestReview(spawn, kit, offers));
         });
     }
 
     private static void requestReview(String spawn, String kit) {
-        var request = new HeritageNetwork.Choose(spawn, kit, catalog.get("revision").getAsLong());
+        requestReview(spawn, kit, List.of());
+    }
+
+    private static void requestReview(String spawn, String kit, List<Integer> offers) {
+        var request = new HeritageNetwork.Choose(spawn, kit, catalog.get("revision").getAsLong(), offers);
         net.neoforged.neoforge.network.PacketDistributor.sendToServer(new HeritageNetwork.Review(request));
     }
 
@@ -362,7 +368,7 @@ public final class ClientSelection {
             if (minecraft.screen != finalReview) minecraft.setScreen(finalReview);
         } else if (kits != null) {
             kits.tick();
-            if (!KitSelection.isInventory(minecraft.screen) && !KitSelection.isLayoutPicker(minecraft.screen)) kits.openInventory();
+            if (!kits.hasScreen(minecraft.screen)) kits.openInventory();
         } else if (!(minecraft.screen instanceof SpawnSelectScreen)) {
             minecraft.setScreen(selection);
         }

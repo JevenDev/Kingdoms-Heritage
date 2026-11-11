@@ -19,13 +19,14 @@ function read(source) {
   if(!object(document))throw issue('A kit must be a JSON object.');
   if(document.enabled!==undefined&&typeof document.enabled!=='boolean')throw issue('enabled must be true or false.',['enabled']);
   if(document.enabled===false)return {document,warnings:[]};
-  for(const name of ['title','title_key','description','description_key','order','selected_slot','tags','items'])if(document[name]===null)throw issue(name+' cannot be null.',[name]);
+  for(const name of ['title','title_key','description','description_key','order','selected_slot','tags','items','shop'])if(document[name]===null)throw issue(name+' cannot be null.',[name]);
   const title=document.title??document.title_key;
   if(typeof title!=='string'||!title.trim()||title.length>120)throw issue('Enter a title or title_key from 1 to 120 characters.',[document.title===undefined&&document.title_key!==undefined?'title_key':'title']);
   for(const [name,max] of [['description',4000],['title_key',256],['description_key',256]])if(document[name]!==undefined&&(typeof document[name]!=='string'||document[name].length>max))throw issue(name+' must be text up to '+max+' characters.',[name]);
   integer(document.order??0,-2147483648,2147483647,'order',['order']);
   integer(document.selected_slot??0,0,8,'selected_slot',['selected_slot']);
   if(document.tags!==undefined&&(!Array.isArray(document.tags)||document.tags.length>128||document.tags.some(tag=>typeof tag!=='string'||!idPattern.test(tag))))throw issue('tags must contain up to 128 resource IDs, without #.',['tags']);
+  if(document.shop!==undefined&&document.items===undefined)document.items=[];
   if(!Array.isArray(document.items)||document.items.length>256)throw issue('items must be an array of up to 256 entries.',['items']);
   const occupied=new Set(),warnings=[];
   for(const [n,entry] of document.items.entries()) {
@@ -41,19 +42,34 @@ function read(source) {
     const key=[inventory,slot,entry.index,cosmetic].join('/');
     if(occupied.has(key))throw issue('Two items use the same slot: '+key,[...path,'index']);
     occupied.add(key);
-    if(!object(entry.item))throw issue(label+': enter an item object.',[...path,'item']);
-    if(typeof entry.item.id!=='string'||!idPattern.test(entry.item.id))throw issue(label+': enter a valid item ID.',[...path,'item','id']);
-    const id=normalize(entry.item.id),known=items.get(id);
-    if(id.startsWith('minecraft:')&&!known)throw issue(label+': unknown Minecraft 1.21.1 item '+id,[...path,'item','id']);
-    if(entry.item.components!==undefined&&!object(entry.item.components))throw issue(label+': components must be a JSON object.',[...path,'item','components']);
-    if(entry.item.count===null)throw issue(label+': count cannot be null.',[...path,'item','count']);
-    const componentMax=entry.item.components?.['minecraft:max_stack_size'];
-    const maximum=componentMax===undefined?known?.max??99:componentMax;
-    integer(maximum,1,entry.ignore_stack_limit===true?MAX_COUNT:99,label+' maximum stack size',[...path,'item','components','minecraft:max_stack_size']);
-    integer(entry.item.count??1,1,entry.ignore_stack_limit===true?MAX_COUNT:maximum,label+' count',[...path,'item','count']);
-    warnings.push(...itemWarnings(entry).map(message=>id+': '+message));
+    validateStack(entry,label,path,warnings);
   }
+  if(document.shop!==undefined)validateShop(document.shop,warnings);
   return {document,warnings:[...new Set(warnings)]};
+}
+function validateStack(entry,label,path,warnings) {
+  if(!object(entry.item))throw issue(label+': enter an item object.',[...path,'item']);
+  if(typeof entry.item.id!=='string'||!idPattern.test(entry.item.id))throw issue(label+': enter a valid item ID.',[...path,'item','id']);
+  const id=normalize(entry.item.id),known=items.get(id);
+  if(id.startsWith('minecraft:')&&!known)throw issue(label+': unknown Minecraft 1.21.1 item '+id,[...path,'item','id']);
+  if(entry.item.components!==undefined&&!object(entry.item.components))throw issue(label+': components must be a JSON object.',[...path,'item','components']);
+  if(entry.item.count===null)throw issue(label+': count cannot be null.',[...path,'item','count']);
+  const componentMax=entry.item.components?.['minecraft:max_stack_size'];
+  const maximum=componentMax===undefined?known?.max??99:componentMax;
+  integer(maximum,1,entry.ignore_stack_limit===true?MAX_COUNT:99,label+' maximum stack size',[...path,'item','components','minecraft:max_stack_size']);
+  integer(entry.item.count??1,1,entry.ignore_stack_limit===true?MAX_COUNT:maximum,label+' count',[...path,'item','count']);
+  warnings.push(...itemWarnings(entry).map(message=>id+': '+message));
+}
+function validateShop(shop,warnings) {
+  if(!object(shop))throw issue('shop must be an object.',['shop']);
+  integer(shop.budget,0,1000000,'Shop budget',['shop','budget']);
+  if(!Array.isArray(shop.offers)||!shop.offers.length||shop.offers.length>256)throw issue('Enter 1 to 256 shop offers.',['shop','offers']);
+  for(const [index,offer] of shop.offers.entries()) {
+    const path=['shop','offers',index],label='Offer '+(index+1);
+    if(!object(offer))throw issue(label+' must be an object.',path);
+    integer(offer.cost,0,1000000,label+' cost',[...path,'cost']);
+    validateStack({item:offer.item},label,path,warnings);
+  }
 }
 function canPreview(document) {
   return object(document)&&Array.isArray(document.items)&&document.items.length<=256&&document.items.every(entry=>

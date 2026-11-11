@@ -14,7 +14,7 @@ final class DialogueContexts {
     private DialogueContexts() {}
 
     static DialogueContext create(ServerPlayer player, SpawnDefinition spawn, KitDefinition kit,
-                                  HeritageConfig.InventoryPolicy policy) {
+                                  HeritageConfig.InventoryPolicy policy, boolean hasKitItems) {
         var members = SelectionParty.members(player);
         var companions = members.stream().filter(member -> member != player).map(member -> member.getGameProfile().getName()).toList();
         var leaderId = SelectionParty.leader(player);
@@ -22,7 +22,7 @@ final class DialogueContexts {
         boolean belongings = !player.getInventory().isEmpty()
                 || EquipmentCompat.slots(player).stream().anyMatch(slot -> !slot.get().get().isEmpty());
         boolean keeps = belongings && policy != HeritageConfig.InventoryPolicy.REPLACE;
-        boolean receives = policy != HeritageConfig.InventoryPolicy.PRESERVE && !kit.entries().isEmpty();
+        boolean receives = policy != HeritageConfig.InventoryPolicy.PRESERVE && hasKitItems;
         var title = kit.titleKey().isEmpty() ? Component.literal(kit.title()) : Component.translatableWithFallback(kit.titleKey(), kit.title());
         var equipment = receives ? keeps ? Component.translatable("dialogue.kingdomsheritage.equipment_merged", title) : title
                 : Component.translatable("screen.kingdomsheritage." + (keeps ? "review_carried_items" : "review_empty_items"));

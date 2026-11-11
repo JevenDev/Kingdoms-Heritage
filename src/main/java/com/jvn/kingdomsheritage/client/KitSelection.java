@@ -30,6 +30,8 @@ public final class KitSelection {
     private List<KitDefinition.StackEntry> stacks = List.of();
     private int index;
     private boolean submitted;
+    private boolean shopOpen;
+    private KitShopScreen shop;
     private Component definitionProblem = Component.empty();
     private Component problem = Component.empty();
     private final KitSelectionView view = new KitSelectionView(this);
@@ -67,19 +69,56 @@ public final class KitSelection {
         }
     }
 
+    boolean hasScreen(Screen screen) {
+        return shopOpen ? screen == shop : isInventory(screen) || isLayoutPicker(screen);
+    }
+
+    boolean hasShop() {
+        return kit != null && kit.shop() != null && inventoryPolicy != HeritageConfig.InventoryPolicy.PRESERVE;
+    }
+
+    void openShop() {
+        if (!hasShop()) return;
+        if (shop == null) shop = new KitShopScreen(this, kit, stacks, inventoryPolicy);
+        shopOpen = true;
+        Minecraft.getInstance().setScreen(shop);
+    }
+
+    void leaveShop() {
+        shopOpen = false;
+        openInventory();
+    }
+
+    void resumeShop(KitSelection previous) {
+        if (!previous.shopOpen || !hasShop() || !kitId().equals(previous.kitId())
+                || catalog.get("revision").getAsLong() != previous.catalog.get("revision").getAsLong()
+                || !definitionProblem.getString().isEmpty()) return;
+        shop = new KitShopScreen(this, kit, stacks, inventoryPolicy);
+        shop.restore(previous.shop.picks());
+        shopOpen = true;
+    }
+
     void openInventory() {
+        if (shopOpen) {
+            Minecraft.getInstance().setScreen(shop);
+            return;
+        }
         Minecraft.getInstance().player.getRecipeBook().setOpen(net.minecraft.world.inventory.RecipeBookType.CRAFTING, false);
         Minecraft.getInstance().setScreen(new InventoryScreen(player));
     }
 
     void select(int index) {
         this.index = index;
+        shop = null;
+        shopOpen = false;
+        kit = null;
         ClientSelection.choicesChanged(spawn, kitId());
         view.reset();
         problem = DefinitionJson.message(choices.get(index), "problem", player.registryAccess());
         try {
             kit = KitDefinition.parse(ResourceLocation.parse(choices.get(index).get("id").getAsString()), choices.get(index));
             stacks = kit.decode(player.registryAccess());
+            if (hasShop()) kit.decodeOffers(player.registryAccess());
         } catch (IllegalArgumentException error) {
             stacks = List.of();
             problem = HeritageException.component(error);
@@ -164,10 +203,10 @@ public final class KitSelection {
                 + inventoryPolicy.name().toLowerCase(java.util.Locale.ROOT)) : problem;
     }
 
-    void submit() {
+    void submit(List<Integer> offers) {
         submitted = true;
         view.updateButtons();
-        ClientSelection.review(spawn, kitId());
+        ClientSelection.review(spawn, kitId(), offers);
     }
 
     void close() {

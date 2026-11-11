@@ -6,6 +6,7 @@ import com.jvn.kingdomsheritage.HeritageConfig;
 import com.jvn.kingdomsheritage.KingdomsHeritage;
 import com.jvn.kingdomsheritage.compat.EquipmentCompat;
 import com.jvn.kingdomsheritage.data.HeritageCatalog;
+import com.jvn.kingdomsheritage.data.KitDefinition;
 import com.jvn.kingdomsheritage.data.HeritageException;
 import com.jvn.kingdomsheritage.network.HeritageNetwork;
 import java.nio.charset.StandardCharsets;
@@ -264,7 +265,7 @@ public final class SelectionManager {
         }
         try {
             SelectionSteps.requireComplete(player, request.spawn(), request.kit());
-            var stacks = kit.decode(player.registryAccess());
+            var stacks = kit.loadout(player, inventoryPolicy(player), request.offers());
             if (inventoryPolicy(player) != HeritageConfig.InventoryPolicy.PRESERVE) EquipmentCompat.validate(player, stacks);
             SelectionLifecycle.choices(player, spawnId, kitId);
             var search = SelectionParty.search(player, spawn);
@@ -316,9 +317,11 @@ public final class SelectionManager {
                 review.add("companions", SelectionParty.companions(player));
                 SelectionParty.stage(player, 3);
                 review.add("locations", SpawnIntro.locations(preparation.search().definition(), destination));
+                var request = preparation.request();
+                var kit = HeritageCatalog.kits().get(ResourceLocation.parse(request.kit()));
                 review.add("dialogue_context", DialogueContexts.create(player,
-                        HeritageCatalog.spawns().get(ResourceLocation.parse(preparation.request().spawn())),
-                        HeritageCatalog.kits().get(ResourceLocation.parse(preparation.request().kit())), inventoryPolicy(player)).json());
+                        HeritageCatalog.spawns().get(ResourceLocation.parse(request.spawn())), kit, inventoryPolicy(player),
+                        !kit.entries().isEmpty() || !request.offers().isEmpty()).json());
                 JsonObject message = new JsonObject();
                 message.add("review", review);
                 REVIEWS.put(player.getUUID(), new Review(token, preparation));
@@ -331,6 +334,7 @@ public final class SelectionManager {
             }
             var members = SelectionParty.members(player);
             var requests = new LinkedHashMap<ServerPlayer, HeritageNetwork.Choose>();
+            var loadouts = new LinkedHashMap<ServerPlayer, List<KitDefinition.StackEntry>>();
             for (var member : members) {
                 if (SelectionDebug.isBot(member)) continue;
                 var request = SelectionParty.grouped(player) ? REVIEWS.get(member.getUUID()).preparation().request() : preparation.request();
@@ -339,9 +343,10 @@ public final class SelectionManager {
                 }
                 SelectionSteps.requireComplete(member, request.spawn(), request.kit());
                 var kit = HeritageCatalog.kits().get(ResourceLocation.parse(request.kit()));
-                var stacks = kit.decode(member.registryAccess());
+                var stacks = kit.loadout(member, inventoryPolicy(member), request.offers());
                 if (inventoryPolicy(member) != HeritageConfig.InventoryPolicy.PRESERVE) EquipmentCompat.validate(member, stacks);
                 requests.put(member, request);
+                loadouts.put(member, stacks);
             }
             KingdomsHeritage.LOGGER.debug("Prepared Heritage location {} in {} ms of server work",
                     preparation.request().spawn(), preparation.search().workMillis());
@@ -358,10 +363,12 @@ public final class SelectionManager {
                     var member = entry.getKey();
                     var kit = HeritageCatalog.kits().get(ResourceLocation.parse(entry.getValue().kit()));
                     var intro = SpawnIntro.prepare(preparation.search().definition(), destination);
+                    var loadout = loadouts.get(member);
                     intro.add("dialogue_context", DialogueContexts.create(member,
-                            HeritageCatalog.spawns().get(ResourceLocation.parse(entry.getValue().spawn())), kit, inventoryPolicy(member)).json());
+                            HeritageCatalog.spawns().get(ResourceLocation.parse(entry.getValue().spawn())), kit, inventoryPolicy(member),
+                            !loadout.isEmpty()).json());
                     intros.put(member, intro);
-                    KitService.apply(member, kit, kit.decode(member.registryAccess()), inventoryPolicy(member));
+                    KitService.apply(member, kit, loadout, inventoryPolicy(member));
                 }
             } catch (RuntimeException error) {
                 backups.forEach(InventoryBackup::restore);
@@ -561,8 +568,10 @@ public final class SelectionManager {
                 items.add(item);
             }
             choice.add("items", items);
+            if (kit.shop() != null) choice.add("shop", kit.shop().json());
             try {
                 var decoded = kit.decode(player.registryAccess());
+                kit.decodeOffers(player.registryAccess());
                 if (inventoryPolicy(player) != HeritageConfig.InventoryPolicy.PRESERVE) EquipmentCompat.validate(player, decoded);
                 choice.addProperty("problem", "");
             } catch (IllegalArgumentException failure) {

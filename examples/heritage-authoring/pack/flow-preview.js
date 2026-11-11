@@ -108,6 +108,7 @@ async function loadOverlayShader(source,toast=false){
   const position=gl.getAttribLocation(program,'Position');gl.enableVertexAttribArray(position);gl.vertexAttribPointer(position,2,gl.FLOAT,false,0,0);
   const texture=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,texture);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL,true);
   const progress=gl.getUniformLocation(program,toast?'Time':'Progress'),resolution=gl.getUniformLocation(program,toast?'Size':'Resolution');
+  if(!toast)gl.uniform3f(gl.getUniformLocation(program,'EdgeColor'),.95,.73,.40);
   const effect=(w,h,value)=>{const width=toast?Math.round(w*viewport.scale):layer.width,height=toast?Math.round(h*viewport.scale):layer.height;if(target.width!==width||target.height!==height){target.width=width;target.height=height;}gl.viewport(0,0,target.width,target.height);gl.uniform1f(progress,value);gl.uniform2f(resolution,w,h);if(!toast)gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,layer);gl.clear(gl.COLOR_BUFFER_BIT);gl.drawArrays(gl.TRIANGLES,0,3);return target;};
   if(toast)toastBackground=effect;else dissolve=effect;
 }

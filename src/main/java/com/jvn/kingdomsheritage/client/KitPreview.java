@@ -16,6 +16,7 @@ final class KitPreview {
     private Snapshot original;
     private Snapshot expected;
     private KitDefinition kit;
+    private List<KitDefinition.StackEntry> stacks;
     private InventoryPolicy policy;
     private IllegalArgumentException failure;
 
@@ -24,7 +25,7 @@ final class KitPreview {
     }
 
     void apply(KitDefinition kit, List<KitDefinition.StackEntry> stacks, InventoryPolicy policy) {
-        if (this.kit == kit && this.policy == policy && original != null && original.matches(player)) {
+        if (this.kit == kit && this.stacks == stacks && this.policy == policy && original != null && original.matches(player)) {
             if (failure != null) throw failure;
             return;
         }
@@ -33,6 +34,7 @@ final class KitPreview {
         expected = null;
         failure = null;
         this.kit = kit;
+        this.stacks = stacks;
         this.policy = policy;
         try {
             if (kit != null) {

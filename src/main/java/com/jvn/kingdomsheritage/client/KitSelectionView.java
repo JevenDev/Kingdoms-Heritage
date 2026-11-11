@@ -124,6 +124,10 @@ final class KitSelectionView {
     private void confirm() {
         if (model.submitted() || !confirm.active || !model.problem().getString().isEmpty() || SelectionTransition.active()) return;
         if (!confirming) {
+            if (model.hasShop()) {
+                model.openShop();
+                return;
+            }
             confirmationFrom = confirmationProgress();
             confirmationStarted = net.minecraft.Util.getMillis();
             confirming = true;
@@ -131,7 +135,7 @@ final class KitSelectionView {
             Minecraft.getInstance().screen.setFocused(confirm);
             return;
         }
-        model.submit();
+        model.submit(List.of());
     }
 
     private void back() {

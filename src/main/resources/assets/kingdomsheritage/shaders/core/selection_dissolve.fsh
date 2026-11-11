@@ -3,6 +3,7 @@
 uniform sampler2D Sampler0;
 uniform float Progress;
 uniform vec2 Resolution;
+uniform vec3 EdgeColor;
 
 in vec2 texCoord;
 
@@ -29,6 +30,6 @@ void main() {
     float coverage = smoothstep(threshold, threshold + 0.045, grain);
     if (coverage < 0.001) discard;
     float edge = 1.0 - smoothstep(threshold + 0.045, threshold + 0.12, grain);
-    color.rgb = mix(color.rgb, vec3(0.95, 0.73, 0.40) * color.a, edge * 0.65);
+    color.rgb = mix(color.rgb, EdgeColor * color.a, edge * 0.65);
     fragColor = color * coverage;
 }

@@ -456,7 +456,8 @@ public final class SpawnSelectScreen extends Screen {
 
     private void updateNext() {
         var kits = ClientSelection.allowedKits(catalog, selectedId());
-        automaticKit = kits.size() == 1 ? kits.getFirst() : null;
+        boolean preserve = catalog.has("inventory_policy") && "PRESERVE".equals(catalog.get("inventory_policy").getAsString());
+        automaticKit = kits.size() == 1 && (preserve || !kits.getFirst().has("shop")) ? kits.getFirst() : null;
         boolean valid = automaticKit == null || automaticKit.get("problem").getAsString().isEmpty();
         float progress = confirmationProgress(net.minecraft.Util.getMillis());
         for (Card card : cards) card.active = !submitted && !confirming && progress == 0 && card.visible;
