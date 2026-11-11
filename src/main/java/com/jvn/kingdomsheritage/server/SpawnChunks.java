@@ -25,9 +25,13 @@ final class SpawnChunks implements AutoCloseable {
     SpawnChunks(ServerLevel level) { this.level = level; }
 
     boolean prepare(BlockPos position) {
+        return prepare(position, 1);
+    }
+
+    boolean prepare(BlockPos position, int margin) {
         var needed = new HashSet<ChunkPos>();
-        for (int x = (position.getX() - 1) >> 4; x <= (position.getX() + 1) >> 4; x++) {
-            for (int z = (position.getZ() - 1) >> 4; z <= (position.getZ() + 1) >> 4; z++) needed.add(new ChunkPos(x, z));
+        for (int x = (position.getX() - margin) >> 4; x <= (position.getX() + margin) >> 4; x++) {
+            for (int z = (position.getZ() - margin) >> 4; z <= (position.getZ() + margin) >> 4; z++) needed.add(new ChunkPos(x, z));
         }
         terrain.entrySet().removeIf(entry -> {
             if (needed.contains(entry.getKey())) return false;

@@ -305,6 +305,10 @@ public final class SelectionManager {
                 return;
             }
             var members = SelectionParty.members(player);
+            if (members.size() > 1 && !search.preparePartyArrival()) {
+                session.requeue();
+                return;
+            }
             var deliveries = new ArrayList<SelectionFinalization.Member>();
             var assigned = new ArrayList<BlockPos>();
             for (var member : members) {
@@ -319,7 +323,7 @@ public final class SelectionManager {
                 var spawn = HeritageCatalog.spawns().get(ResourceLocation.parse(reviewed.spawn()));
                 var kit = HeritageCatalog.kits().get(ResourceLocation.parse(reviewed.kit()));
                 var policy = inventoryPolicy(member);
-                var arrival = SpawnResolver.partyArrival(destination, search.definition(), assigned);
+                var arrival = search.partyArrival(assigned);
                 assigned.add(arrival.position());
                 deliveries.add(SelectionFinalization.plan(member, spawn, kit, kit.loadout(member, policy, reviewed.offers()),
                         policy, search.definition(), arrival));
