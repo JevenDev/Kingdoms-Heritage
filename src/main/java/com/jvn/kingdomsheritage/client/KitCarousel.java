@@ -97,14 +97,17 @@ final class KitCarousel {
             if (!includeSelected && index == selected) continue;
             Pose pose = pose(index, bounds, width, position);
             if (pose.opacity <= 0) continue;
+            var tabs = model.shopTabs(index);
+            int tabWidth = tabs.width(bounds.getX());
             if (index == selected && !moving(now)) {
-                drawInventory.render(index, 1);
+                renderCard(graphics, bounds, tabs, tabWidth, () -> drawInventory.render(index, 1));
                 continue;
             }
             Frame frame = frames.computeIfAbsent(index, ignored -> new Frame());
             boolean looking = pose.look > 0;
             if (index == selected || looking || frame.looking || now - frame.captured >= 120 || frame.captured == 0) {
-                frame.preview.capture(graphics, () -> drawInventory.render(index, pose.look));
+                frame.preview.capture(graphics,
+                        () -> renderCard(graphics, bounds, tabs, tabWidth, () -> drawInventory.render(index, pose.look)));
                 frame.captured = now;
                 frame.looking = looking;
             }
@@ -112,7 +115,9 @@ final class KitCarousel {
             frame.hover = Mth.lerp(response, frame.hover, index == hovered ? 1 : 0);
             frame.rendered = now;
             float opacity = Math.min(1, pose.opacity + frame.hover * 0.2F) * visibility;
-            frame.preview.draw(graphics, bounds, pose.x, pose.y, pose.scale, 0, opacity);
+            var captureBounds = tabWidth == 0 ? bounds : new Rect2i(bounds.getX() - tabWidth, bounds.getY(),
+                    bounds.getWidth() + tabWidth, bounds.getHeight());
+            frame.preview.draw(graphics, captureBounds, pose.x - tabWidth * pose.scale, pose.y, pose.scale, 0, opacity);
             if (index != selected) {
                 var font = Minecraft.getInstance().font;
                 var name = DefinitionJson.component(model.choices().get(index), "title");
@@ -134,6 +139,13 @@ final class KitCarousel {
                 }
             }
         }
+    }
+
+    private static void renderCard(GuiGraphics graphics, Rect2i bounds, KitShopTabs.Preview tabs,
+                                   int tabWidth, Runnable inventory) {
+        if (tabWidth > 0) tabs.renderUnselected(graphics, bounds.getX(), bounds.getY());
+        inventory.run();
+        if (tabWidth > 0) tabs.renderSelected(graphics, bounds.getX(), bounds.getY());
     }
 
     int hit(Rect2i bounds, int width, int count, double x, double y, long now) {

@@ -1,12 +1,15 @@
 package com.jvn.kingdomsheritage.client;
 
+import static com.jvn.kingdomsheritage.client.KitShopTabs.HEIGHT;
+import static com.jvn.kingdomsheritage.client.KitShopTabs.PITCH;
+import static com.jvn.kingdomsheritage.client.KitShopTabs.WIDTH;
+
 import com.jvn.kingdomsheritage.HeritageConfig.InventoryPolicy;
 import com.jvn.kingdomsheritage.data.DefinitionJson;
 import com.jvn.kingdomsheritage.data.HeritageException;
 import com.jvn.kingdomsheritage.data.KitDefinition;
 import com.jvn.kingdomsheritage.data.KitLoadout;
 import com.jvn.kingdomsheritage.data.KitShop;
-import com.mojang.math.Axis;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -15,7 +18,6 @@ import net.minecraft.Util;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Tooltip;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.locale.Language;
@@ -32,7 +34,7 @@ final class KitShopScreen extends Screen {
     private static final int COLUMNS = KitShop.VISIBLE_COLUMNS, PAGE_SIZE = COLUMNS * KitShop.ROWS, SLOT_PITCH = 18, BAR_WIDTH = 182;
     private static final int SHOP_WIDTH = 14 + COLUMNS * SLOT_PITCH, INVENTORY_WIDTH = 176, PANEL_HEIGHT = 166;
     private static final int EFFECT_DURATION = 270;
-    private static final int TAB_HEIGHT = 26, TAB_PITCH = 27, TAB_WIDTH = 28, TAB_SPRITE_WIDTH = 32, TAB_ROWS = 6;
+    private static final int TAB_ROWS = 6, TAB_ARROW_SIZE = 16;
     private static final int DETAIL_WIDTH = 68, NAME_LINES = 2;
     private static final int CHEST_SLOT = 38, OFFHAND_SLOT = 40;
     private static final int DETAIL_INK = 0xff404040, DETAIL_MUTED = 0xff545454;
@@ -42,9 +44,6 @@ final class KitShopScreen extends Screen {
     private static final ResourceLocation INVENTORY = ResourceLocation.withDefaultNamespace("textures/gui/container/inventory.png");
     private static final ResourceLocation BAR = ResourceLocation.withDefaultNamespace("hud/experience_bar_background");
     private static final ResourceLocation FILL = ResourceLocation.withDefaultNamespace("hud/experience_bar_progress");
-    private static final ResourceLocation TAB_SELECTED = ResourceLocation.withDefaultNamespace("textures/gui/sprites/container/creative_inventory/tab_top_selected_1.png");
-    private static final ResourceLocation TAB_SELECTED_MIDDLE = ResourceLocation.withDefaultNamespace("textures/gui/sprites/container/creative_inventory/tab_top_selected_2.png");
-    private static final ResourceLocation TAB_UNSELECTED = ResourceLocation.withDefaultNamespace("textures/gui/sprites/container/creative_inventory/tab_top_unselected_1.png");
     private static final List<ResourceLocation> EMPTY_EQUIPMENT = List.of(
             InventoryMenu.EMPTY_ARMOR_SLOT_BOOTS, InventoryMenu.EMPTY_ARMOR_SLOT_LEGGINGS,
             InventoryMenu.EMPTY_ARMOR_SLOT_CHESTPLATE, InventoryMenu.EMPTY_ARMOR_SLOT_HELMET,
@@ -68,8 +67,8 @@ final class KitShopScreen extends Screen {
     private List<KitDefinition.StackEntry> loadout;
     private Component problem = Component.empty();
     private Button previous, next, back, review, reset, previousSections, nextSections;
-    private int left, top, page, spent, section, sectionPage;
-    private double scrollRemainder;
+    private int left, top, page, spent, section, sectionOffset;
+    private double scrollRemainder, sectionScrollRemainder;
     private Trade trade;
     private boolean controlsDirty = true;
     private final OfferStatus[] offerStatuses = new OfferStatus[PAGE_SIZE];
@@ -85,8 +84,7 @@ final class KitShopScreen extends Screen {
         this.fixed = fixed;
         this.loadout = fixed;
         stock = kit.decodeOffers(selection.player().registryAccess());
-        sectionIcons = shop.sections().stream()
-                .map(tab -> BuiltInRegistries.ITEM.getOptional(tab.icon()).orElse(Items.PAPER).getDefaultInstance()).toList();
+        sectionIcons = shop.sections().stream().map(KitShopTabs::icon).toList();
         layout = shop.layout("");
         bought = new int[stock.size()];
         preview = new KitPreview(selection.player());
@@ -106,20 +104,23 @@ final class KitShopScreen extends Screen {
         controlsDirty = true;
         previousSections = nextSections = null;
         if (!sectionIcons.isEmpty()) {
-            int x = left - TAB_WIDTH;
+            int x = left - WIDTH;
             boolean paged = sectionIcons.size() + 1 > TAB_ROWS;
-            int y = top + (paged ? 16 : 4);
+            int y = top + (paged && top < TAB_ARROW_SIZE ? TAB_ARROW_SIZE : 0);
             for (int row = 0; row < Math.min(tabRows(), sectionIcons.size() + 1); row++) {
                 int index = row;
-                tabs.add(addWidget(new TabButton(x, y + row * TAB_PITCH, () -> selectSection(sectionPage * tabRows() + index))));
+                tabs.add(addWidget(new TabButton(x, y + row * PITCH, row == 0, () -> selectSection(sectionOffset + index))));
             }
             if (paged) {
-                previousSections = addRenderableWidget(SelectionControls.arrow(x + 6, top, false, text("previous_sections"), button -> pageSections(-1)));
-                nextSections = addRenderableWidget(SelectionControls.arrow(x + 6, top + 150, true, text("next_sections"), button -> pageSections(1)));
-                previousSections.setWidth(16);
-                previousSections.setHeight(16);
-                nextSections.setWidth(16);
-                nextSections.setHeight(16);
+                int arrowX = x + KitShopTabs.PAGER_INSET;
+                previousSections = addRenderableWidget(SelectionControls.verticalArrow(arrowX, y - TAB_ARROW_SIZE, false,
+                        text("previous_sections"), button -> scrollSections(-1)));
+                nextSections = addRenderableWidget(SelectionControls.verticalArrow(arrowX, y + tabRows() * PITCH, true,
+                        text("next_sections"), button -> scrollSections(1)));
+                previousSections.setWidth(TAB_ARROW_SIZE);
+                previousSections.setHeight(TAB_ARROW_SIZE);
+                nextSections.setWidth(TAB_ARROW_SIZE);
+                nextSections.setHeight(TAB_ARROW_SIZE);
             }
         }
         for (int cell = 0; cell < PAGE_SIZE; cell++) {
@@ -168,11 +169,17 @@ final class KitShopScreen extends Screen {
 
     private int tabRows() { return sectionIcons.size() + 1 > TAB_ROWS ? TAB_ROWS - 1 : TAB_ROWS; }
 
-    private void pageSections(int delta) {
-        if (busy()) return;
-        sectionPage = Mth.clamp(sectionPage + delta, 0, sectionIcons.size() / tabRows());
+    private int lastSectionOffset() { return Math.max(0, sectionIcons.size() + 1 - tabRows()); }
+
+    private boolean scrollSections(int delta) {
+        if (busy()) return false;
+        int offset = Mth.clamp(sectionOffset + delta, 0, lastSectionOffset());
+        if (offset == sectionOffset) return false;
+        sectionOffset = offset;
+        if (getFocused() instanceof TabButton) setFocused(null);
         controlsDirty = true;
         updateControls();
+        return true;
     }
 
     private void selectSection(int index) {
@@ -200,6 +207,18 @@ final class KitShopScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double horizontal, double vertical) {
+        if (vertical != 0 && previousSections != null && mouseX >= left - WIDTH && mouseX < left
+                && mouseY >= previousSections.getY() && mouseY < nextSections.getY() + TAB_ARROW_SIZE) {
+            if (!busy()) {
+                double delta = -vertical;
+                if (Math.signum(delta) != Math.signum(sectionScrollRemainder)) sectionScrollRemainder = 0;
+                sectionScrollRemainder += delta;
+                int steps = (int) sectionScrollRemainder;
+                sectionScrollRemainder -= steps;
+                if (steps != 0 && scrollSections(steps)) SelectionSounds.HOVER.play();
+            }
+            return true;
+        }
         double delta = horizontal != 0 ? horizontal : -vertical;
         if (delta == 0 || mouseX < left || mouseX >= left + SHOP_WIDTH || mouseY < top || mouseY >= top + PANEL_HEIGHT) {
             return super.mouseScrolled(mouseX, mouseY, horizontal, vertical);
@@ -341,12 +360,12 @@ final class KitShopScreen extends Screen {
         review.setMessage(selection.submitted() ? ClientSelection.progress() : text("review"));
         reset.active = available && !picks.isEmpty();
         if (previousSections != null) {
-            previousSections.active = available && sectionPage > 0;
-            nextSections.active = available && (sectionPage + 1) * tabRows() <= sectionIcons.size();
+            previousSections.active = available && sectionOffset > 0;
+            nextSections.active = available && sectionOffset < lastSectionOffset();
         }
         for (int row = 0; row < tabs.size(); row++) {
             var tab = tabs.get(row);
-            int index = sectionPage * tabRows() + row;
+            int index = sectionOffset + row;
             tab.visible = index <= sectionIcons.size();
             tab.active = tab.visible && available;
             if (!tab.visible || !refresh) continue;
@@ -628,25 +647,21 @@ final class KitShopScreen extends Screen {
 
     private final class TabButton extends SelectionControls.SoundButton {
         private int index;
+        private final boolean first;
 
-        private TabButton(int x, int y, Runnable action) {
-            super(x, y, TAB_WIDTH, TAB_HEIGHT, Component.empty(), button -> action.run());
+        private TabButton(int x, int y, boolean first, Runnable action) {
+            super(x, y, WIDTH, HEIGHT, Component.empty(), button -> action.run());
+            this.first = first;
         }
 
         @Override
         protected void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-            graphics.pose().pushPose();
-            graphics.pose().translate(getX(), getY() + TAB_HEIGHT, 0);
-            graphics.pose().mulPose(Axis.ZP.rotationDegrees(-90));
-            var sprite = index != section ? TAB_UNSELECTED : index % tabRows() == 0 ? TAB_SELECTED : TAB_SELECTED_MIDDLE;
-            graphics.blit(sprite, 0, 0, TAB_HEIGHT, TAB_SPRITE_WIDTH, TAB_HEIGHT, 0,
-                    -TAB_HEIGHT, TAB_SPRITE_WIDTH, TAB_HEIGHT, TAB_SPRITE_WIDTH);
-            graphics.pose().popPose();
+            KitShopTabs.background(graphics, getX(), getY(), index == section, first);
             if (index != section && isFocused() && minecraft.getLastInputType().isKeyboard()) {
-                graphics.renderOutline(getX() + 1, getY() + 1, TAB_WIDTH - 1, TAB_HEIGHT - 2, 0xffffe4a1);
+                graphics.renderOutline(getX() + 1, getY() + 1, WIDTH - 1, HEIGHT - 2, 0xffffe4a1);
             }
             var icon = index == 0 ? Items.CHEST.getDefaultInstance() : sectionIcons.get(index - 1);
-            graphics.renderItem(icon, getX() + (TAB_SPRITE_WIDTH - 16) / 2, getY() + (TAB_HEIGHT - 16) / 2);
+            KitShopTabs.drawIcon(graphics, getX(), getY(), icon);
         }
     }
 

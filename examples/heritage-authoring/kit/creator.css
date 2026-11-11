@@ -175,7 +175,7 @@
 .shop-preview summary { margin-bottom: 8px; cursor: pointer; }
 .shop-preview-bar { display: block; margin: 0 auto 8px; image-rendering: pixelated; }
 .shop-preview-stock { display: flex; justify-content: center; }
-.shop-inline-tabs { flex: 0 0 64px; max-height: 332px; padding-top: 8px; overflow: hidden auto; scrollbar-width: thin; }
+.shop-inline-tabs { flex: 0 0 64px; max-height: 332px; overflow: hidden auto; scrollbar-width: thin; }
 #author-workspace #shop-inline-tabs .shop-inline-tab {
   position: relative; display: grid; place-items: center; width: 56px; height: 52px; min-height: 0;
   margin: 0 0 2px; padding: 0; border: 0; border-radius: 0; background: none;
