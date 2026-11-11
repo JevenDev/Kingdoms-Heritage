@@ -43,7 +43,10 @@ function edit(kit,action) {
     else{
       shop.sections.splice(index,1);
       if(!shop.sections.length)delete shop.sections;
-      for(const offer of shop.offers)if(offer.section===action.id)delete offer.section;
+      for(const offer of shop.offers)if(offer.section===action.id){
+        delete offer.section;
+        delete offer.position;
+      }
     }
     return next;
   }
@@ -53,6 +56,9 @@ function edit(kit,action) {
     case 'count': offer.item.count=action.value; break;
     case 'cost': offer.cost=action.value; break;
     case 'limit': offer.limit=action.value; break;
+    case 'position':
+      if(action.value)offer.position=action.value;else delete offer.position;
+      break;
     case 'section':
       if(action.value)offer.section=action.value;else delete offer.section;
       break;
@@ -220,8 +226,16 @@ function create(config) {
     row.remove=button('Remove',()=>apply({type:'remove',index:row.index},'remove'));
     const sectionLabel=label('label','shop-offer-section','Section'),section=label('select');
     section.addEventListener('change',()=>apply({type:'section',index:row.index,value:section.value}));
-    sectionLabel.append(section);fields.append(hint,sectionLabel);
-    row.sectionLabel=sectionLabel;row.section=section;
+    sectionLabel.append(section);
+    const slotLabel=label('label','shop-offer-slot','Slot (row, column)'),slot=label('input');
+    slot.placeholder='Automatic';
+    slot.addEventListener('change',()=>{
+      const value=slot.value.trim(),match=/^(\d+)\s*,\s*(\d+)$/.exec(value);
+      if(value&&!match){render();report('Enter a row and column separated by a comma.',true);return;}
+      apply({type:'position',index:row.index,value:match?{row:Number(match[1]),column:Number(match[2])}:null});
+    });
+    slotLabel.append(slot);fields.append(hint,sectionLabel,slotLabel);
+    row.sectionLabel=sectionLabel;row.section=section;row.slot=slot;
     actions.append(row.up,row.down,row.remove);
     element.append(identity,fields,actions);
     element.addEventListener('focusin',()=>highlight(row.index));
@@ -307,6 +321,9 @@ function create(config) {
       }
       row.section.value=offer.section??'';
       row.section.setAttribute('aria-label','Section for offer '+(index+1)+', '+name);
+      row.slot.value=offer.position?offer.position.row+', '+offer.position.column:'';
+      row.slot.disabled=locked;
+      row.slot.setAttribute('aria-label','Slot (row, column) for offer '+(index+1)+', '+name);
       for(const [field,text] of [['count','Stack size'],['cost','Price in points'],['limit','Purchase limit']]){
         row[field].disabled=locked;row[field].setAttribute('aria-label',text+' for offer '+(index+1)+', '+name);
       }

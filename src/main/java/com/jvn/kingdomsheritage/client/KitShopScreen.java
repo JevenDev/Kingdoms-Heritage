@@ -29,7 +29,7 @@ import net.minecraft.world.item.Items;
 
 final class KitShopScreen extends Screen {
     private static final int SHOP_WIDTH = 68, INVENTORY_WIDTH = 176, PANEL_HEIGHT = 166;
-    private static final int COLUMNS = 3, PAGE_SIZE = 24, SLOT_PITCH = 18, BAR_WIDTH = 182;
+    private static final int COLUMNS = 3, PAGE_SIZE = COLUMNS * KitShop.ROWS, SLOT_PITCH = 18, BAR_WIDTH = 182;
     private static final int EFFECT_DURATION = 270;
     private static final int TAB_HEIGHT = 26, TAB_PITCH = 27, TAB_WIDTH = 28, TAB_SPRITE_WIDTH = 32, TAB_ROWS = 6;
     private static final int DETAIL_WIDTH = 68, NAME_LINES = 2;
@@ -58,7 +58,7 @@ final class KitShopScreen extends Screen {
     private final List<ItemStack> stock;
     private final List<ItemStack> sectionIcons;
     private final List<TabButton> tabs = new ArrayList<>();
-    private List<Integer> visibleOffers;
+    private KitShop.Layout layout;
     private final KitPreview preview;
     private final List<SlotButton> offers = new ArrayList<>();
     private final List<SlotButton> inventory = new ArrayList<>();
@@ -68,6 +68,7 @@ final class KitShopScreen extends Screen {
     private Component problem = Component.empty();
     private Button previous, next, back, review, reset, previousSections, nextSections;
     private int left, top, page, spent, section, sectionPage;
+    private double scrollRemainder;
     private Trade trade;
     private long occupied;
     private boolean controlsDirty = true;
@@ -86,7 +87,7 @@ final class KitShopScreen extends Screen {
         stock = kit.decodeOffers(selection.player().registryAccess());
         sectionIcons = shop.sections().stream()
                 .map(tab -> BuiltInRegistries.ITEM.getOptional(tab.icon()).orElse(Items.PAPER).getDefaultInstance()).toList();
-        visibleOffers = IntStream.range(0, stock.size()).boxed().toList();
+        layout = shop.layout("");
         bought = new int[stock.size()];
         preview = new KitPreview(selection.player());
     }
@@ -159,11 +160,10 @@ final class KitShopScreen extends Screen {
         return top + (slot < 9 ? 142 : 84 + (slot / 9 - 1) * SLOT_PITCH);
     }
 
-    private int pages() { return Math.max(1, (visibleOffers.size() + PAGE_SIZE - 1) / PAGE_SIZE); }
+    private int pages() { return Math.max(1, layout.columns() - COLUMNS + 1); }
 
     private int offerIndex(int cell) {
-        int index = page * PAGE_SIZE + cell;
-        return index < visibleOffers.size() ? visibleOffers.get(index) : -1;
+        return layout.offerAt(cell / COLUMNS, page + cell % COLUMNS);
     }
 
     private int tabRows() { return sectionIcons.size() + 1 > TAB_ROWS ? TAB_ROWS - 1 : TAB_ROWS; }
@@ -179,19 +179,39 @@ final class KitShopScreen extends Screen {
         if (busy() || index == section || index > sectionIcons.size()) return;
         section = index;
         page = 0;
+        scrollRemainder = 0;
         controlsDirty = true;
         String id = section == 0 ? "" : shop.sections().get(section - 1).id();
-        visibleOffers = IntStream.range(0, stock.size())
-                .filter(offer -> id.isEmpty() || shop.offers().get(offer).section().equals(id)).boxed().toList();
+        layout = shop.layout(id);
         if (getFocused() instanceof SlotButton) setFocused(null);
         updateControls();
     }
 
-    private void page(int delta) {
-        if (busy()) return;
-        page = Mth.clamp(page + delta, 0, pages() - 1);
+    private boolean page(int delta) {
+        if (busy()) return false;
+        int nextPage = Mth.clamp(page + delta, 0, pages() - 1);
+        if (nextPage == page) return false;
+        page = nextPage;
+        if (offers.contains(getFocused())) setFocused(null);
         controlsDirty = true;
         updateControls();
+        return true;
+    }
+
+    @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double horizontal, double vertical) {
+        double delta = horizontal != 0 ? horizontal : -vertical;
+        if (delta == 0 || mouseX < left || mouseX >= left + SHOP_WIDTH || mouseY < top || mouseY >= top + PANEL_HEIGHT) {
+            return super.mouseScrolled(mouseX, mouseY, horizontal, vertical);
+        }
+        if (!busy() && pages() > 1) {
+            if (Math.signum(delta) != Math.signum(scrollRemainder)) scrollRemainder = 0;
+            scrollRemainder += delta;
+            int steps = (int) scrollRemainder;
+            scrollRemainder -= steps;
+            if (steps != 0 && page(steps)) SelectionSounds.HOVER.play();
+        }
+        return true;
     }
 
     private boolean busy() { return selection.submitted() || SelectionTransition.active() || ClientParty.blocksInput(); }
@@ -445,7 +465,7 @@ final class KitShopScreen extends Screen {
         }
         if (pages() > 1) SelectionText.centered(graphics, font, text("page", page + 1, pages()), left + SHOP_WIDTH / 2,
                 top + PANEL_HEIGHT + 10, 0xffffffff);
-        if (visibleOffers.isEmpty()) {
+        if (layout.columns() == 0) {
             int y = top + 18;
             for (var line : font.split(text("empty_section"), SHOP_WIDTH - 12)) {
                 graphics.drawCenteredString(font, line, left + SHOP_WIDTH / 2, y, 0xffffffff);

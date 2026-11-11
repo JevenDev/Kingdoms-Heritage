@@ -133,6 +133,20 @@ test('section browsing keeps global offer indices and shares purchases across ta
   assert.equal(session.shopStatus(boots).bought,1);
   assert.deepEqual(session.purchases,[{offer:2,slot:36},{offer:0,slot:0}]);
 });
+test('shop windows slide a column at a time and preserve positioned gaps',()=>{
+  const offers=[
+    {section:'tools',position:{row:3,column:5}},
+    {section:'tools',position:{row:1,column:1}},
+    {section:'tools',position:{row:1,column:3}},
+    {section:'tools'}
+  ];
+  const tools=Flow.shopLayout({offers},'tools');
+  assert.equal(tools.columns,4);
+  assert.equal(tools.pages,2);
+  assert.deepEqual(tools.window(0).slice(0,9),[1,2,-1,-1,-1,-1,-1,-1,0]);
+  assert.deepEqual(tools.window(1).slice(0,9),[2,-1,3,-1,-1,-1,-1,0,-1]);
+  assert.deepEqual(Flow.shopLayout({offers}).window(0).slice(0,4),[0,1,2,3]);
+});
 test('standalone shop tests restart with the same draft and a fresh inventory',()=>{
   const kit=shopChoices().kits.at(-1);
   const session=new Flow.Session({spawns:[],kits:[kit]},{shopOnly:true});
