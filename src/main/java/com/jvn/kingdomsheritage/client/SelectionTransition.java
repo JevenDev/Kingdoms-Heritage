@@ -1,6 +1,7 @@
 package com.jvn.kingdomsheritage.client;
 
 import com.google.gson.JsonObject;
+import java.util.function.BooleanSupplier;
 import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
@@ -32,6 +33,7 @@ final class SelectionTransition {
     private static final int DURATION_MILLIS = 300;
     private static final int ARRIVAL_TIMEOUT_MILLIS = 15000;
     private enum Phase { IDLE, JOINING, FADING_OUT, WAITING, ARRIVING, REVEALING }
+    enum ArrivalAction { WAIT, START_INTRO, REVEAL, TIMEOUT }
     private static Phase phase = Phase.IDLE;
     private static long started;
     private static float from;
@@ -126,14 +128,19 @@ final class SelectionTransition {
             clear();
             return;
         }
-        if (phase == Phase.ARRIVING && Util.getMillis() - started >= ARRIVAL_TIMEOUT_MILLIS) {
-            SpawnIntroOverlay.cancelArrival();
-            endArrival();
+        if (phase == Phase.ARRIVING) {
+            switch (arrivalAction(Util.getMillis() - started, SelectionTransition::terrainReady, SpawnIntroOverlay.active())) {
+                case TIMEOUT -> {
+                    SpawnIntroOverlay.cancelArrival();
+                    endArrival();
+                }
+                case REVEAL -> endArrival();
+                case START_INTRO -> {
+                    if (minecraft.screen instanceof ArrivalScreen) minecraft.setScreen(null);
+                }
+                case WAIT -> { }
+            }
             return;
-        }
-        if (phase == Phase.ARRIVING && terrainReady()) {
-            if (minecraft.screen instanceof ArrivalScreen) minecraft.setScreen(null);
-            if (!SpawnIntroOverlay.active()) reveal();
         }
         if (Util.getMillis() - started < DURATION_MILLIS) return;
         if (phase == Phase.REVEALING) {
@@ -144,6 +151,12 @@ final class SelectionTransition {
             onBlack = null;
             action.run();
         }
+    }
+
+    static ArrivalAction arrivalAction(long elapsed, BooleanSupplier terrainReady, boolean introActive) {
+        if (elapsed >= ARRIVAL_TIMEOUT_MILLIS) return ArrivalAction.TIMEOUT;
+        if (!terrainReady.getAsBoolean()) return ArrivalAction.WAIT;
+        return introActive ? ArrivalAction.START_INTRO : ArrivalAction.REVEAL;
     }
 
     static void endArrival() {
