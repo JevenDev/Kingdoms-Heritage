@@ -1,5 +1,6 @@
 package com.jvn.kingdomsheritage.client;
 
+import com.mojang.math.Axis;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Tooltip;
@@ -52,6 +53,14 @@ final class SelectionControls {
     }
 
     static Button arrow(int x, int y, boolean forward, Component message, Button.OnPress onPress) {
+        return arrow(x, y, forward, false, message, onPress);
+    }
+
+    static Button verticalArrow(int x, int y, boolean down, Component message, Button.OnPress onPress) {
+        return arrow(x, y, down, true, message, onPress);
+    }
+
+    private static Button arrow(int x, int y, boolean forward, boolean vertical, Component message, Button.OnPress onPress) {
         var button = new SoundButton(x, y, 32, 32, message, onPress, narration -> narration.get()) {
             @Override
             protected void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
@@ -60,6 +69,11 @@ final class SelectionControls {
                 graphics.pose().pushPose();
                 graphics.pose().translate(getX(), getY(), 0);
                 graphics.pose().scale(getWidth() / 32F, getHeight() / 32F, 1);
+                if (vertical) {
+                    graphics.pose().translate(16, 16, 0);
+                    graphics.pose().mulPose(Axis.ZP.rotationDegrees(90));
+                    graphics.pose().translate(-16, -16, 0);
+                }
                 drawArrow(graphics, forward, active && isHoveredOrFocused(), 8, 4);
                 graphics.pose().popPose();
                 graphics.setColor(1, 1, 1, 1);

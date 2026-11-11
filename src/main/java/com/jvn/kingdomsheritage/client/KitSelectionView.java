@@ -311,7 +311,14 @@ final class KitSelectionView {
             bounds = new net.minecraft.client.renderer.Rect2i(left, container.getGuiTop(), right - left, container.getYSize());
         }
         int middle = bounds.getY() + (bounds.getHeight() - previous.getHeight()) / 2;
-        previous.setPosition(Math.max(4, bounds.getX() - previous.getWidth() - 10), middle);
+        int previousX = bounds.getX() - previous.getWidth() - 10;
+        int previousY = middle;
+        int tabBottom = bounds.getY() + model.shopTabHeight();
+        if (bounds.getX() >= KitShopTabs.WIDTH && tabBottom > middle) {
+            if (previousX - KitShopTabs.WIDTH >= 4) previousX -= KitShopTabs.WIDTH;
+            else previousY = tabBottom + 4;
+        }
+        previous.setPosition(Math.max(4, previousX), previousY);
         next.setPosition(Math.min(screen.width - next.getWidth() - 4, bounds.getX() + bounds.getWidth() + 10), middle);
         int center = bounds.getX() + bounds.getWidth() / 2;
         int bottom = Math.min(screen.height - 24, bounds.getY() + bounds.getHeight() + 6);

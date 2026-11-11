@@ -1,5 +1,6 @@
 package com.jvn.kingdomsheritage.client;
 
+import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.jvn.kingdomsheritage.HeritageConfig;
 import com.jvn.kingdomsheritage.data.DefinitionJson;
@@ -25,8 +26,10 @@ public final class KitSelection {
     private final KitPreview inventoryPreview;
     private final Map<Integer, NeighborPreview> neighborPreviews = new HashMap<>();
     private final boolean modelPreview;
+    private final int shopTabHeight;
     private final HeritageConfig.InventoryPolicy inventoryPolicy;
     private KitDefinition kit;
+    private KitShopTabs.Preview shopTabs = KitShopTabs.Preview.EMPTY;
     private final boolean recipeBookOpen;
     private List<KitDefinition.StackEntry> stacks = List.of();
     private int index;
@@ -46,6 +49,10 @@ public final class KitSelection {
         inventoryPreview = new KitPreview(player);
         inventoryPolicy = catalog.has("inventory_policy") ? HeritageConfig.InventoryPolicy.valueOf(
                 catalog.get("inventory_policy").getAsString()) : HeritageConfig.InventoryPolicy.REPLACE;
+        shopTabHeight = modelPreview || inventoryPolicy == HeritageConfig.InventoryPolicy.PRESERVE ? 0
+                : choices.stream().mapToInt(choice -> choice.get("shop") instanceof JsonObject shop
+                        && shop.get("sections") instanceof JsonArray sections ? KitShopTabs.previewHeight(sections.size()) : 0)
+                        .max().orElse(0);
         recipeBookOpen = Minecraft.getInstance().player.getRecipeBook().isOpen(net.minecraft.world.inventory.RecipeBookType.CRAFTING);
         select(0);
     }
@@ -90,6 +97,19 @@ public final class KitSelection {
         return Component.translatable(points == 1 ? "screen.kingdomsheritage.shop.kit_budget_one"
                 : "screen.kingdomsheritage.shop.kit_budget", points);
     }
+
+    KitShopTabs.Preview shopTabs(int index) {
+        if (modelPreview) return KitShopTabs.Preview.EMPTY;
+        if (index == this.index) return shopTabs;
+        var neighbor = neighborPreviews.get(index);
+        return neighbor == null ? KitShopTabs.Preview.EMPTY : neighbor.shopTabs();
+    }
+
+    private KitShopTabs.Preview shopTabs(KitDefinition definition) {
+        return KitShopTabs.preview(hasShop(definition) ? definition.shop() : null);
+    }
+
+    int shopTabHeight() { return shopTabHeight; }
 
     boolean hasIncludedGear() { return !stacks.isEmpty(); }
 
@@ -139,6 +159,7 @@ public final class KitSelection {
             stacks = List.of();
             problem = HeritageException.component(error);
         }
+        shopTabs = shopTabs(kit);
         definitionProblem = problem;
         preview();
         view.updateButtons();
@@ -192,7 +213,7 @@ public final class KitSelection {
         } catch (IllegalArgumentException error) {
             definition = null;
         }
-        return new NeighborPreview(definition, items, new KitPreview(player));
+        return new NeighborPreview(definition, items, new KitPreview(player), shopTabs(definition));
     }
 
     void renderNeighbor(int index, Runnable draw) {
@@ -200,7 +221,8 @@ public final class KitSelection {
         else neighborPreviews.get(index).inventory.render(draw);
     }
 
-    private record NeighborPreview(KitDefinition kit, List<KitDefinition.StackEntry> stacks, KitPreview inventory) {}
+    private record NeighborPreview(KitDefinition kit, List<KitDefinition.StackEntry> stacks,
+                                   KitPreview inventory, KitShopTabs.Preview shopTabs) {}
 
     void restore() {
         if (Minecraft.getInstance().player == player) Minecraft.getInstance().player.getRecipeBook().setOpen(net.minecraft.world.inventory.RecipeBookType.CRAFTING, recipeBookOpen);
