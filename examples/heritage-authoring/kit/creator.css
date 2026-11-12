@@ -157,7 +157,8 @@
 #shop-status[data-error=true] { color: var(--danger, #e6a3a3); }
 .shop-page-nav { align-items: center; margin: 0 0 12px; }
 .shop-page-nav span { color: var(--muted); }
-.shop-page-content { display: grid; grid-template-columns: minmax(0,1fr) max-content; gap: 24px; align-items: start; }
+.shop-workspace { display: grid; grid-template-columns: minmax(0,1fr); align-items: start; }
+.shop-pages { display: contents; }
 #author-workspace .shop-offers { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; min-width: 0; container: shop-offer-list / inline-size; }
 .shop-offer { display: grid; gap: 6px; padding: 10px 0; border-bottom: 1px solid var(--line-soft); min-width: 0; }
 .shop-offer[data-selected=true] { border-bottom-color: var(--accent-strong); }
@@ -171,7 +172,7 @@
 #author-workspace .shop-budget-hint[data-field=cost] { color: var(--danger, #e6a3a3); }
 .shop-offer-actions { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; }
 .shop-offer-actions button, .shop-page-nav button { padding: 4px 8px; min-height: 28px; font-size: calc(12px + var(--reading-increase)); }
-.shop-preview { --shop-scale: 1.5; --shop-slot-size: calc(36px * var(--shop-scale)); position: sticky; top: 0; }
+.shop-preview { --shop-scale: 1.5; --shop-slot-size: calc(36px * var(--shop-scale)); }
 .shop-preview summary { margin-bottom: 8px; cursor: pointer; }
 .shop-preview-bar { display: block; width: calc(182px * var(--shop-scale)); height: auto; margin: 0 auto 8px; image-rendering: pixelated; }
 .shop-preview-stock { display: flex; justify-content: center; }
@@ -226,7 +227,8 @@
 @container shop-panel (max-width: 660px) {
   .shop-preview { --shop-scale: 1; }
 }
-@container shop-panel (max-width: 520px) {
-  .shop-page-content { grid-template-columns: minmax(0,1fr); }
-  .shop-preview { grid-row: 1; position: static; }
+@container shop-panel (width > 520px) {
+  .shop-workspace { grid-template-columns: minmax(0,1fr) max-content; grid-template-rows: auto auto 1fr; }
+  .shop-setup, .shop-page-nav, .shop-offers { grid-column: 1; }
+  .shop-preview { grid-area: 1 / 2 / span 3; margin-inline-start: 24px; position: sticky; top: 0; }
 }
