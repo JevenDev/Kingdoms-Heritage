@@ -36,7 +36,7 @@ test('enabling bundled defaults after importing the example removes stale disabl
   const project=await Example.create(ids());project.pack.keepKits=true;project.pack.keepLocations=true;
   for(const location of project.pack.locations)location.kitMode='all';
   const output=build(project),bundled=require('./assets/defaults.json'),choices=Flow.catalog(output,bundled);
-  assert.equal(choices.kits.length,3);assert.equal(choices.spawns.length,6);
+  assert.equal(choices.kits.length,6);assert.equal(choices.spawns.length,6);
   for(const spawn of choices.spawns)assert.ok(spawn.kits.every(id=>choices.kits.some(kit=>kit.id===id)));
   assert.ok(!output.files.some(file=>/^data\/kingdomsheritage\/heritage\/(kits|spawns)\//.test(file.path)&&JSON.parse(file.content).enabled===false));
   project.pack.keepKits=false;project.pack.keepLocations=false;

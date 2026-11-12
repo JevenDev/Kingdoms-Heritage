@@ -199,8 +199,13 @@ test('missing saved kits retain distinct names and repair targets in validation 
 
 
 test('pack kit ordering exports native positions without rewriting shared drafts',()=>{
-  const input=state();input.kits=[{id:'a',path:'a',included:true},{id:'b',path:'b',included:true}];input.kitOrder=['b','bundled-empty','a'];const entries={kits:[{id:'a',name:'A',document:{title:'A',order:-10,items:[]},warnings:[]},{id:'b',name:'B',document:{title:'B',order:50,items:[]},warnings:[]}],intros:[]},original=JSON.stringify(entries),result=Pack.build(input,entries);
-  assert.deepEqual(result.errors,[]);const Flow=require('./flow.js'),defaults=require('./assets/defaults.json');assert.deepEqual(Flow.catalog(result,defaults).kits.map(kit=>kit.id),['my_pack:b','kingdomsheritage:default','my_pack:a']);assert.equal(JSON.stringify(entries),original);assert.equal(JSON.parse(result.files.find(file=>file.path==='data/kingdomsheritage/heritage/kits/default.json').content).title_key,'heritage.kingdomsheritage.kits.default.title');
+  const input=state();input.kits=[{id:'a',path:'a',included:true},{id:'b',path:'b',included:true}];input.kitOrder=['kingdomsheritage:byo','b','bundled-empty','a'];const entries={kits:[{id:'a',name:'A',document:{title:'A',order:-10,items:[]},warnings:[]},{id:'b',name:'B',document:{title:'B',order:50,items:[]},warnings:[]}],intros:[]},original=JSON.stringify(entries),result=Pack.build(input,entries);
+  assert.deepEqual(result.errors,[]);
+  const Flow=require('./flow.js'),defaults=require('./assets/defaults.json'),preview=Flow.catalog(result,defaults);
+  assert.deepEqual(preview.kits.map(kit=>kit.id),['kingdomsheritage:byo','my_pack:b','kingdomsheritage:default','my_pack:a','kingdomsheritage:miner','kingdomsheritage:adventurer']);
+  assert.deepEqual(preview.kits[0].shop,defaults.kits.find(kit=>kit.id==='kingdomsheritage:byo').shop);
+  assert.equal(JSON.stringify(entries),original);
+  assert.equal(JSON.parse(result.files.find(file=>file.path==='data/kingdomsheritage/heritage/kits/default.json').content).title_key,'heritage.kingdomsheritage.kits.default.title');
 });
 test('unreordered kits retain their own menu positions and use the native tie break',()=>{
   const input=state();input.keepKits=false;input.kits=[{id:'b',path:'b',included:true},{id:'a',path:'a',included:true}];const entries={kits:[{id:'a',document:{title:'A',order:12,items:[]},warnings:[]},{id:'b',document:{title:'B',order:-3,items:[]},warnings:[]}],intros:[]};assert.deepEqual(Pack.orderedKitIds(input,entries),['b','a']);const result=Pack.build(input,entries);assert.deepEqual(result.errors,[]);assert.equal(JSON.parse(result.files.find(file=>file.path.endsWith('/kits/a.json')).content).order,12);assert.equal(input.kitOrder,undefined);

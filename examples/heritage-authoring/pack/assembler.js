@@ -2,10 +2,15 @@
 'use strict';
 const P=HeritagePack,$=id=>document.getElementById(id),storageKey='heritage.packAssembler.v1';
 if(!await HeritageSession.acquire(storageKey))return;
+try{P.setBundledKits((await HeritageFlowPreview.defaults()).kits);}
+catch(error){$('project-status').textContent=error.message;return;}
 const validators={kit:source=>HeritageKit.read(source),intro:source=>HeritagePreview.readJson(source)};
 const code=new HeritageJsonEditor($('export-json'),$('line-count'));
 HeritageIcons.action('copy','copy','Copy JSON');
 let catalog={kits:[],intros:[]},state,output,saveTimer,saveBlocked=false,storageError='',projects,openingProject=false;
+const bundledKit=id=>P.bundledKits(state).find(entry=>entry.id===id);
+const kitDraft=id=>catalog.kits.find(entry=>entry.id===id)??bundledKit(id);
+const kitName=id=>kitDraft(id)?.name??'Missing kit';
 const W=HeritageWorkflow,route=new URLSearchParams(location.search),touched=new Set();
 const saveMessage=$('nav-save-message'),saveSources=[$('project-status'),$('embedded-editor-status'),$('save-status')];
 new MutationObserver(()=>{const source=saveSources.find(node=>node.textContent),message=source?.textContent??'';if(saveMessage.textContent!==message)saveMessage.textContent=message;saveMessage.title=source?.title||message;}).observe(saveMessage.parentElement,{childList:true,subtree:true});
@@ -145,7 +150,7 @@ function kitContents(kit){
 }
 function renderContentSummary(){
   const entry=active(),host=$('location-content-summary');host.replaceChildren();if(!entry)return;
-  const kits=locationKitIds(entry).map(id=>id==='bundled-empty'?'Heritage Empty-handed':catalog.kits.find(draft=>draft.id===id)?.name||'Missing kit'),intro=catalog.intros.find(draft=>draft.id===entry.intro);
+  const kits=locationKitIds(entry).map(kitName),intro=catalog.intros.find(draft=>draft.id===entry.intro);
   for(const [part,label,text] of [['kits','Starting kits',kits.join(', ')||'Choose at least one kit'],['intro','Arrival intro',intro?.name||(entry.intro?'Missing saved intro':'No intro, optional')]]){const button=element('button',{type:'button','data-edit-content':part});button.append(element('strong',{},label),element('span',{},text));host.append(button);}
 }
 function renderOverview() {
@@ -155,7 +160,7 @@ function renderOverview() {
   for(const entry of orderedLocations()) {
     const row=element('li',{class:'review-location-entry'}),button=element('button',{type:'button',class:'review-location-open','data-review-location':entry.id,'aria-label':'Edit location '+(entry.fields.title||entry.path)}),content=element('span',{class:'review-location-content'});
     content.append(element('strong',{title:entry.fields.title||'Unnamed location'},entry.fields.title||'Unnamed location'),element('span',{class:'summary-detail'},locationDescription(entry)));
-    const intro=catalog.intros.find(draft=>draft.id===entry.intro),ids=locationKitIds(entry),names=ids.map(id=>id==='bundled-empty'?'Heritage Empty-handed':catalog.kits.find(draft=>draft.id===id)?.name||'Missing kit'),fullKits=names.join(', ')||'Choose a kit',kits=names.slice(0,2).join(', ')+(names.length>2?' +'+(names.length-2):'');
+    const intro=catalog.intros.find(draft=>draft.id===entry.intro),ids=locationKitIds(entry),names=ids.map(kitName),fullKits=names.join(', ')||'Choose a kit',kits=names.slice(0,2).join(', ')+(names.length>2?' +'+(names.length-2):'');
     const overrides=entry.fields.type==='pool'?entry.destinations.filter(destination=>Object.hasOwn(destination,'intro')&&destination.intro!=='').length:0;
     const introSummary=(entry.fields.type==='pool'?'Default intro: ':'Intro: ')+(intro?.name||(entry.intro?'Missing intro':'None'))+(overrides?' · '+overrides+' place override'+(overrides===1?'':'s'):'');
     content.append(element('span',{class:'summary-detail',title:fullKits},ids.length+' kit'+(ids.length===1?'':'s')+': '+(kits||'Choose a kit')),element('span',{class:'summary-detail',title:introSummary},introSummary));
@@ -229,7 +234,7 @@ function changed() {
 }
 function renderKits() {
   const container=$('kit-library');container.replaceChildren();
-  for(const id of P.orderedKitIds(state,catalog).filter(id=>id!=='bundled-empty')) {
+  for(const id of P.orderedKitIds(state,catalog).filter(id=>state.kits.some(kit=>kit.id===id))) {
     const selection=state.kits.find(kit=>kit.id===id);
     const draft=catalog.kits.find(entry=>entry.id===selection.id),name=draft?.name??'Missing kit · '+selection.path;
     const row=contentNode(element('div',{class:'kit-library-row'}),'kit',selection.id),label=element('label',{class:'check'}),check=element('input',{type:'checkbox','data-include-kit':selection.id,'aria-label':'Include '+name});
@@ -266,7 +271,7 @@ function locationThumbnail(entry){
   return element('img',{class:'location-thumbnail',src:locationPicture(entry).data??'pack/assets/'+(image?.[1]??'card_fallback')+'.png',width:'48',height:'72',alt:''});
 }
 function locationKitIds(entry){
-  const ids=entry.kitMode==='selected'?entry.kits:[...state.kits.filter(kit=>kit.included).map(kit=>kit.id),...(state.keepKits?['bundled-empty']:[])],ordered=P.orderedKitIds(state,catalog);return [...ordered.filter(id=>ids.includes(id)),...ids.filter(id=>!ordered.includes(id))];
+  const ids=entry.kitMode==='selected'?entry.kits:[...state.kits.filter(kit=>kit.included).map(kit=>kit.id),...P.bundledKits(state).map(kit=>kit.id)],ordered=P.orderedKitIds(state,catalog);return [...ordered.filter(id=>ids.includes(id)),...ids.filter(id=>!ordered.includes(id))];
 }
 function locationOptions(){
   const list=$('locations');list.replaceChildren();$('location-count').textContent=String(state.locations.length);
@@ -294,7 +299,7 @@ function contentNode(node,kind,id){node.dataset.contentKind=kind;node.dataset.co
 function renderContentBrowser(){
   const host=$('content-assets'),entry=active(),another=$('editor-new-entry');$('content-bin-tools').append(another);host.replaceChildren();$('content-location-name').textContent=entry?.fields.title||'Location content';if(!entry)return;
   const group=(kind,label)=>{const section=element('section',{class:'content-asset-group'}),heading=element('div',{class:'section-heading'});heading.append(element('h3',{},label));if(embeddedSession?.kind===kind)heading.append(another);else heading.append(element('a',{href:editorUrl(kind,null,true),class:'library-edit','aria-label':'New '+kind+' for '+(entry.fields.title||entry.path)},'New '+kind));const list=element('div',{class:'content-asset-list'});section.append(heading,list);host.append(section);return list;};
-  const kits=group('kit','Kits');for(const id of locationKitIds(entry)){const draft=catalog.kits.find(kit=>kit.id===id),editable=id!==P.emptyKit.id&&id!=='bundled-empty'&&draft,row=contentNode(element(editable?'a':'div',{class:'content-asset'},''),'kit',id);if(editable){row.href=editorUrl('kit',id);row.setAttribute('aria-current',String(embeddedSession?.kind==='kit'&&embeddedSession.id===id));}const item=draft?.document?.items?.[0]?.item;if(item)row.append(HeritageInventory.icon(item.id));const detail=element('span');detail.append(element('strong',{},id==='bundled-empty'?'Heritage Empty-handed':draft?.name||'Missing kit'),element('span',{class:'hint'},draft?.error?'Needs attention':kitContents(draft?.document)));row.append(detail);kits.append(row);}
+  const kits=group('kit','Kits');for(const id of locationKitIds(entry)){const draft=kitDraft(id),editable=id!==P.emptyKit.id&&!bundledKit(id)&&draft,row=contentNode(element(editable?'a':'div',{class:'content-asset'},''),'kit',id);if(editable){row.href=editorUrl('kit',id);row.setAttribute('aria-current',String(embeddedSession?.kind==='kit'&&embeddedSession.id===id));}const item=draft?.document?.items?.[0]?.item;if(item)row.append(HeritageInventory.icon(item.id));const detail=element('span');detail.append(element('strong',{},draft?.name||'Missing kit'),element('span',{class:'hint'},draft?.error?'Needs attention':kitContents(draft?.document)));row.append(detail);kits.append(row);}
   const intros=group('intro','Intros'),add=(id,label,destination=null)=>{const draft=catalog.intros.find(intro=>intro.id===id),row=contentNode(element(draft?'a':'div',{class:'content-asset',...(draft?{href:editorUrl('intro',id)}:{}),'aria-current':String(embeddedSession?.kind==='intro'&&embeddedSession.id===id&&embeddedSession.destination===destination)}),'intro',id),detail=element('span');if(Number.isInteger(destination))row.dataset.destinationIntro=destination;detail.append(element('strong',{},draft?.name||'Missing intro'),element('span',{class:'hint'+(draft?'':' error')},draft?label:label+' · Choose another intro'));row.append(detail);intros.append(row);};
   if(entry.intro)add(entry.intro,entry.fields.type==='pool'?'Default arrival':'Arrival');else intros.append(element('p',{class:'hint'},'No default intro'));
   entry.destinations.forEach((destination,index)=>{if(typeof destination.intro==='string'&&destination.intro)add(destination.intro,'Place '+(index+1),index);});contentBrowser?.refresh();
@@ -336,7 +341,7 @@ async function copyContentDraft(target,local=false){
   await writeWorkspace(next,before);historyDrafts=[{kind,id}];historyLabel=local?'Make a local '+target.kind+' copy':'Duplicate '+target.kind;changed();editContentDraft(target.kind,id,target.destination,!local);
 }
 function contentTarget(node){return {kind:node.dataset.contentKind,id:node.dataset.contentId,locationId:state.active,destination:node.hasAttribute('data-destination-intro')?Number(node.dataset.destinationIntro):null};}
-function contentName(node){const target=contentTarget(node);return target.kind==='location'?state.locations.find(entry=>entry.id===target.id)?.fields.title||'Location':target.kind==='kit'?(target.id==='bundled-empty'?'Heritage Empty-handed':catalog.kits.find(entry=>entry.id===target.id)?.name||'Missing kit'):catalog.intros.find(entry=>entry.id===target.id)?.name||'Missing intro';}
+function contentName(node){const target=contentTarget(node);return target.kind==='location'?state.locations.find(entry=>entry.id===target.id)?.fields.title||'Location':target.kind==='kit'?kitName(target.id):catalog.intros.find(entry=>entry.id===target.id)?.name||'Missing intro';}
 function contentMenuActions(node){
   const target=contentTarget(node),{kind,id,locationId,destination}=target,entry=state.locations.find(entry=>entry.id===locationId),actions=[],add=(label,run,disabled=false,extra={})=>actions.push({label,run,disabled,...extra}),separator=()=>actions.push({separator:true});
   const sourceId=kind==='location'?state.namespace+':'+state.locations.find(entry=>entry.id===id)?.path:id;
@@ -346,7 +351,8 @@ function contentMenuActions(node){
     for(const [label,part] of [['Edit location','details'],['Edit kits','kits'],['Edit intro','intro']])add(label,()=>showContentLocation(id,part));
     add('Rename location',()=>{if(showContentLocation(id)){const field=document.querySelector('[data-location-field=title]');field.focus();field.select();}});add('Duplicate location',()=>{if(showContentLocation(id))$('duplicate-location').click();});
   }else{
-    const draft=catalog[kind==='kit'?'kits':'intros'].find(entry=>entry.id===id),builtin=kind==='kit'&&[P.emptyKit.id,'bundled-empty'].includes(id),editable=!!draft&&!builtin;
+    const draft=kind==='kit'?kitDraft(id):catalog.intros.find(entry=>entry.id===id);
+    const builtin=kind==='kit'&&(id===P.emptyKit.id||!!bundledKit(id)),editable=!!draft&&!builtin;
     add('Edit '+kind,()=>editContentDraft(kind,id,destination),!editable);add('Rename '+kind,()=>editContentDraft(kind,id,destination,true),!editable);add('Duplicate '+kind,()=>copyContentDraft(target),(!draft&&!builtin)||!!draft?.error||!entry);
     const used=projects.projects.reduce((count,project)=>count+W.usage(project.id===projects.active?state:project.state,kind,id).length,0);if(editable&&used>1&&W.usage(state,kind,id).some(location=>location.id===locationId))add('Make a copy for this location',()=>copyContentDraft(target,true));
   }
@@ -356,7 +362,7 @@ function contentMenuActions(node){
   separator();
   if(kind==='location')add('Delete location…',()=>{if(showContentLocation(id))$('delete-location').click();},false,{destructive:true});
   else if(kind==='kit'){
-    const assigned=entry&&locationKitIds(entry).includes(id);add(assigned?'Remove from this location':'Use in this location',()=>{if(!showContentLocation(locationId,'kits'))return;const location=active();if(assigned){location.kits=locationKitIds(location).filter(value=>value!==id);location.kitMode='selected';}else if(id==='bundled-empty'&&state.keepKits)location.kits=[...new Set([...location.kits,id])];else W.attach(state,'kit',id);historyLabel=assigned?'Remove kit from location':'Assign kit';kitChoices();renderKits();changed();},!entry,{destructive:!!assigned});
+    const assigned=entry&&locationKitIds(entry).includes(id);add(assigned?'Remove from this location':'Use in this location',()=>{if(!showContentLocation(locationId,'kits'))return;const location=active();if(assigned){location.kits=locationKitIds(location).filter(value=>value!==id);location.kitMode='selected';}else if(bundledKit(id))location.kits=[...new Set([...location.kits,id])];else W.attach(state,'kit',id);historyLabel=assigned?'Remove kit from location':'Assign kit';kitChoices();renderKits();changed();},!entry,{destructive:!!assigned});
   }else{
     const assigned=entry&&(Number.isInteger(destination)?entry.destinations[destination]?.intro===id:entry.intro===id);add(assigned?(Number.isInteger(destination)?'Remove intro from this place':'Remove intro from this location'):'Use as this location’s intro',()=>{if(!showContentLocation(locationId,'intro'))return;if(assigned&&Number.isInteger(destination))active().destinations[destination].intro=null;else active().intro=assigned?'':id;historyLabel=assigned?'Remove intro from location':'Assign intro';introOptions();renderPool();changed();},!entry,{destructive:!!assigned});
   }
@@ -427,7 +433,7 @@ function kitChoiceStatus(){
 function kitChoices(){
   const entry=active(),container=$('location-kits');container.replaceChildren();if(!entry)return;container.hidden=false;
   const all=entry.kitMode==='all';$('manage-kits').hidden=!all;kitChoiceStatus();
-  const choices=catalog.kits.map(draft=>({id:draft.id,name:draft.name,draft,included:state.kits.find(kit=>kit.id===draft.id)?.included}));if(state.keepKits)choices.push({id:'bundled-empty',name:'Heritage Empty-handed',included:true});
+  const choices=catalog.kits.map(draft=>({id:draft.id,name:draft.name,draft,included:state.kits.find(kit=>kit.id===draft.id)?.included}));for(const draft of P.bundledKits(state))choices.push({id:draft.id,name:draft.name,draft,included:true,bundled:true});
   for(const id of entry.kits)if(!choices.some(kit=>kit.id===id))choices.push({id,name:'Missing saved kit',missing:true});
   const ranks=new Map(P.orderedKitIds(state,catalog).map((id,index)=>[id,index]));choices.sort((a,b)=>(ranks.get(a.id)??Infinity)-(ranks.get(b.id)??Infinity));
   for(const kit of choices){
@@ -438,7 +444,7 @@ function kitChoices(){
     content.append(element('span',{},kit.name),element('span',{class:'hint'},description));label.append(input,content);row.append(label);
     const items=kit.draft?.document?.items??[],pictures=element('div',{class:'kit-choice-items'});for(const entry of items.slice(0,2))pictures.append(HeritageInventory.icon(entry.item.id));if(items.length>2)pictures.append(element('span',{},'+'+(items.length-2)));if(!items.length&&!kit.draft?.document?.shop)pictures.append(element('span',{class:'hint'},'Empty inventory'));const preview=element('button',{type:'button','data-preview-kit':kit.id,'aria-label':'Preview '+kit.name,'aria-pressed':'false'},'Preview');preview.disabled=!!kit.missing;if(kit.missing)preview.title='Restore this kit or remove its assignment before previewing it.';const actions=element('div',{class:'kit-choice-actions'});actions.append(preview);row.append(pictures,actions);
     if(excluded)actions.append(element('button',{type:'button','data-include-allowed-kit':kit.id},'Include kit'));
-    if(kit.id!==P.emptyKit.id&&kit.id!=='bundled-empty'&&!kit.missing)actions.append(element('a',{class:'library-edit',href:editorUrl('kit',kit.id),'aria-label':'Edit '+kit.name},'Edit'));
+    if(kit.id!==P.emptyKit.id&&!kit.bundled&&!kit.missing)actions.append(element('a',{class:'library-edit',href:editorUrl('kit',kit.id),'aria-label':'Edit '+kit.name},'Edit'));
     container.append(row);
   }
 }
@@ -611,7 +617,7 @@ function renderOutput() {
   $('export-pack').textContent=output.resourceFiles.length?'Download datapack & resource pack':'Download datapack';
   $('export-file').disabled=!output.previewFiles.length;
   $('preview-state').textContent=output.errors.length?'Draft preview. Fix the highlighted issues before downloading.':'Read-only preview';
-  const kitCount=state.kits.filter(kit=>kit.included).length+(state.keepKits?1:0),locationCount=state.locations.length+(state.keepLocations?4:0);
+  const kitCount=state.kits.filter(kit=>kit.included).length+P.bundledKits(state).length,locationCount=state.locations.length+(state.keepLocations?4:0);
   $('pack-summary').textContent=locationCount+' starting location'+(locationCount===1?'':'s')+' · '+kitCount+' included kit'+(kitCount===1?'':'s');
   $('export-fix').hidden=!output.errors.length;
   const errors=$('export-errors');errors.replaceChildren();
@@ -911,7 +917,7 @@ async function writeWorkspace(next,expected){
   await lock(0);
 }
 if(!saveBlocked){
-  try{packTools=HeritagePackAuthoring.create({read:readWorkspace,write:writeWorkspace,prepare:closeEmbedded,flush:flushEmbedded,render,locations:locationOptions,ordered:()=>orderedLocations().map(entry=>entry.id),move:(id,direction)=>{const source=state.locations.find(entry=>entry.id===id),cards=workspaceVisuals.cards(),index=cards.findIndex(spawn=>spawn.id===state.namespace+':'+source?.path),target=cards[index+direction];if(target)reorderLocationCards(cards[index].id,target.id,direction>0);},kitIds:locationKitIds,kits:()=>[...catalog.kits.map(entry=>({id:entry.id,name:entry.name})),...(state.keepKits?[{id:'bundled-empty',name:'Heritage Empty-handed'}]:[])],intros:()=>catalog.intros,shared:()=>embeddedSession?{kind:embeddedSession.kind,id:embeddedSession.id,locationId:embeddedSession.locationId}:null,open:openEmbedded,
+  try{packTools=HeritagePackAuthoring.create({read:readWorkspace,write:writeWorkspace,prepare:closeEmbedded,flush:flushEmbedded,render,locations:locationOptions,ordered:()=>orderedLocations().map(entry=>entry.id),move:(id,direction)=>{const source=state.locations.find(entry=>entry.id===id),cards=workspaceVisuals.cards(),index=cards.findIndex(spawn=>spawn.id===state.namespace+':'+source?.path),target=cards[index+direction];if(target)reorderLocationCards(cards[index].id,target.id,direction>0);},kitIds:locationKitIds,kits:()=>[...catalog.kits.map(entry=>({id:entry.id,name:entry.name})),...P.bundledKits(state).map(({id,name})=>({id,name}))],intros:()=>catalog.intros,shared:()=>embeddedSession?{kind:embeddedSession.kind,id:embeddedSession.id,locationId:embeddedSession.locationId}:null,open:openEmbedded,
     bulk:(ids,changes)=>{if(!closeEmbedded())return false;state=HeritageEditing.assign(state,ids,changes);historyLabel='Assign '+(changes.kitIds?'kits':'intro')+' to '+ids.length+' locations';renderLocation();renderKits();changed();return true;},
     reorder:ids=>{if(!closeEmbedded())return;state=HeritageEditing.reorder(state,ids,workspaceVisuals.cards());historyLabel='Reorder locations';renderLocation();changed();}
   });locationOptions();}

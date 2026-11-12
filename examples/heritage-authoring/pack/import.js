@@ -48,9 +48,18 @@ async function read(bytes,name='Imported pack.zip',createId=()=>crypto.randomUUI
   const description=typeof metadata.pack.description==='string'?metadata.pack.description:JSON.stringify(metadata.pack.description??'Imported Heritage pack');
   const state={version:1,name:name.replace(/(?:-packs|-data)?\.zip$/i,'')||'Imported pack',namespace,description,keepKits:true,keepLocations:!bundled.some(id=>disabled.has(id)),allowCustomTargets:true,kits:[],locations:[],active:'',packMetadata:metadata,importedFiles:{data:[],resources:[]}};
   const libraries={kits:{version:2,active:'',kits:[]},intros:{version:2,active:'',intros:[]}},kits=new Map(),catalog={kits:[],intros:[]};
-  const defaultKit=definitions.find(entry=>entry.namespace==='kingdomsheritage'&&entry.kind==='kits'&&entry.id==='default');
-  if(defaultKit?.document.enabled===false||namespace==='kingdomsheritage'&&defaultKit)state.keepKits=false;
-  else if(defaultKit){Kit.read(JSON.stringify(defaultKit.document));state.bundledKit=Pack.copy(defaultKit.document);data.delete(defaultKit.path);}
+  const stock=new Set(Pack.bundledKits(state).map(entry=>entry.resource));
+  const overrides=definitions.filter(entry=>entry.kind==='kits'&&stock.has(entry.namespace+':'+entry.id));
+  const defaultKit=overrides.find(entry=>entry.id==='default');
+  const usesOtherStock=overrides.some(entry=>entry.id!=='default'&&entry.document.enabled!==false)
+    ||definitions.some(entry=>entry.kind==='spawns'&&Array.isArray(entry.document.kits)
+      &&entry.document.kits.some(id=>id!=='kingdomsheritage:default'&&stock.has(id)));
+  if(defaultKit?.document.enabled===false&&!usesOtherStock)state.keepKits=false;
+  if(state.keepKits)for(const entry of overrides){
+    Kit.read(JSON.stringify(entry.document));
+    (state.bundledKits??={})[entry.namespace+':'+entry.id]=Pack.copy(entry.document);
+    data.delete(entry.path);
+  }
   function draft(kind,document,title){
     const id=createId(),source=JSON.stringify(document,null,2),value={source,document:Pack.copy(document)};
     if(kind==='kits'){
@@ -60,11 +69,12 @@ async function read(bytes,name='Imported pack.zip',createId=()=>crypto.randomUUI
     catalog[kind].push({id,name:title,document:Pack.copy(document),error:'',warnings:[]});return id;
   }
   for(const entry of definitions){
-    if(entry.namespace!==namespace||entry.kind!=='kits'||entry.document.enabled===false)continue;
+    if(entry.namespace!==namespace||entry.kind!=='kits'||entry.document.enabled===false
+      ||state.keepKits&&stock.has(entry.namespace+':'+entry.id))continue;
     const id=draft('kits',entry.document,entry.document.title??entry.id);
     state.kits.push({id,path:entry.id,included:true});kits.set(namespace+':'+entry.id,{id,document:entry.document});data.delete(entry.path);
   }
-  if(state.keepKits)kits.set('kingdomsheritage:default',{id:'bundled-empty',document:state.bundledKit??Pack.emptyKit.document});
+  for(const entry of Pack.bundledKits(state))kits.set(entry.resource,{id:entry.id,document:entry.document});
   for(const entry of definitions){
     if(entry.document.enabled===false||entry.kind!=='spawns')continue;
     if(entry.namespace!==namespace){

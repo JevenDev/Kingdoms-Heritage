@@ -7,6 +7,9 @@ function validatePack(value) {
   if(value.guiScale!==undefined&&(!Number.isInteger(value.guiScale)||value.guiScale<0||value.guiScale>16))throw new Error('GUI scale must be a whole number from 0 to 16.');
   if(value.kitPreview!==undefined&&!['inventory','model'].includes(value.kitPreview))throw new Error('Kit preview must be inventory or model.');
   if(value.kitOrder!==undefined&&(!Array.isArray(value.kitOrder)||value.kitOrder.some(id=>typeof id!=='string')||new Set(value.kitOrder).size!==value.kitOrder.length))throw new Error('Kit order must list each kit at most once.');
+  if(value.bundledKits!==undefined&&(!value.bundledKits||typeof value.bundledKits!=='object'||Array.isArray(value.bundledKits)
+    ||Object.entries(value.bundledKits).some(([id,document])=>!/^kingdomsheritage:(default|miner|adventurer|byo)$/.test(id)
+      ||!document||typeof document!=='object'||Array.isArray(document))))throw new Error('Bundled kit definitions are invalid.');
   if(value.locations.some(entry=>entry.keepImageResolution!==undefined&&typeof entry.keepImageResolution!=='boolean'))throw new Error('Keep source resolution must be enabled or disabled.');
   if(value.bundledLocations!==undefined&&(!value.bundledLocations||typeof value.bundledLocations!=='object'||Array.isArray(value.bundledLocations)||Object.entries(value.bundledLocations).some(([id,document])=>!/^kingdomsheritage:(default|random|plains|village)$/.test(id)||!document||typeof document!=='object'||Array.isArray(document)||!Number.isInteger(document.order))))throw new Error('Default location order is invalid.');
   const result=copy(value);

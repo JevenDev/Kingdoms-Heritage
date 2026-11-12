@@ -12,7 +12,9 @@ const choices=()=>({spawns:[{id:'pack:home',title:'Home',type:'default',kits:['p
 test('preview catalog uses the exact exported definitions and disabled bundled choices',()=>{
   const output=build(),catalog=Flow.catalog(output,bundled);
   assert.deepEqual(catalog.spawns.map(entry=>entry.id),['preview:location_1']);
-  assert.deepEqual(catalog.kits.map(entry=>entry.id),['kingdomsheritage:default']);
+  assert.deepEqual(catalog.kits.map(entry=>entry.id),['kingdomsheritage:default','kingdomsheritage:miner','kingdomsheritage:adventurer','kingdomsheritage:byo']);
+  assert.deepEqual(catalog.kits.map(entry=>entry.title),['Naked','Miner','Adventurer','BYO']);
+  assert.deepEqual(catalog.spawns[0].kits,catalog.kits.map(entry=>entry.id));
   const file=output.files.find(file=>file.path==='data/preview/heritage/spawns/location_1.json');
   assert.deepEqual(catalog.spawns[0],{...JSON.parse(file.content),id:'preview:location_1'});
 });
@@ -288,7 +290,8 @@ test('flow previews read their global GUI scale from the exported settings',()=>
   assert.equal(Flow.catalog(build(),bundled).guiScale,0);
   for(const guiScale of [0,1,3,16])assert.equal(Flow.catalog(build({guiScale}),bundled).guiScale,guiScale);
   const source=Flow.catalog(build({guiScale:3}),bundled),session=new Flow.Session(source);
-  session.choose('preview:location_1');session.next();session.next();session.next();
+  session.choose('preview:location_1');session.next();
+  assert.equal(session.phase,'kit');session.next();session.next();session.next();session.next();
   assert.equal(session.phase,'complete');assert.equal(session.choices.guiScale,3);session.restart();
   assert.equal(session.choices.guiScale,3);assert.equal(source.guiScale,3);
 });
