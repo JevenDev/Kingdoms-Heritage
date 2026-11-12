@@ -8,7 +8,7 @@ const Kit=require('./engine.js');
 const Flow=require('../pack/flow.js');
 const trail=require('../templates/trail-kit.json');
 
-test('the Trail Kit example keeps its budget and second page of offers',()=>{
+test('the Trail Kit example keeps its budget and offers',()=>{
   const source={...trail};
   delete source.items;
   const {document,warnings}=Kit.read(JSON.stringify(source));
@@ -62,13 +62,12 @@ test('shop edits preserve item data and follow game paging when offers cross pag
   const {document}=Kit.read(JSON.stringify(draft));
   assert.equal(document.shop.budget,16);
   const offers=[...document.shop.offers,...Array(8).fill(document.shop.offers.at(-1))];
-  const pages=[Shop.paginate(offers,0),Shop.paginate(offers,2)];
-  assert.equal(pages[0].offers.length,32);
-  assert.equal(pages[1].index,1);
-  assert.equal(pages[1].start,32);
-  assert.equal(pages[1].offers.length,1);
-  assert.equal(pages[1].offers[0].item.id,'minecraft:compass');
-  assert.deepEqual(pages[0].offers[23],{cost:3,limit:4,item:{id:'minecraft:torch',count:32,components:{'minecraft:custom_name':'"Camping Torches"'}}});
+  const layout=Flow.shopLayout({...document.shop,offers});
+  assert.equal(layout.pages,2);
+  assert.equal(layout.window(0).length,32);
+  assert.deepEqual(layout.window(1).filter(index=>index>=0),[32]);
+  assert.equal(offers[layout.window(1)[0]].item.id,'minecraft:compass');
+  assert.deepEqual(offers[layout.window(0)[23]],{cost:3,limit:4,item:{id:'minecraft:torch',count:32,components:{'minecraft:custom_name':'"Camping Torches"'}}});
 });
 
 test('slot reordering keeps whole offers and can move one to the end of a filtered view',()=>{
@@ -90,16 +89,16 @@ test('dropping into an empty grid cell saves the slot and leaves other offers wh
   const edited=Shop.edit(kit,{type:'place',index:0,slot:11});
   const saved=Kit.read(JSON.stringify(edited)).document;
   assert.deepEqual(saved.shop.offers.map(offer=>offer.position),[{row:3,column:4},{row:1,column:2}]);
-  const {offers:cells}=Shop.paginate(Shop.layoutSlots(saved.shop),0);
-  assert.equal(cells[0],undefined);
+  const cells=Flow.shopLayout(saved.shop).window(0);
+  assert.equal(cells[0],-1);
   assert.equal(cells[1],1);
   assert.equal(cells[11],0);
   assert.equal(Flow.shopLayout(saved.shop).window(0)[11],0);
   assert.equal(kit.shop.offers[0].position,undefined);
 
   const swapped=Shop.edit(saved,{type:'place',index:0,slot:1});
-  assert.equal(Shop.layoutSlots(swapped.shop)[1],0);
-  assert.equal(Shop.layoutSlots(swapped.shop)[11],1);
+  assert.equal(Flow.shopLayout(swapped.shop).window(0)[1],0);
+  assert.equal(Flow.shopLayout(swapped.shop).window(0)[11],1);
 });
 
 test('grid drops use the selected section and retain columns on later pages',()=>{
@@ -111,11 +110,33 @@ test('grid drops use the selected section and retain columns on later pages',()=
   const edited=Shop.edit(kit,{type:'place',index:1,section:'light',slot:38});
   const saved=Kit.read(JSON.stringify(edited)).document;
   assert.deepEqual(saved.shop.offers[1].position,{row:2,column:7});
-  assert.equal(Shop.paginate(Shop.layoutSlots(saved.shop,'light'),1).offers[6],1);
-  assert.equal(Flow.shopLayout(saved.shop,'light').window(3)[7],1);
-  assert.equal(Shop.layoutSlots(saved.shop,'light')[0],2);
+  assert.equal(Flow.shopLayout(saved.shop,'light').window(1)[6],1);
+  assert.equal(Flow.shopLayout(saved.shop,'light').window(0)[0],2);
   assert.deepEqual(saved.shop.offers[0],kit.shop.offers[0]);
   assert.throws(()=>Shop.edit(kit,{type:'place',index:1,slot:6}),/Open the offer’s section/);
+});
+
+test('column settings and authored later pages survive kit validation and pack export',()=>{
+  const start={title:'Shop',shop:{budget:5,offers:[{item:{id:'minecraft:bread'},cost:1}]}};
+  for(const columns of [1,9]){
+    const sized=Shop.edit(start,{type:'columns',value:columns});
+    const edited=Shop.edit(sized,{type:'add',id:'minecraft:torch',position:{row:1,column:columns+1}});
+    const draft=Kit.read(JSON.stringify(edited));
+    const layout=Flow.shopLayout(draft.document.shop);
+    assert.equal(layout.columns,columns);
+    assert.equal(layout.pages,2);
+    assert.equal(layout.window(0)[0],0);
+    assert.equal(layout.window(1)[0],1);
+    const pack={name:'Shop pack',namespace:'test_shop',description:'A starting kit shop',keepKits:false,keepLocations:false,
+      kits:[{id:'test',included:true,path:'test'}],locations:[Pack.location('start')]};
+    const output=Pack.build(pack,{kits:[{id:'test',...draft}],intros:[]});
+    assert.deepEqual(output.errors,[]);
+    assert.deepEqual(JSON.parse(output.files.find(file=>file.path==='data/test_shop/heritage/kits/test.json').content).shop,edited.shop);
+  }
+  for(const columns of [0,10,1.5,'4',null]){
+    const invalid=Shop.edit(start,{type:'columns',value:columns});
+    assert.throws(()=>Kit.read(JSON.stringify(invalid)),error=>assert.deepEqual(error.path,['shop','columns'])===undefined);
+  }
 });
 
 test('budget hints flag unaffordable offers and partially affordable purchase limits',()=>{

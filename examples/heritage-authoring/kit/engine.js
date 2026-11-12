@@ -63,6 +63,7 @@ function validateStack(entry,label,path,warnings) {
 function validateShop(shop,warnings) {
   if(!object(shop))throw issue('shop must be an object.',['shop']);
   integer(shop.budget,0,1000000,'Shop budget',['shop','budget']);
+  if(shop.columns!==undefined)integer(shop.columns,1,9,'Shop columns',['shop','columns']);
   const sections=new Set();
   if(shop.sections!==undefined){
     if(!Array.isArray(shop.sections)||shop.sections.length>256)throw issue('Enter up to 256 shop sections.',['shop','sections']);

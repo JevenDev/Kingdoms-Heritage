@@ -3,6 +3,7 @@
   "order": 30,
   "shop": {
     "budget": 32,
+    "columns": 9,
     "sections": [
       {
         "id": "tools",

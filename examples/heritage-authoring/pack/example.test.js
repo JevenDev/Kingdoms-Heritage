@@ -11,6 +11,9 @@ test('the starter example creates two playable locations sharing fixed gear, a s
   const {id,...exported}=choices.kits.find(kit=>kit.title===scout.title);
   assert.deepEqual(exported.items,scout.items);
   assert.deepEqual(exported.shop,scout.shop);
+  const shop=Flow.shopLayout(exported.shop);
+  assert.equal(shop.columns,6);
+  assert.deepEqual(shop.window(0).slice(0,shop.columns),[0,1,2,3,4,5]);
   for(const spawn of choices.spawns){
     const session=new Flow.Session(choices);session.choose(spawn.id);assert.equal(session.allowed().length,2);session.next();
     session.select(session.allowed().findIndex(kit=>kit.id===id));session.next();assert.equal(session.phase,'kit-shop');

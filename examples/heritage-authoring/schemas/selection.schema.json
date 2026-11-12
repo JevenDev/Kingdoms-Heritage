@@ -7,8 +7,8 @@
     "gui_scale": {
       "type": "integer",
       "minimum": 0,
-      "maximum": 16,
-      "description": "0 or omitted uses the player GUI scale. A positive value overrides the GUI scale for selection screens and the entire arrival intro, including bars. Minecraft window and font limits apply. The saved player option stays unchanged."
+      "maximum": 4,
+      "description": "0 or omitted uses the player GUI scale up to 4. A positive value overrides the GUI scale for selection screens and the entire arrival intro, including bars. Minecraft window and font limits apply. The saved player option stays unchanged."
     },
     "kit_preview": {
       "type": "string",

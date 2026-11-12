@@ -18,6 +18,18 @@ test('preview catalog uses the exact exported definitions and disabled bundled c
   const file=output.files.find(file=>file.path==='data/preview/heritage/spawns/location_1.json');
   assert.deepEqual(catalog.spawns[0],{...JSON.parse(file.content),id:'preview:location_1'});
 });
+test('bundled BYO uses the native nine-column layout and keeps a second page of all offers',()=>{
+  const {id,...kit}=bundled.kits.find(entry=>entry.id==='kingdomsheritage:byo');
+  assert.deepEqual(kit,JSON.parse(fs.readFileSync(path.join(native,'data/kingdomsheritage/heritage/kits/byo.json'),'utf8')));
+  const all=Flow.shopLayout(kit.shop),tools=Flow.shopLayout(kit.shop,'tools'),armor=Flow.shopLayout(kit.shop,'armor');
+  assert.equal(all.columns,9);
+  assert.equal(all.pages,2);
+  assert.deepEqual(all.window(1).filter(index=>index>=0),kit.shop.offers.slice(72).map((_,index)=>72+index));
+  assert.equal(tools.pages,1);
+  assert.equal(kit.shop.offers[tools.window(0)[8]].item.id,'minecraft:shield');
+  assert.equal(armor.pages,1);
+  assert.equal(armor.window(0).filter(index=>index>=0).length,64);
+});
 test('kept bundled choices and custom kits use game menu order followed by resource ID',()=>{
   const spawns=[Pack.location('z'),Pack.location('a')];spawns[0].path='z';spawns[1].path='a';spawns[0].fields.order='0';spawns[1].fields.order='0';
   const catalog=Flow.catalog(build({keepLocations:true,locations:spawns}),bundled);
@@ -170,7 +182,7 @@ test('section browsing keeps global offer indices and shares purchases across ta
   assert.equal(session.shopStatus(boots).bought,1);
   assert.deepEqual(session.purchases,[{offer:2,slot:36},{offer:0,slot:0}]);
 });
-test('shop windows slide a column at a time and preserve positioned gaps',()=>{
+test('shop pages preserve positioned gaps without repeating offers',()=>{
   const offers=[
     {section:'tools',position:{row:3,column:5}},
     {section:'tools',position:{row:1,column:1}},
@@ -179,10 +191,10 @@ test('shop windows slide a column at a time and preserve positioned gaps',()=>{
     {section:'tools'}
   ];
   const tools=Flow.shopLayout({offers},'tools');
-  assert.equal(tools.columns,8);
-  assert.equal(tools.pages,5);
+  assert.equal(tools.columns,4);
+  assert.equal(tools.pages,2);
   assert.deepEqual(tools.window(0).slice(0,12),[1,4,2,-1,-1,-1,-1,-1,-1,-1,-1,-1]);
-  assert.deepEqual(tools.window(4).slice(0,12),[-1,-1,-1,-1,-1,-1,-1,3,0,-1,-1,-1]);
+  assert.deepEqual(tools.window(1).slice(0,12),[-1,-1,-1,-1,-1,-1,-1,3,0,-1,-1,-1]);
   assert.deepEqual(Flow.shopLayout({offers}).window(0).slice(0,4),[0,1,2,3]);
 });
 test('standalone shop tests restart with the same draft and a fresh inventory',()=>{
@@ -288,7 +300,7 @@ test('simulated parties expose the companion and party size to the review and in
 });
 test('flow previews read their global GUI scale from the exported settings',()=>{
   assert.equal(Flow.catalog(build(),bundled).guiScale,0);
-  for(const guiScale of [0,1,3,16])assert.equal(Flow.catalog(build({guiScale}),bundled).guiScale,guiScale);
+  for(const guiScale of [0,1,3,4])assert.equal(Flow.catalog(build({guiScale}),bundled).guiScale,guiScale);
   const source=Flow.catalog(build({guiScale:3}),bundled),session=new Flow.Session(source);
   session.choose('preview:location_1');session.next();
   assert.equal(session.phase,'kit');session.next();session.next();session.next();session.next();

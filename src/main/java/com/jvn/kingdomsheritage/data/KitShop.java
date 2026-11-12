@@ -5,7 +5,6 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.jvn.kingdomsheritage.HeritageConfig.InventoryPolicy;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -16,11 +15,12 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 
-public record KitShop(int budget, List<Offer> offers, List<Section> sections) {
+public record KitShop(int budget, List<Offer> offers, List<Section> sections, int columns) {
     public static final int MAX_OFFERS = 256;
     public static final int MAX_PICKS = 41;
     public static final int ROWS = 8;
-    public static final int VISIBLE_COLUMNS = 4;
+    public static final int DEFAULT_COLUMNS = 4;
+    public static final int MAX_COLUMNS = 9;
     private static final int MAX_POINTS = 1_000_000;
 
     public record Section(String id, String name, ResourceLocation icon) {}
@@ -30,15 +30,24 @@ public record KitShop(int budget, List<Offer> offers, List<Section> sections) {
         public Offer(JsonObject item, int cost, int limit) { this(item, cost, limit, ""); }
     }
 
-    public record Layout(int columns, List<Integer> slots) {
-        public int offerAt(int row, int column) { return column < columns ? slots.get(row * columns + column) : -1; }
+    public record Layout(int pageSize, List<Integer> slots) {
+        public int pages() { return Math.max(1, Math.ceilDiv(slots.size(), pageSize)); }
+        public boolean isEmpty() { return slots.isEmpty(); }
+        public int offerAt(int page, int cell) {
+            int slot = page * pageSize + cell;
+            return slot < slots.size() ? slots.get(slot) : -1;
+        }
     }
 
     public KitShop(int budget, List<Offer> offers) { this(budget, offers, List.of()); }
+    public KitShop(int budget, List<Offer> offers, List<Section> sections) {
+        this(budget, offers, sections, DEFAULT_COLUMNS);
+    }
     public record Pick(int offer, int slot) {}
 
     static KitShop parse(JsonObject json) {
         int budget = integer(json.get("budget"), "budget", 0, MAX_POINTS);
+        int columns = json.has("columns") ? integer(json.get("columns"), "columns", 1, MAX_COLUMNS) : DEFAULT_COLUMNS;
         JsonArray stock = GsonHelper.getAsJsonArray(json, "offers");
         if (stock.isEmpty() || stock.size() > MAX_OFFERS) {
             throw new IllegalArgumentException("A kit shop requires between 1 and " + MAX_OFFERS + " offers");
@@ -83,7 +92,7 @@ public record KitShop(int budget, List<Offer> offers, List<Section> sections) {
                     integer(offer.get("cost"), "cost", 0, MAX_POINTS),
                     offer.has("limit") ? integer(offer.get("limit"), "limit", 1, MAX_PICKS) : 1, section, position));
         }
-        return new KitShop(budget, List.copyOf(offers), List.copyOf(sections));
+        return new KitShop(budget, List.copyOf(offers), List.copyOf(sections), columns);
     }
 
     private static String sectionText(JsonObject json, String field, int max) {
@@ -111,6 +120,7 @@ public record KitShop(int budget, List<Offer> offers, List<Section> sections) {
     public JsonObject json() {
         var json = new JsonObject();
         json.addProperty("budget", budget);
+        if (columns != DEFAULT_COLUMNS) json.addProperty("columns", columns);
         if (!sections.isEmpty()) {
             var tabs = new JsonArray();
             for (var section : sections) {
@@ -142,32 +152,31 @@ public record KitShop(int budget, List<Offer> offers, List<Section> sections) {
     }
 
     public Layout layout(String section) {
-        var visible = new ArrayList<Integer>();
-        int columns = 0;
+        int pageSize = columns * ROWS;
+        var slots = new ArrayList<Integer>();
+        var automatic = new ArrayList<Integer>();
         for (int index = 0; index < offers.size(); index++) {
             var offer = offers.get(index);
             boolean sameSection = section.equals(offer.section());
             if (!section.isEmpty() && !sameSection) continue;
-            visible.add(index);
-            if (sameSection && offer.position() != null) columns = Math.max(columns, offer.position().column());
-        }
-
-        int automaticColumns = Math.max(Math.min(VISIBLE_COLUMNS, visible.size()), Math.ceilDiv(visible.size(), ROWS));
-        columns = Math.max(columns, automaticColumns);
-        var slots = new ArrayList<Integer>(Collections.nCopies(columns * ROWS, -1));
-        var automatic = new ArrayList<Integer>();
-        for (int index : visible) {
-            var offer = offers.get(index);
-            var position = section.equals(offer.section()) ? offer.position() : null;
-            if (position == null) automatic.add(index);
-            else slots.set((position.row() - 1) * columns + position.column() - 1, index);
+            var position = sameSection ? offer.position() : null;
+            if (position == null) {
+                automatic.add(index);
+            } else {
+                int column = position.column() - 1;
+                int slot = column / columns * pageSize + (position.row() - 1) * columns + column % columns;
+                if (slot >= slots.size()) slots.addAll(Collections.nCopies(slot + 1 - slots.size(), -1));
+                slots.set(slot, index);
+            }
         }
         int slot = 0;
         for (int index : automatic) {
-            while (slots.get(slot) != -1) slot++;
-            slots.set(slot++, index);
+            while (slot < slots.size() && slots.get(slot) != -1) slot++;
+            if (slot == slots.size()) slots.add(index);
+            else slots.set(slot, index);
+            slot++;
         }
-        return new Layout(columns, List.copyOf(slots));
+        return new Layout(pageSize, List.copyOf(slots));
     }
 
     public int cost(List<Pick> picks) {

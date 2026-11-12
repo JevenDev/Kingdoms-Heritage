@@ -9,6 +9,7 @@
   ],
   "shop": {
     "budget": 8,
+    "columns": 6,
     "sections": [
       { "id": "gear", "name": "Gear", "icon": "minecraft:shield" },
       { "id": "supplies", "name": "Supplies", "icon": "minecraft:torch" }

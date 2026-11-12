@@ -137,7 +137,7 @@ test('ZIP validation rejects unsafe paths, duplicate names and unsupported conte
 test('GUI scaling stays optional and exports one global settings file when configured',()=>{
   const original=state();
   assert.deepEqual(JSON.parse(Pack.build(original,catalog).files.find(file=>file.path===Pack.selectionPath).content),{gui_scale:0});
-  for(const guiScale of [0,1,4,16]){
+  for(const guiScale of [0,1,4]){
     const input={...original,guiScale,namespace:'renamed_pack'},output=Pack.build(input,catalog);
     assert.deepEqual(output.errors,[]);
     assert.deepEqual(JSON.parse(output.files.find(file=>file.path===Pack.selectionPath).content),{gui_scale:guiScale});
@@ -148,7 +148,7 @@ test('GUI scaling stays optional and exports one global settings file when confi
 });
 
 test('invalid GUI scales block export and retain a marked settings preview',()=>{
-  for(const guiScale of [-1,17,1.5,'4',null,true,NaN,Infinity]){
+  for(const guiScale of [-1,5,17,1.5,'4',null,true,NaN,Infinity]){
     const output=Pack.build({...state(),guiScale},catalog);
     assert.ok(output.errors.some(error=>error.startsWith('GUI scale:')));
     assert.deepEqual(output.files,[]);
@@ -165,6 +165,7 @@ test('GUI scaling survives saved projects, backups and library merges without ch
   const projects=new Project.Projects(storage,input,()=>'project');projects.save();
   assert.equal(new Project.Projects(storage,initial).state().guiScale,3);
   assert.deepEqual(Project.validatePack(initial),initial);
+  assert.equal(Project.validatePack({...input,guiScale:16}).guiScale,4);
   for(const guiScale of [-1,17,1.5,'4',null])assert.throws(()=>Project.validatePack({...input,guiScale}),/GUI scale/);
 });
 

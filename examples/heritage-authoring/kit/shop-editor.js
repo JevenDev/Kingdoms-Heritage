@@ -1,25 +1,9 @@
 (() => {
 'use strict';
 const K=HeritageKit,F=typeof module==='undefined'?HeritageFlow:require('../pack/flow.js');
-const COLUMNS=F.shopColumns,PAGE_SIZE=F.shopPageSize,ROWS=PAGE_SIZE/COLUMNS,MAX_OFFERS=256,DEFAULT_BUDGET=12;
-const pageOf=index=>Math.floor(index/PAGE_SIZE);
-function paginate(offers,page) {
-  const count=Math.max(1,Math.ceil(offers.length/PAGE_SIZE));
-  const index=Math.max(0,Math.min(page,count-1)),start=index*PAGE_SIZE;
-  return {index,count,start,offers:offers.slice(start,start+PAGE_SIZE)};
-}
-function positionOf(slot){
-  return {row:Math.floor(slot%PAGE_SIZE/COLUMNS)+1,column:pageOf(slot)*COLUMNS+slot%COLUMNS+1};
-}
-function layoutSlots(shop,section=''){
-  const layout=F.shopLayout(shop,section);
-  const slots=[];
-  for(let column=0;column<layout.columns;column+=COLUMNS){
-    for(const [cell,index] of layout.window(column).entries()){
-      if(index>=0)slots[column/COLUMNS*PAGE_SIZE+cell]=index;
-    }
-  }
-  return slots;
+const MAX_OFFERS=256,MAX_POSITION_COLUMN=256,DEFAULT_BUDGET=12;
+function positionOf(slot,{columns,pageSize}){
+  return {row:Math.floor(slot%pageSize/columns)+1,column:Math.floor(slot/pageSize)*columns+slot%columns+1};
 }
 function budgetHint(budget,cost,limit=1){
   if(cost===0)return null;
@@ -35,12 +19,14 @@ function edit(kit,action) {
     if(next.shop.offers.length>=MAX_OFFERS)throw new Error('A shop can have up to '+MAX_OFFERS+' offers.');
     const offer={cost:1,item:{id:K.normalize(action.id.trim())}};
     if(action.section)offer.section=action.section;
+    if(action.position)offer.position=action.position;
     next.shop.offers.push(offer);
     return next;
   }
   const shop=next.shop;
   if(!shop)throw new Error('Add an offer to start a shop.');
   if(action.type==='budget'){shop.budget=action.value;return next;}
+  if(action.type==='columns'){shop.columns=action.value;return next;}
   if(action.type==='add-section'){
     shop.sections??=[];
     let number=1;
@@ -76,17 +62,17 @@ function edit(kit,action) {
     case 'place': {
       const section=action.section??'';
       if((offer.section??'')!==section)throw new Error('Open the offer’s section to place it in a slot.');
-      const slots=layoutSlots(shop,section),from=slots.indexOf(action.index),to=action.slot;
-      if(!Number.isInteger(to)||to<0||to>=MAX_OFFERS*ROWS)throw new Error('That shop slot is outside the layout.');
+      const layout=F.shopLayout(shop,section),{slots}=layout,from=slots.indexOf(action.index),to=action.slot;
+      if(!Number.isInteger(to)||to<0||positionOf(to,layout).column>MAX_POSITION_COLUMN)throw new Error('That shop slot is outside the layout.');
       if(from===to)break;
       const target=shop.offers[slots[to]];
       if(target&&(target.section??'')!==section)throw new Error('Choose an empty slot or an offer in the same section.');
       slots.forEach((index,slot)=>{
         const entry=shop.offers[index];
         if((entry.section??'')!==section)return;
-        if(index===action.index)entry.position=positionOf(to);
-        else if(slot===to)entry.position=positionOf(from);
-        else if(!entry.position)entry.position=positionOf(slot);
+        if(index===action.index)entry.position=positionOf(to,layout);
+        else if(slot===to)entry.position=positionOf(from,layout);
+        else if(!entry.position)entry.position=positionOf(slot,layout);
       });
       break;
     }
@@ -110,12 +96,23 @@ function create(config) {
   const $=id=>document.getElementById(id),V=HeritageInventory,T=HeritageItemText;
   const budget=$('shop-budget'),form=$('shop-add-form'),itemId=$('shop-item-id'),list=$('shop-offers'),tray=$('shop-tray'),status=$('shop-status');
   const addButton=form.querySelector('button'),testShop=$('shop-test'),previous=$('shop-prev'),next=$('shop-next');
+  const columnsInput=$('shop-columns'),addPage=$('shop-add-page'),panel=$('shop-tray-panel');
   const sectionsPanel=$('shop-sections'),sectionList=$('shop-section-list'),addSection=$('shop-add-section');
   const narrow=matchMedia('(max-width:550px)'),preview=$('shop-preview');
   const fitPreview=()=>{preview.open=!narrow.matches;};
   fitPreview();narrow.addEventListener('change',fitPreview);
   const inlineTabs=$('shop-inline-tabs'),meter=$('shop-preview-bar');
-  let page=0,selection=-1,activeSection='',rows=[],cells=[],sectionRows=[],tabs=[],locked=false;
+  let page=0,draftPage=false,selection=-1,activeSection='',rows=[],cells=[],sectionRows=[],tabs=[],locked=false;
+  let drawnColumns=0;
+  const texture=new Image();
+  function drawPanel(columns){
+    if(!texture.naturalWidth||columns===drawnColumns)return;
+    drawnColumns=columns;
+    panel.width=F.shopPanelWidth(columns);panel.height=texture.height;
+    F.drawShopPanel(panel.getContext('2d'),texture,0,0,columns);
+  }
+  texture.addEventListener('load',()=>drawPanel(Number(columnsInput.value)||F.defaultShopColumns));
+  texture.src='kit/assets/shop.png?v=2';
   function report(message='',error=false){
     status.textContent=message;status.hidden=!message;status.dataset.error=String(error);
   }
@@ -143,22 +140,23 @@ function create(config) {
   }
   function apply(action,focus=undefined,message=''){
     if(locked)return false;
-    const beforePage=page,beforeSelection=selection;
+    const beforePage=page,beforeDraftPage=draftPage,beforeSelection=selection;
     try{
       const candidate=edit(config.getKit(),action);
       K.read(JSON.stringify(candidate));
-      if(action.type==='add')selection=candidate.shop.offers.length-1;
+      if(action.type==='add'){selection=candidate.shop.offers.length-1;draftPage=false;}
+      if(action.type==='columns'){page=0;draftPage=false;}
       if(action.type==='move')selection=action.to;
       if(action.type==='place'||action.type==='position')selection=action.index;
       if(['add','move','remove','place','position'].includes(action.type)){
         const indices=candidate.shop?F.shopOfferIndices(candidate.shop,activeSection):[];
         if(action.type==='remove')selection=indices.find(index=>index>=action.index)??indices.at(-1)??-1;
-        const slot=candidate.shop?layoutSlots(candidate.shop,activeSection).indexOf(selection):-1;
-        if(slot>=0)page=pageOf(slot);
+        const layout=candidate.shop&&F.shopLayout(candidate.shop,activeSection),slot=layout?.slots.indexOf(selection)??-1;
+        if(slot>=0)page=Math.floor(slot/layout.pageSize);
       }
       if(!config.commit(candidate))throw new Error('The shop edit could not be saved. Check the kit for pending edits.');
     }catch(error){
-      page=beforePage;selection=beforeSelection;render();report(error.message,true);return false;
+      page=beforePage;draftPage=beforeDraftPage;selection=beforeSelection;render();report(error.message,true);return false;
     }
     render();report(message);
     if(focus)focusRow(selection,focus);
@@ -209,7 +207,7 @@ function create(config) {
       const tab={icon:label('span','shop-inline-tab-icon')};
       tab.button=button('',()=>{
         if(tab.id===activeSection)return;
-        activeSection=tab.id;page=0;selection=-1;render();
+        activeSection=tab.id;page=0;draftPage=false;selection=-1;render();
       });
       tab.button.className='shop-inline-tab';
       tab.button.append(tab.icon);inlineTabs.append(tab.button);tabs.push(tab);
@@ -268,7 +266,7 @@ function create(config) {
     sectionLabel.append(section);
     const slotTitle='Slot (row, column)';
     const slotLabel=label('label','shop-offer-slot',slotTitle),slot=label('input');
-    slotLabel.dataset.tooltip=JSON.stringify([slotTitle,'Position in this section’s grid. The top left is 1, 1. Leave blank for automatic placement.']);
+    slotLabel.dataset.tooltip=JSON.stringify([slotTitle,'Rows start at 1 on each page. Columns continue across pages. Leave blank for automatic placement.']);
     slot.placeholder='Automatic';
     slot.addEventListener('change',()=>{
       const value=slot.value.trim(),match=/^(\d+)\s*,\s*(\d+)$/.exec(value);
@@ -292,6 +290,7 @@ function create(config) {
   function dragOffer(event,index){
     if(locked)return;
     const kit=config.getKit(),startPage=page,startSection=activeSection;
+    const {pageSize}=F.shopLayout(kit.shop,startSection);
     const offer=kit.shop.offers[index];
     V.dragStart(event,{item:offer.item},slot=>{
       if(config.getKit()!==kit||page!==startPage||activeSection!==startSection)return;
@@ -306,7 +305,7 @@ function create(config) {
       if(targetOffer&&((offer.section??'')!==activeSection||(targetOffer.section??'')!==activeSection||!offer.position&&!targetOffer.position)){
         apply({type:'move',index,to:target});
       }else{
-        apply({type:'place',index,section:activeSection,slot:startPage*PAGE_SIZE+slot});
+        apply({type:'place',index,section:activeSection,slot:startPage*pageSize+slot});
       }
     },{source:event.currentTarget,dropTarget:element=>{
       const target=element?.closest('[data-slot]');
@@ -340,14 +339,21 @@ function create(config) {
     tray.dataset.editable=list.dataset.editable=String(!locked);
     const offers=reason&&reason.invalid?[]:shop?.offers??[];
     const sections=offers.length?shop.sections??[]:[];
-    if(activeSection&&!sections.some(section=>section.id===activeSection)){activeSection='';page=0;}
-    const indices=F.shopOfferIndices({offers},activeSection),view=paginate(layoutSlots({offers},activeSection),page);
-    const pageOffers=view.offers.filter(index=>index!==undefined).sort((a,b)=>a-b);
-    const sectionOptions=JSON.stringify(sections.map(({id,name})=>[id,name]));
-    page=view.index;
+    if(activeSection&&!sections.some(section=>section.id===activeSection)){activeSection='';page=0;draftPage=false;}
+    const layout=F.shopLayout({offers,columns:offers.length?shop.columns:undefined},activeSection);
+    const {columns,pageSize,pages}=layout;
+    if(!offers.length||pages*columns>=MAX_POSITION_COLUMN)draftPage=false;
+    const pageCount=pages+Number(draftPage);
+    page=Math.min(page,pageCount-1);
+    const visible=layout.window(page),pageOffers=visible.filter(index=>index>=0).sort((a,b)=>a-b);
+    const indices=F.shopOfferIndices({offers},activeSection),sectionOptions=JSON.stringify(sections.map(({id,name})=>[id,name]));
+    tray.style.setProperty('--shop-columns',columns);
+    preview.classList.toggle('shop-preview-wide',columns>F.defaultShopColumns);
+    drawPanel(columns);
     if(selection>=offers.length)selection=offers.length-1;
     budget.value=Number.isInteger(shop?.budget)?shop.budget:'';
-    testShop.disabled=budget.disabled=locked||!offers.length;
+    columnsInput.value=columns;
+    testShop.disabled=budget.disabled=columnsInput.disabled=locked||!offers.length;
     itemId.disabled=locked;
     addButton.disabled=locked||offers.length>=MAX_OFFERS;
     $('shop-count').textContent=offers.length?offers.length+' offer'+(offers.length===1?'':'s'):reason?.invalid?'':'Fixed kit';
@@ -356,8 +362,9 @@ function create(config) {
     $('shop-pages').hidden=!offers.length;
     renderSections(sections,!!offers.length);renderInlineTabs(sections);
     meter.alt='0 / '+(shop?.budget??0)+' points spent';
-    $('shop-page').textContent=indices.length?'Page '+(page+1)+' of '+view.count+' · Columns '+(page*COLUMNS+1)+'–'+((page+1)*COLUMNS):'No offers in this section.';
-    previous.disabled=page===0;next.disabled=page+1===view.count;
+    $('shop-page').textContent=indices.length||draftPage?'Page '+(page+1)+' of '+pageCount+' · Columns '+(page*columns+1)+'–'+Math.min(MAX_POSITION_COLUMN,(page+1)*columns):'No offers in this section.';
+    previous.disabled=page===0;next.disabled=page+1===pageCount;
+    addPage.disabled=addButton.disabled||!layout.slots.length||draftPage||pages*columns>=MAX_POSITION_COLUMN;
     while(rows.length>pageOffers.length)rows.pop().element.remove();
     while(rows.length<pageOffers.length)rows.push(makeRow());
     for(const [offset,index] of pageOffers.entries()){
@@ -383,16 +390,20 @@ function create(config) {
       row.up.disabled=locked||row.previous===undefined;row.down.disabled=locked||row.next===undefined;row.remove.disabled=locked;
       for(const [action,text] of [['up','Move earlier'],['down','Move later'],['remove','Remove']])row[action].setAttribute('aria-label',text+' offer '+(index+1)+', '+name);
     }
-    while(cells.length<PAGE_SIZE)cells.push(makeCell());
+    while(cells.length>pageSize)cells.pop().element.remove();
+    while(cells.length<pageSize)cells.push(makeCell());
     for(const [offset,cell] of cells.entries()){
-      const index=view.offers[offset];
+      const index=visible[offset];
       fillCell(cell,offers[index],index);
     }
     updateHints();highlight(selection);
   }
   function add(id){
     const name=K.items.get(K.normalize(id.trim()))?.name??id.trim();
-    return apply({type:'add',id,section:activeSection},undefined,name+' added.');
+    const layout=page>0&&F.shopLayout(config.getKit().shop,activeSection);
+    const cell=layout?layout.window(page).findIndex((index,offset)=>index<0&&page*layout.columns+offset%layout.columns<MAX_POSITION_COLUMN):-1;
+    const position=cell>=0?positionOf(page*layout.pageSize+cell,layout):undefined;
+    return apply({type:'add',id,section:activeSection,position},undefined,name+' added.');
   }
   addSection.addEventListener('click',()=>{
     if(apply({type:'add-section'}))sectionRows.at(-1)?.name.focus();
@@ -404,11 +415,17 @@ function create(config) {
   budget.addEventListener('input',updateHints);
   budget.addEventListener('change',()=>number(budget,{type:'budget'}));
   budget.addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();budget.blur();}});
+  columnsInput.addEventListener('change',()=>number(columnsInput,{type:'columns'}));
+  columnsInput.addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();columnsInput.blur();}});
   form.addEventListener('submit',event=>{event.preventDefault();if(add(itemId.value)){itemId.value='';itemId.focus();}});
+  addPage.addEventListener('click',()=>{
+    page=F.shopLayout(config.getKit().shop,activeSection).pages;draftPage=true;selection=-1;
+    render();itemId.focus();report('Add an offer to save this page.');
+  });
   previous.addEventListener('click',()=>{page--;render();});
   next.addEventListener('click',()=>{page++;render();});
-  return {add,render,reset(){page=0;selection=-1;activeSection='';sectionsPanel.open=false;itemId.value='';report();render();}};
+  return {add,render,reset(){page=0;draftPage=false;selection=-1;activeSection='';sectionsPanel.open=false;itemId.value='';report();render();}};
 }
-globalThis.HeritageShopEditor={create,edit,layoutSlots,paginate,budgetHint};
+globalThis.HeritageShopEditor={create,edit,budgetHint};
 if(typeof module!=='undefined')module.exports=globalThis.HeritageShopEditor;
 })();

@@ -67,6 +67,7 @@
         "required": ["budget", "offers"],
         "properties": {
           "budget": { "type": "integer", "minimum": 0, "maximum": 1000000, "description": "Points available to each player for this kit." },
+          "columns": { "type": "integer", "minimum": 1, "maximum": 9, "default": 4, "description": "Number of offer columns on each page." },
           "sections": {
             "type": "array",
             "maxItems": 256,
@@ -99,7 +100,7 @@
                 "section": { "type": "string", "pattern": "^[a-z0-9_-]{1,64}$", "description": "ID of a shop section. All offers are also shown on the All tab." },
                 "position": {
                   "type": "object",
-                  "description": "Optional slot in this offer's section, counting from 1. Unpositioned offers follow the positioned columns. Empty slots within a column remain empty, and wholly empty columns are skipped.",
+                  "description": "Optional slot in this offer's section, counting from 1. Column numbers continue across pages. Unpositioned offers fill open slots in page order.",
                   "required": ["row", "column"],
                   "properties": {
                     "row": { "type": "integer", "minimum": 1, "maximum": 8 },

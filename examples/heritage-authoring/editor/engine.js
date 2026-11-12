@@ -379,8 +379,8 @@ function bounds(block) {
   const width=Math.max(0,...block.lines.map(line=>line.width))*block.scale;
   return {x:block.x-width*block.column/2,y:block.y,width,height:block.lines.length*block.lineHeight*block.scale};
 }
-function guiViewport(width,height,requested=0) {
-  const maxScale=Math.max(1,Math.min(Math.floor(width/320),Math.floor(height/240)));
+function guiViewport(width,height,requested=0,minimumWidth=320) {
+  const maxScale=Math.max(1,Math.min(4,Math.floor(width/Math.max(320,minimumWidth)),Math.floor(height/240)));
   const scale=requested===0?maxScale:Math.max(1,Math.min(requested,maxScale));
   return {width,height,scale,maxScale,guiWidth:Math.ceil(width/scale),guiHeight:Math.ceil(height/scale)};
 }

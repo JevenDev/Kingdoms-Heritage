@@ -278,7 +278,7 @@ function build(state,catalog) {
   };
   const selection=selectionDocument(state);
   report('GUI scale',()=>{
-    if(!Number.isInteger(selection.gui_scale)||selection.gui_scale<0||selection.gui_scale>16)throw Object.assign(fieldError('guiScale','Use a whole number from 0 to 16.'),{path:['gui_scale']});
+    if(!Number.isInteger(selection.gui_scale)||selection.gui_scale<0||selection.gui_scale>4)throw Object.assign(fieldError('guiScale','Use a whole number from 0 to 4.'),{path:['gui_scale']});
   },undefined,selectionPath);
   report('Kit preview',()=>{
     if(selection.kit_preview!==undefined&&!['inventory','model'].includes(selection.kit_preview))throw Object.assign(fieldError('kitPreview','Choose Inventory or Model only.'),{path:['kit_preview']});

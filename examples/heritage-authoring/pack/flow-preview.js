@@ -140,7 +140,7 @@ async function loadOverlayShader(source,toast=false){
 }
 let defaultsLoading;
 function loadDefaults(){
-  return defaultsLoading??=fetch(new URL('defaults.json?v=6',base)).then(response=>{
+  return defaultsLoading??=fetch(new URL('defaults.json?v=8',base)).then(response=>{
     if(!response.ok)throw new Error('Bundled locations and kits could not load.');
     return response.json();
   }).catch(error=>{defaultsLoading=null;throw error;});
@@ -179,7 +179,9 @@ async function load(){
 }
 function resize(){
   const [w,h]=$('flow-resolution').value.split('x').map(Number),locked=lockedScale>0&&(session?.phase!=='complete'||transition.phase!=='idle');
-  viewport=P.guiViewport(w,h,locked?lockedScale:playerScale);
+  const shop=session?.phase==='kit-shop'?session.kit.shop:null;
+  const shopWidth=shop?F.shopPanelWidth(shop.columns??F.defaultShopColumns)+176+(shop.sections?.length?shopTabWidth:0)+8:320;
+  viewport=P.guiViewport(w,h,locked?lockedScale:playerScale,shopWidth);
   $('flow-scale').disabled=locked;$('flow-scale').value=String(locked?lockedScale:playerScale);
   $('flow-scale-status').textContent=locked?'Pack override: '+lockedScale+'. Effective scale at this resolution: '+viewport.scale+'.':session?.phase==='complete'?'Player GUI scale restored. Effective scale: '+viewport.scale+'.':'Uses the player’s preview GUI scale. Effective scale: '+viewport.scale+'.';
   if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h;}$('flow-stage').style.aspectRatio=w+'/'+h;$('flow-stage').style.setProperty('--flow-ratio',w/h);
@@ -907,14 +909,16 @@ function shopScreen(w,h,now){
   if(progress>=1)shopTrade=null;
   const shake=shopTrade?Math.round(Math.sin(progress*19)*2.5*(1-progress)):0;
   const {budget,offers}=session.kit.shop,spent=session.spent,shop=images.get('shop');
-  const left=Math.trunc((w-shop.width-inventory.layout.width)/2),top=Math.trunc((h-shop.height)/2),inv=left+shop.width,bottom=top+shop.height+4;
-  const layout=currentShopLayout(),pages=layout.pages,visibleOffers=layout.window(shopPage);
+  const layout=currentShopLayout(),{columns,pages}=layout,visibleOffers=layout.window(shopPage);
+  const shopWidth=F.shopPanelWidth(columns),tabWidth=session.kit.shop.sections?.length?shopTabWidth:0;
+  const left=Math.trunc((w-shopWidth-inventory.layout.width-tabWidth)/2)+tabWidth;
+  const top=Math.trunc((h-shop.height)/2),inv=left+shopWidth,bottom=top+shop.height+4;
   const slotPitch=18;
   let detail=null;
   const showing=node=>!partyOpen&&node.matches(':hover,:focus-visible');
   const {hovered:hoveredTab,active:activeTab,rail}=drawShopTabs(left,top,showing);
   shopBounds={left,top,right:inv,bottom:top+shop.height,rail};
-  ctx.drawImage(shop,left,top);
+  F.drawShopPanel(ctx,shop,left,top,columns);
   if(activeTab)paintShopTab(activeTab);
   inventory.aim={x:pointer.x-inv-51,y:pointer.y-top-32};
   inventory.visible=true;inventory.draw(shopTrade?.buying?shopTrade.slot:null);
@@ -922,7 +926,7 @@ function shopScreen(w,h,now){
 
   for(const [cell,index] of visibleOffers.entries()){
     if(index<0)continue;
-    const x=left+8+cell%F.shopColumns*slotPitch,y=top+12+Math.floor(cell/F.shopColumns)*slotPitch;
+    const x=left+8+cell%columns*slotPitch,y=top+12+Math.floor(cell/columns)*slotPitch;
     const status=session.shopStatus(index),{offer}=status,name=HeritageItemText.name(offer.item);
     const action=shopText('buy',name,offer.cost),feedback=shopStatusText(status);
     const limitReached=status.issue==='limit_reached',short=status.issue==='short'||status.issue==='short_one';
@@ -1004,11 +1008,15 @@ function shopScreen(w,h,now){
     if(lines===9&&(status.limit>1||status.bought>=status.limit))text(shopText('bought',status.bought,status.limit),detailX,top+67,{...ink,color:0x505050,maxLines:1});
   }
 
-  if(!layout.columns)text(shopText('empty_section'),left+shop.width/2,top+18,{center:true,limit:shop.width-12});
+  if(!layout.slots.length)text(shopText('empty_section'),w/2,top+shop.height+27,{center:true});
   if(pages>1){
-    arrow('shop-previous',shopText('previous_page'),left+3,bottom,()=>changeShopPage(-1),shopPage===0,{scale:.67,compact:true,forward:false});
-    text(shopText('page',shopPage+1,pages),left+shop.width/2,bottom+6,{center:true});
-    arrow('shop-next',shopText('next_page'),inv-16,bottom,()=>changeShopPage(1),shopPage+1===pages,{scale:.67,compact:true});
+    const size=Math.min(20,shopWidth/2),y=bottom+(20-size)/2,scale=size/32;
+    arrow('shop-previous',shopText('previous_page'),left,y,()=>changeShopPage(-1),shopPage===0,{scale,forward:false});
+    const count=shopText('page',shopPage+1,pages);
+    if(columns<=3){
+      text(count,left+shopWidth/2,top+2,{center:true,color:0x404040,outline:false,scale:Math.min(1,(shopWidth-4)/width(literal(count)))});
+    }else text(count,left+shopWidth/2,bottom+6,{center:true});
+    arrow('shop-next',shopText('next_page'),inv-size,y,()=>changeShopPage(1),shopPage+1===pages,{scale});
   }
   if(!session.shopOnly)button('back','Back',inv+3,bottom,46,back);
   button('shop-reset',shopText('reset'),inv+53,bottom,44,()=>{

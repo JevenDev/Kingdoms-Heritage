@@ -76,43 +76,43 @@ function browseLocation(count,index,offset,byPage=false){
   }else index+=offset;
   return Math.max(0,Math.min(last,index));
 }
-const shopColumns=4,shopRows=8,shopPageSize=shopColumns*shopRows;
+const defaultShopColumns=4,maxShopColumns=9,shopRows=8,shopSlotPitch=18,shopPanelEdge=7;
 function shopOfferIndices(shop,section=''){
   const indices=[];
   for(const [index,offer] of shop.offers.entries())if(!section||offer.section===section)indices.push(index);
   return indices;
 }
 function shopLayout(shop,section=''){
-  const indices=shopOfferIndices(shop,section);
-  const positions=indices.map(index=>{
-    const offer=shop.offers[index];
-    return (offer.section??'')===section?offer.position:undefined;
-  });
-  const columns=Math.max(Math.min(shopColumns,indices.length),Math.ceil(indices.length/shopRows),
-    ...positions.map(position=>position?.column??0));
-  const slots=Array(columns*shopRows).fill(-1);
-  const automatic=[];
-  for(const [offset,index] of indices.entries()){
-    const position=positions[offset];
-    if(position)slots[(position.row-1)*columns+position.column-1]=index;
-    else automatic.push(index);
+  const columns=shop.columns??defaultShopColumns,pageSize=columns*shopRows;
+  const slots=[],automatic=[];
+  for(const index of shopOfferIndices(shop,section)){
+    const offer=shop.offers[index],position=(offer.section??'')===section?offer.position:undefined;
+    if(!position){automatic.push(index);continue;}
+    const column=position.column-1;
+    slots[Math.floor(column/columns)*pageSize+(position.row-1)*columns+column%columns]=index;
   }
   let slot=0;
   for(const index of automatic){
-    while(slots[slot]!==-1)slot++;
+    while(slots[slot]!==undefined)slot++;
     slots[slot++]=index;
   }
   return {
-    columns,
-    pages:Math.max(1,columns-shopColumns+1),
-    window(offset){
-      return Array.from({length:shopPageSize},(_,cell)=>{
-        const row=Math.floor(cell/shopColumns),column=offset+cell%shopColumns;
-        if(column>=columns)return -1;
-        return slots[row*columns+column];
-      });
+    columns,pageSize,slots,
+    pages:Math.max(1,Math.ceil(slots.length/pageSize)),
+    window(page){
+      return Array.from({length:pageSize},(_,cell)=>slots[page*pageSize+cell]??-1);
     }
   };
+}
+const shopPanelWidth=columns=>2*shopPanelEdge+columns*shopSlotPitch;
+function drawShopPanel(ctx,texture,x,y,columns){
+  if(columns===defaultShopColumns){ctx.drawImage(texture,x,y);return;}
+  const edge=shopPanelEdge,pitch=shopSlotPitch,h=texture.height;
+  ctx.drawImage(texture,0,0,edge,h,x,y,edge,h);
+  for(let column=0;column<columns;column++){
+    ctx.drawImage(texture,edge,0,pitch,h,x+edge+column*pitch,y,pitch,h);
+  }
+  ctx.drawImage(texture,texture.width-edge,0,edge,h,x+shopPanelWidth(columns)-edge,y,edge,h);
 }
 function equipmentSlot(stack){
   const id=stack.id.includes(':')?stack.id:'minecraft:'+stack.id;
@@ -293,7 +293,7 @@ class Session {
     if(this.phase==='review')this.phase=this.kit.shop?'kit-shop':this.allowed().length===1?'location-confirm':'kit';
   }
 }
-const api={pageSize,shopColumns,shopPageSize,shopOfferIndices,shopLayout,browseLocation,companionNames,compare,catalog,label,place,destination,locations,context,narration,revealed,Session};
+const api={pageSize,defaultShopColumns,maxShopColumns,shopRows,shopOfferIndices,shopLayout,shopPanelWidth,drawShopPanel,browseLocation,companionNames,compare,catalog,label,place,destination,locations,context,narration,revealed,Session};
 if(typeof module!=='undefined')module.exports=api;
 else globalThis.HeritageFlow=api;
 })();
