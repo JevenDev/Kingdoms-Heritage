@@ -1,7 +1,5 @@
 {
-  "title": "Empty-handed",
-  "description": "Begin with an empty inventory.",
+  "title": "Naked",
   "items": [],
-  "title_key": "heritage.kingdomsheritage.kits.default.title",
-  "description_key": "heritage.kingdomsheritage.kits.default.description"
+  "title_key": "heritage.kingdomsheritage.kits.default.title"
 }

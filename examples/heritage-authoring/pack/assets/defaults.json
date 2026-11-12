@@ -129,12 +129,1569 @@
   ],
   "kits": [
     {
-      "title": "Empty-handed",
-      "description": "Begin with an empty inventory.",
+      "title": "Naked",
       "items": [],
       "title_key": "heritage.kingdomsheritage.kits.default.title",
-      "description_key": "heritage.kingdomsheritage.kits.default.description",
       "id": "kingdomsheritage:default"
+    },
+    {
+      "title": "Miner",
+      "order": 10,
+      "items": [
+        {
+          "index": 0,
+          "item": {
+            "id": "minecraft:iron_pickaxe",
+            "components": {
+              "minecraft:damage": 218
+            }
+          }
+        },
+        {
+          "index": 1,
+          "item": {
+            "id": "minecraft:torch",
+            "count": 32
+          }
+        },
+        {
+          "index": 2,
+          "item": {
+            "id": "minecraft:bread",
+            "count": 8
+          }
+        },
+        {
+          "index": 3,
+          "item": {
+            "id": "minecraft:stone_shovel"
+          }
+        },
+        {
+          "index": 4,
+          "item": {
+            "id": "minecraft:clock"
+          }
+        },
+        {
+          "index": 5,
+          "item": {
+            "id": "minecraft:ladder",
+            "count": 32
+          }
+        }
+      ],
+      "id": "kingdomsheritage:miner"
+    },
+    {
+      "title": "Adventurer",
+      "order": 20,
+      "items": [
+        {
+          "index": 0,
+          "item": {
+            "id": "minecraft:iron_sword",
+            "components": {
+              "minecraft:damage": 186
+            }
+          }
+        },
+        {
+          "index": 1,
+          "item": {
+            "id": "minecraft:bread",
+            "count": 8
+          }
+        },
+        {
+          "index": 8,
+          "item": {
+            "id": "minecraft:spyglass"
+          }
+        },
+        {
+          "index": 40,
+          "item": {
+            "id": "minecraft:shield",
+            "components": {
+              "minecraft:damage": 168
+            }
+          }
+        },
+        {
+          "index": 36,
+          "item": {
+            "id": "minecraft:leather_boots"
+          }
+        },
+        {
+          "index": 2,
+          "item": {
+            "id": "minecraft:map"
+          }
+        },
+        {
+          "index": 3,
+          "item": {
+            "id": "minecraft:compass"
+          }
+        }
+      ],
+      "id": "kingdomsheritage:adventurer"
+    },
+    {
+      "title": "BYO",
+      "order": 30,
+      "shop": {
+        "budget": 32,
+        "sections": [
+          {
+            "id": "tools",
+            "name": "Tools",
+            "icon": "minecraft:iron_pickaxe"
+          },
+          {
+            "id": "food",
+            "name": "Food",
+            "icon": "minecraft:bread"
+          },
+          {
+            "id": "armor",
+            "name": "Armor",
+            "icon": "minecraft:iron_chestplate"
+          }
+        ],
+        "offers": [
+          {
+            "section": "tools",
+            "cost": 12,
+            "item": {
+              "id": "minecraft:iron_axe"
+            },
+            "position": {
+              "row": 1,
+              "column": 1
+            }
+          },
+          {
+            "section": "tools",
+            "cost": 13,
+            "item": {
+              "id": "minecraft:iron_pickaxe"
+            },
+            "position": {
+              "row": 1,
+              "column": 2
+            }
+          },
+          {
+            "section": "tools",
+            "cost": 11,
+            "item": {
+              "id": "minecraft:iron_sword"
+            },
+            "position": {
+              "row": 1,
+              "column": 3
+            }
+          },
+          {
+            "section": "tools",
+            "cost": 8,
+            "item": {
+              "id": "minecraft:iron_shovel"
+            },
+            "position": {
+              "row": 1,
+              "column": 4
+            }
+          },
+          {
+            "section": "tools",
+            "cost": 7,
+            "item": {
+              "id": "minecraft:stone_axe"
+            },
+            "position": {
+              "row": 1,
+              "column": 5
+            }
+          },
+          {
+            "section": "tools",
+            "cost": 8,
+            "item": {
+              "id": "minecraft:stone_pickaxe"
+            },
+            "position": {
+              "row": 1,
+              "column": 6
+            }
+          },
+          {
+            "section": "tools",
+            "cost": 6,
+            "item": {
+              "id": "minecraft:stone_sword"
+            },
+            "position": {
+              "row": 1,
+              "column": 7
+            }
+          },
+          {
+            "section": "tools",
+            "cost": 5,
+            "item": {
+              "id": "minecraft:stone_shovel"
+            },
+            "position": {
+              "row": 1,
+              "column": 8
+            }
+          },
+          {
+            "section": "tools",
+            "cost": 12,
+            "item": {
+              "id": "minecraft:shield"
+            },
+            "position": {
+              "row": 1,
+              "column": 9
+            }
+          },
+          {
+            "section": "tools",
+            "cost": 10,
+            "item": {
+              "id": "minecraft:iron_axe",
+              "components": {
+                "minecraft:damage": 62
+              }
+            },
+            "position": {
+              "row": 2,
+              "column": 1
+            }
+          },
+          {
+            "section": "tools",
+            "cost": 11,
+            "item": {
+              "id": "minecraft:iron_pickaxe",
+              "components": {
+                "minecraft:damage": 62
+              }
+            },
+            "position": {
+              "row": 2,
+              "column": 2
+            }
+          },
+          {
+            "section": "tools",
+            "cost": 9,
+            "item": {
+              "id": "minecraft:iron_sword",
+              "components": {
+                "minecraft:damage": 62
+              }
+            },
+            "position": {
+              "row": 2,
+              "column": 3
+            }
+          },
+          {
+            "section": "tools",
+            "cost": 7,
+            "item": {
+              "id": "minecraft:iron_shovel",
+              "components": {
+                "minecraft:damage": 62
+              }
+            },
+            "position": {
+              "row": 2,
+              "column": 4
+            }
+          },
+          {
+            "section": "tools",
+            "cost": 6,
+            "item": {
+              "id": "minecraft:stone_axe",
+              "components": {
+                "minecraft:damage": 33
+              }
+            },
+            "position": {
+              "row": 2,
+              "column": 5
+            }
+          },
+          {
+            "section": "tools",
+            "cost": 7,
+            "item": {
+              "id": "minecraft:stone_pickaxe",
+              "components": {
+                "minecraft:damage": 33
+              }
+            },
+            "position": {
+              "row": 2,
+              "column": 6
+            }
+          },
+          {
+            "section": "tools",
+            "cost": 5,
+            "item": {
+              "id": "minecraft:stone_sword",
+              "components": {
+                "minecraft:damage": 33
+              }
+            },
+            "position": {
+              "row": 2,
+              "column": 7
+            }
+          },
+          {
+            "section": "tools",
+            "cost": 4,
+            "item": {
+              "id": "minecraft:stone_shovel",
+              "components": {
+                "minecraft:damage": 33
+              }
+            },
+            "position": {
+              "row": 2,
+              "column": 8
+            }
+          },
+          {
+            "section": "tools",
+            "cost": 10,
+            "item": {
+              "id": "minecraft:shield",
+              "components": {
+                "minecraft:damage": 84
+              }
+            },
+            "position": {
+              "row": 2,
+              "column": 9
+            }
+          },
+          {
+            "section": "tools",
+            "cost": 8,
+            "item": {
+              "id": "minecraft:iron_axe",
+              "components": {
+                "minecraft:damage": 125
+              }
+            },
+            "position": {
+              "row": 3,
+              "column": 1
+            }
+          },
+          {
+            "section": "tools",
+            "cost": 8,
+            "item": {
+              "id": "minecraft:iron_pickaxe",
+              "components": {
+                "minecraft:damage": 125
+              }
+            },
+            "position": {
+              "row": 3,
+              "column": 2
+            }
+          },
+          {
+            "section": "tools",
+            "cost": 7,
+            "item": {
+              "id": "minecraft:iron_sword",
+              "components": {
+                "minecraft:damage": 125
+              }
+            },
+            "position": {
+              "row": 3,
+              "column": 3
+            }
+          },
+          {
+            "section": "tools",
+            "cost": 5,
+            "item": {
+              "id": "minecraft:iron_shovel",
+              "components": {
+                "minecraft:damage": 125
+              }
+            },
+            "position": {
+              "row": 3,
+              "column": 4
+            }
+          },
+          {
+            "section": "tools",
+            "cost": 4,
+            "item": {
+              "id": "minecraft:stone_axe",
+              "components": {
+                "minecraft:damage": 65
+              }
+            },
+            "position": {
+              "row": 3,
+              "column": 5
+            }
+          },
+          {
+            "section": "tools",
+            "cost": 5,
+            "item": {
+              "id": "minecraft:stone_pickaxe",
+              "components": {
+                "minecraft:damage": 65
+              }
+            },
+            "position": {
+              "row": 3,
+              "column": 6
+            }
+          },
+          {
+            "section": "tools",
+            "cost": 4,
+            "item": {
+              "id": "minecraft:stone_sword",
+              "components": {
+                "minecraft:damage": 65
+              }
+            },
+            "position": {
+              "row": 3,
+              "column": 7
+            }
+          },
+          {
+            "section": "tools",
+            "cost": 3,
+            "item": {
+              "id": "minecraft:stone_shovel",
+              "components": {
+                "minecraft:damage": 65
+              }
+            },
+            "position": {
+              "row": 3,
+              "column": 8
+            }
+          },
+          {
+            "section": "tools",
+            "cost": 8,
+            "item": {
+              "id": "minecraft:shield",
+              "components": {
+                "minecraft:damage": 168
+              }
+            },
+            "position": {
+              "row": 3,
+              "column": 9
+            }
+          },
+          {
+            "section": "tools",
+            "cost": 5,
+            "item": {
+              "id": "minecraft:iron_axe",
+              "components": {
+                "minecraft:damage": 187
+              }
+            },
+            "position": {
+              "row": 4,
+              "column": 1
+            }
+          },
+          {
+            "section": "tools",
+            "cost": 5,
+            "item": {
+              "id": "minecraft:iron_pickaxe",
+              "components": {
+                "minecraft:damage": 187
+              }
+            },
+            "position": {
+              "row": 4,
+              "column": 2
+            }
+          },
+          {
+            "section": "tools",
+            "cost": 4,
+            "item": {
+              "id": "minecraft:iron_sword",
+              "components": {
+                "minecraft:damage": 187
+              }
+            },
+            "position": {
+              "row": 4,
+              "column": 3
+            }
+          },
+          {
+            "section": "tools",
+            "cost": 3,
+            "item": {
+              "id": "minecraft:iron_shovel",
+              "components": {
+                "minecraft:damage": 187
+              }
+            },
+            "position": {
+              "row": 4,
+              "column": 4
+            }
+          },
+          {
+            "section": "tools",
+            "cost": 3,
+            "item": {
+              "id": "minecraft:stone_axe",
+              "components": {
+                "minecraft:damage": 98
+              }
+            },
+            "position": {
+              "row": 4,
+              "column": 5
+            }
+          },
+          {
+            "section": "tools",
+            "cost": 3,
+            "item": {
+              "id": "minecraft:stone_pickaxe",
+              "components": {
+                "minecraft:damage": 98
+              }
+            },
+            "position": {
+              "row": 4,
+              "column": 6
+            }
+          },
+          {
+            "section": "tools",
+            "cost": 2,
+            "item": {
+              "id": "minecraft:stone_sword",
+              "components": {
+                "minecraft:damage": 98
+              }
+            },
+            "position": {
+              "row": 4,
+              "column": 7
+            }
+          },
+          {
+            "section": "tools",
+            "cost": 2,
+            "item": {
+              "id": "minecraft:stone_shovel",
+              "components": {
+                "minecraft:damage": 98
+              }
+            },
+            "position": {
+              "row": 4,
+              "column": 8
+            }
+          },
+          {
+            "section": "tools",
+            "cost": 5,
+            "item": {
+              "id": "minecraft:shield",
+              "components": {
+                "minecraft:damage": 252
+              }
+            },
+            "position": {
+              "row": 4,
+              "column": 9
+            }
+          },
+          {
+            "section": "tools",
+            "cost": 7,
+            "item": {
+              "id": "minecraft:bucket"
+            },
+            "position": {
+              "row": 6,
+              "column": 1
+            }
+          },
+          {
+            "section": "tools",
+            "cost": 5,
+            "item": {
+              "id": "minecraft:spyglass"
+            },
+            "position": {
+              "row": 6,
+              "column": 2
+            }
+          },
+          {
+            "section": "tools",
+            "cost": 6,
+            "item": {
+              "id": "minecraft:compass"
+            },
+            "position": {
+              "row": 6,
+              "column": 3
+            }
+          },
+          {
+            "section": "tools",
+            "cost": 4,
+            "item": {
+              "id": "minecraft:clock"
+            },
+            "position": {
+              "row": 6,
+              "column": 4
+            }
+          },
+          {
+            "section": "tools",
+            "cost": 2,
+            "item": {
+              "id": "minecraft:torch",
+              "count": 16
+            },
+            "limit": 8,
+            "position": {
+              "row": 6,
+              "column": 5
+            }
+          },
+          {
+            "section": "food",
+            "cost": 14,
+            "item": {
+              "id": "minecraft:golden_carrot",
+              "count": 4
+            },
+            "limit": 2
+          },
+          {
+            "section": "food",
+            "cost": 12,
+            "item": {
+              "id": "minecraft:cooked_beef",
+              "count": 4
+            },
+            "limit": 2
+          },
+          {
+            "section": "food",
+            "cost": 10,
+            "item": {
+              "id": "minecraft:golden_apple",
+              "count": 4
+            },
+            "limit": 3
+          },
+          {
+            "section": "food",
+            "cost": 5,
+            "item": {
+              "id": "minecraft:bread",
+              "count": 4
+            },
+            "limit": 6
+          },
+          {
+            "section": "food",
+            "cost": 2,
+            "item": {
+              "id": "minecraft:potato",
+              "count": 4
+            },
+            "limit": 16
+          },
+          {
+            "section": "armor",
+            "cost": 11,
+            "item": {
+              "id": "minecraft:iron_helmet"
+            },
+            "position": {
+              "row": 1,
+              "column": 1
+            }
+          },
+          {
+            "section": "armor",
+            "cost": 16,
+            "item": {
+              "id": "minecraft:iron_chestplate"
+            },
+            "position": {
+              "row": 1,
+              "column": 2
+            }
+          },
+          {
+            "section": "armor",
+            "cost": 14,
+            "item": {
+              "id": "minecraft:iron_leggings"
+            },
+            "position": {
+              "row": 1,
+              "column": 3
+            }
+          },
+          {
+            "section": "armor",
+            "cost": 10,
+            "item": {
+              "id": "minecraft:iron_boots"
+            },
+            "position": {
+              "row": 1,
+              "column": 4
+            }
+          },
+          {
+            "section": "armor",
+            "cost": 8,
+            "item": {
+              "id": "minecraft:chainmail_helmet"
+            },
+            "position": {
+              "row": 5,
+              "column": 1
+            }
+          },
+          {
+            "section": "armor",
+            "cost": 12,
+            "item": {
+              "id": "minecraft:chainmail_chestplate"
+            },
+            "position": {
+              "row": 5,
+              "column": 2
+            }
+          },
+          {
+            "section": "armor",
+            "cost": 10,
+            "item": {
+              "id": "minecraft:chainmail_leggings"
+            },
+            "position": {
+              "row": 5,
+              "column": 3
+            }
+          },
+          {
+            "section": "armor",
+            "cost": 7,
+            "item": {
+              "id": "minecraft:chainmail_boots"
+            },
+            "position": {
+              "row": 5,
+              "column": 4
+            }
+          },
+          {
+            "section": "armor",
+            "cost": 8,
+            "item": {
+              "id": "minecraft:golden_helmet"
+            },
+            "position": {
+              "row": 1,
+              "column": 5
+            }
+          },
+          {
+            "section": "armor",
+            "cost": 12,
+            "item": {
+              "id": "minecraft:golden_chestplate"
+            },
+            "position": {
+              "row": 1,
+              "column": 6
+            }
+          },
+          {
+            "section": "armor",
+            "cost": 10,
+            "item": {
+              "id": "minecraft:golden_leggings"
+            },
+            "position": {
+              "row": 1,
+              "column": 7
+            }
+          },
+          {
+            "section": "armor",
+            "cost": 7,
+            "item": {
+              "id": "minecraft:golden_boots"
+            },
+            "position": {
+              "row": 1,
+              "column": 8
+            }
+          },
+          {
+            "section": "armor",
+            "cost": 5,
+            "item": {
+              "id": "minecraft:leather_helmet"
+            },
+            "position": {
+              "row": 5,
+              "column": 5
+            }
+          },
+          {
+            "section": "armor",
+            "cost": 7,
+            "item": {
+              "id": "minecraft:leather_chestplate"
+            },
+            "position": {
+              "row": 5,
+              "column": 6
+            }
+          },
+          {
+            "section": "armor",
+            "cost": 6,
+            "item": {
+              "id": "minecraft:leather_leggings"
+            },
+            "position": {
+              "row": 5,
+              "column": 7
+            }
+          },
+          {
+            "section": "armor",
+            "cost": 5,
+            "item": {
+              "id": "minecraft:leather_boots"
+            },
+            "position": {
+              "row": 5,
+              "column": 8
+            }
+          },
+          {
+            "section": "armor",
+            "cost": 9,
+            "item": {
+              "id": "minecraft:iron_helmet",
+              "components": {
+                "minecraft:damage": 41
+              }
+            },
+            "position": {
+              "row": 2,
+              "column": 1
+            }
+          },
+          {
+            "section": "armor",
+            "cost": 13,
+            "item": {
+              "id": "minecraft:iron_chestplate",
+              "components": {
+                "minecraft:damage": 60
+              }
+            },
+            "position": {
+              "row": 2,
+              "column": 2
+            }
+          },
+          {
+            "section": "armor",
+            "cost": 12,
+            "item": {
+              "id": "minecraft:iron_leggings",
+              "components": {
+                "minecraft:damage": 56
+              }
+            },
+            "position": {
+              "row": 2,
+              "column": 3
+            }
+          },
+          {
+            "section": "armor",
+            "cost": 8,
+            "item": {
+              "id": "minecraft:iron_boots",
+              "components": {
+                "minecraft:damage": 49
+              }
+            },
+            "position": {
+              "row": 2,
+              "column": 4
+            }
+          },
+          {
+            "section": "armor",
+            "cost": 7,
+            "item": {
+              "id": "minecraft:chainmail_helmet",
+              "components": {
+                "minecraft:damage": 41
+              }
+            },
+            "position": {
+              "row": 6,
+              "column": 1
+            }
+          },
+          {
+            "section": "armor",
+            "cost": 10,
+            "item": {
+              "id": "minecraft:chainmail_chestplate",
+              "components": {
+                "minecraft:damage": 60
+              }
+            },
+            "position": {
+              "row": 6,
+              "column": 2
+            }
+          },
+          {
+            "section": "armor",
+            "cost": 8,
+            "item": {
+              "id": "minecraft:chainmail_leggings",
+              "components": {
+                "minecraft:damage": 56
+              }
+            },
+            "position": {
+              "row": 6,
+              "column": 3
+            }
+          },
+          {
+            "section": "armor",
+            "cost": 6,
+            "item": {
+              "id": "minecraft:chainmail_boots",
+              "components": {
+                "minecraft:damage": 49
+              }
+            },
+            "position": {
+              "row": 6,
+              "column": 4
+            }
+          },
+          {
+            "section": "armor",
+            "cost": 7,
+            "item": {
+              "id": "minecraft:golden_helmet",
+              "components": {
+                "minecraft:damage": 19
+              }
+            },
+            "position": {
+              "row": 2,
+              "column": 5
+            }
+          },
+          {
+            "section": "armor",
+            "cost": 10,
+            "item": {
+              "id": "minecraft:golden_chestplate",
+              "components": {
+                "minecraft:damage": 28
+              }
+            },
+            "position": {
+              "row": 2,
+              "column": 6
+            }
+          },
+          {
+            "section": "armor",
+            "cost": 8,
+            "item": {
+              "id": "minecraft:golden_leggings",
+              "components": {
+                "minecraft:damage": 26
+              }
+            },
+            "position": {
+              "row": 2,
+              "column": 7
+            }
+          },
+          {
+            "section": "armor",
+            "cost": 6,
+            "item": {
+              "id": "minecraft:golden_boots",
+              "components": {
+                "minecraft:damage": 23
+              }
+            },
+            "position": {
+              "row": 2,
+              "column": 8
+            }
+          },
+          {
+            "section": "armor",
+            "cost": 4,
+            "item": {
+              "id": "minecraft:leather_helmet",
+              "components": {
+                "minecraft:damage": 14
+              }
+            },
+            "position": {
+              "row": 6,
+              "column": 5
+            }
+          },
+          {
+            "section": "armor",
+            "cost": 6,
+            "item": {
+              "id": "minecraft:leather_chestplate",
+              "components": {
+                "minecraft:damage": 20
+              }
+            },
+            "position": {
+              "row": 6,
+              "column": 6
+            }
+          },
+          {
+            "section": "armor",
+            "cost": 5,
+            "item": {
+              "id": "minecraft:leather_leggings",
+              "components": {
+                "minecraft:damage": 19
+              }
+            },
+            "position": {
+              "row": 6,
+              "column": 7
+            }
+          },
+          {
+            "section": "armor",
+            "cost": 4,
+            "item": {
+              "id": "minecraft:leather_boots",
+              "components": {
+                "minecraft:damage": 16
+              }
+            },
+            "position": {
+              "row": 6,
+              "column": 8
+            }
+          },
+          {
+            "section": "armor",
+            "cost": 7,
+            "item": {
+              "id": "minecraft:iron_helmet",
+              "components": {
+                "minecraft:damage": 82
+              }
+            },
+            "position": {
+              "row": 3,
+              "column": 1
+            }
+          },
+          {
+            "section": "armor",
+            "cost": 10,
+            "item": {
+              "id": "minecraft:iron_chestplate",
+              "components": {
+                "minecraft:damage": 120
+              }
+            },
+            "position": {
+              "row": 3,
+              "column": 2
+            }
+          },
+          {
+            "section": "armor",
+            "cost": 9,
+            "item": {
+              "id": "minecraft:iron_leggings",
+              "components": {
+                "minecraft:damage": 112
+              }
+            },
+            "position": {
+              "row": 3,
+              "column": 3
+            }
+          },
+          {
+            "section": "armor",
+            "cost": 6,
+            "item": {
+              "id": "minecraft:iron_boots",
+              "components": {
+                "minecraft:damage": 97
+              }
+            },
+            "position": {
+              "row": 3,
+              "column": 4
+            }
+          },
+          {
+            "section": "armor",
+            "cost": 5,
+            "item": {
+              "id": "minecraft:chainmail_helmet",
+              "components": {
+                "minecraft:damage": 82
+              }
+            },
+            "position": {
+              "row": 7,
+              "column": 1
+            }
+          },
+          {
+            "section": "armor",
+            "cost": 8,
+            "item": {
+              "id": "minecraft:chainmail_chestplate",
+              "components": {
+                "minecraft:damage": 120
+              }
+            },
+            "position": {
+              "row": 7,
+              "column": 2
+            }
+          },
+          {
+            "section": "armor",
+            "cost": 6,
+            "item": {
+              "id": "minecraft:chainmail_leggings",
+              "components": {
+                "minecraft:damage": 112
+              }
+            },
+            "position": {
+              "row": 7,
+              "column": 3
+            }
+          },
+          {
+            "section": "armor",
+            "cost": 4,
+            "item": {
+              "id": "minecraft:chainmail_boots",
+              "components": {
+                "minecraft:damage": 97
+              }
+            },
+            "position": {
+              "row": 7,
+              "column": 4
+            }
+          },
+          {
+            "section": "armor",
+            "cost": 5,
+            "item": {
+              "id": "minecraft:golden_helmet",
+              "components": {
+                "minecraft:damage": 38
+              }
+            },
+            "position": {
+              "row": 3,
+              "column": 5
+            }
+          },
+          {
+            "section": "armor",
+            "cost": 8,
+            "item": {
+              "id": "minecraft:golden_chestplate",
+              "components": {
+                "minecraft:damage": 56
+              }
+            },
+            "position": {
+              "row": 3,
+              "column": 6
+            }
+          },
+          {
+            "section": "armor",
+            "cost": 6,
+            "item": {
+              "id": "minecraft:golden_leggings",
+              "components": {
+                "minecraft:damage": 52
+              }
+            },
+            "position": {
+              "row": 3,
+              "column": 7
+            }
+          },
+          {
+            "section": "armor",
+            "cost": 4,
+            "item": {
+              "id": "minecraft:golden_boots",
+              "components": {
+                "minecraft:damage": 45
+              }
+            },
+            "position": {
+              "row": 3,
+              "column": 8
+            }
+          },
+          {
+            "section": "armor",
+            "cost": 3,
+            "item": {
+              "id": "minecraft:leather_helmet",
+              "components": {
+                "minecraft:damage": 27
+              }
+            },
+            "position": {
+              "row": 7,
+              "column": 5
+            }
+          },
+          {
+            "section": "armor",
+            "cost": 4,
+            "item": {
+              "id": "minecraft:leather_chestplate",
+              "components": {
+                "minecraft:damage": 40
+              }
+            },
+            "position": {
+              "row": 7,
+              "column": 6
+            }
+          },
+          {
+            "section": "armor",
+            "cost": 4,
+            "item": {
+              "id": "minecraft:leather_leggings",
+              "components": {
+                "minecraft:damage": 37
+              }
+            },
+            "position": {
+              "row": 7,
+              "column": 7
+            }
+          },
+          {
+            "section": "armor",
+            "cost": 3,
+            "item": {
+              "id": "minecraft:leather_boots",
+              "components": {
+                "minecraft:damage": 32
+              }
+            },
+            "position": {
+              "row": 7,
+              "column": 8
+            }
+          },
+          {
+            "section": "armor",
+            "cost": 5,
+            "item": {
+              "id": "minecraft:iron_helmet",
+              "components": {
+                "minecraft:damage": 124
+              }
+            },
+            "position": {
+              "row": 4,
+              "column": 1
+            }
+          },
+          {
+            "section": "armor",
+            "cost": 7,
+            "item": {
+              "id": "minecraft:iron_chestplate",
+              "components": {
+                "minecraft:damage": 180
+              }
+            },
+            "position": {
+              "row": 4,
+              "column": 2
+            }
+          },
+          {
+            "section": "armor",
+            "cost": 6,
+            "item": {
+              "id": "minecraft:iron_leggings",
+              "components": {
+                "minecraft:damage": 169
+              }
+            },
+            "position": {
+              "row": 4,
+              "column": 3
+            }
+          },
+          {
+            "section": "armor",
+            "cost": 4,
+            "item": {
+              "id": "minecraft:iron_boots",
+              "components": {
+                "minecraft:damage": 146
+              }
+            },
+            "position": {
+              "row": 4,
+              "column": 4
+            }
+          },
+          {
+            "section": "armor",
+            "cost": 3,
+            "item": {
+              "id": "minecraft:chainmail_helmet",
+              "components": {
+                "minecraft:damage": 124
+              }
+            },
+            "position": {
+              "row": 8,
+              "column": 1
+            }
+          },
+          {
+            "section": "armor",
+            "cost": 5,
+            "item": {
+              "id": "minecraft:chainmail_chestplate",
+              "components": {
+                "minecraft:damage": 180
+              }
+            },
+            "position": {
+              "row": 8,
+              "column": 2
+            }
+          },
+          {
+            "section": "armor",
+            "cost": 4,
+            "item": {
+              "id": "minecraft:chainmail_leggings",
+              "components": {
+                "minecraft:damage": 169
+              }
+            },
+            "position": {
+              "row": 8,
+              "column": 3
+            }
+          },
+          {
+            "section": "armor",
+            "cost": 3,
+            "item": {
+              "id": "minecraft:chainmail_boots",
+              "components": {
+                "minecraft:damage": 146
+              }
+            },
+            "position": {
+              "row": 8,
+              "column": 4
+            }
+          },
+          {
+            "section": "armor",
+            "cost": 3,
+            "item": {
+              "id": "minecraft:golden_helmet",
+              "components": {
+                "minecraft:damage": 58
+              }
+            },
+            "position": {
+              "row": 4,
+              "column": 5
+            }
+          },
+          {
+            "section": "armor",
+            "cost": 5,
+            "item": {
+              "id": "minecraft:golden_chestplate",
+              "components": {
+                "minecraft:damage": 84
+              }
+            },
+            "position": {
+              "row": 4,
+              "column": 6
+            }
+          },
+          {
+            "section": "armor",
+            "cost": 4,
+            "item": {
+              "id": "minecraft:golden_leggings",
+              "components": {
+                "minecraft:damage": 79
+              }
+            },
+            "position": {
+              "row": 4,
+              "column": 7
+            }
+          },
+          {
+            "section": "armor",
+            "cost": 3,
+            "item": {
+              "id": "minecraft:golden_boots",
+              "components": {
+                "minecraft:damage": 68
+              }
+            },
+            "position": {
+              "row": 4,
+              "column": 8
+            }
+          },
+          {
+            "section": "armor",
+            "cost": 2,
+            "item": {
+              "id": "minecraft:leather_helmet",
+              "components": {
+                "minecraft:damage": 41
+              }
+            },
+            "position": {
+              "row": 8,
+              "column": 5
+            }
+          },
+          {
+            "section": "armor",
+            "cost": 3,
+            "item": {
+              "id": "minecraft:leather_chestplate",
+              "components": {
+                "minecraft:damage": 60
+              }
+            },
+            "position": {
+              "row": 8,
+              "column": 6
+            }
+          },
+          {
+            "section": "armor",
+            "cost": 3,
+            "item": {
+              "id": "minecraft:leather_leggings",
+              "components": {
+                "minecraft:damage": 56
+              }
+            },
+            "position": {
+              "row": 8,
+              "column": 7
+            }
+          },
+          {
+            "section": "armor",
+            "cost": 2,
+            "item": {
+              "id": "minecraft:leather_boots",
+              "components": {
+                "minecraft:damage": 49
+              }
+            },
+            "position": {
+              "row": 8,
+              "column": 8
+            }
+          }
+        ]
+      },
+      "id": "kingdomsheritage:byo"
     }
   ],
   "translations": {
@@ -274,7 +1831,7 @@
     "heritage.kingdomsheritage.spawns.village.title": "Village",
     "heritage.kingdomsheritage.spawns.village.subtitle": "Nearby settlement",
     "heritage.kingdomsheritage.spawns.village.description": "Start in the closest village.",
-    "heritage.kingdomsheritage.kits.default.title": "Empty-handed",
+    "heritage.kingdomsheritage.kits.default.title": "Naked",
     "heritage.kingdomsheritage.kits.default.description": "Begin with an empty inventory.",
     "pack.kingdomsheritage.backgrounds": "Heritage: Backgrounds",
     "pack.kingdomsheritage.backgrounds.description": "Optional Settler, Wanderer, and Frontiersman starts with modest equipment.",
@@ -346,7 +1903,7 @@
     "screen.kingdomsheritage.party_stage_2": "Loading",
     "screen.kingdomsheritage.party_stage_3": "Reviewing choices",
     "screen.kingdomsheritage.party_stage_4": "Ready",
-    "screen.kingdomsheritage.party_invite_toast": "Invited you \u00b7 %ss",
+    "screen.kingdomsheritage.party_invite_toast": "Invited you · %ss",
     "screen.kingdomsheritage.party_suggestion": "%s suggests %s",
     "screen.kingdomsheritage.party_suggestion_jump": "Click to view the suggested spawn",
     "screen.kingdomsheritage.party_feedback_suggestion_followed": "You selected their suggested spawn",

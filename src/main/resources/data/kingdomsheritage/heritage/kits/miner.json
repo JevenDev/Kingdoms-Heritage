@@ -1,0 +1,48 @@
+{
+  "title": "Miner",
+  "order": 10,
+  "items": [
+    {
+      "index": 0,
+      "item": {
+        "id": "minecraft:iron_pickaxe",
+        "components": {
+          "minecraft:damage": 218
+        }
+      }
+    },
+    {
+      "index": 1,
+      "item": {
+        "id": "minecraft:torch",
+        "count": 32
+      }
+    },
+    {
+      "index": 2,
+      "item": {
+        "id": "minecraft:bread",
+        "count": 8
+      }
+    },
+    {
+      "index": 3,
+      "item": {
+        "id": "minecraft:stone_shovel"
+      }
+    },
+    {
+      "index": 4,
+      "item": {
+        "id": "minecraft:clock"
+      }
+    },
+    {
+      "index": 5,
+      "item": {
+        "id": "minecraft:ladder",
+        "count": 32
+      }
+    }
+  ]
+}

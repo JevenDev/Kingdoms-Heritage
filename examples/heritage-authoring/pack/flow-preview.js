@@ -138,10 +138,17 @@ async function loadOverlayShader(source,toast=false){
   };
   if(toast)toastBackground=effect;else dissolve=effect;
 }
+let defaultsLoading;
+function loadDefaults(){
+  return defaultsLoading??=fetch(new URL('defaults.json?v=6',base)).then(response=>{
+    if(!response.ok)throw new Error('Bundled locations and kits could not load.');
+    return response.json();
+  }).catch(error=>{defaultsLoading=null;throw error;});
+}
 async function loadArt(){
   if(artLoading)return artLoading;
   artLoading=(async()=>{
-    const response=await fetch(new URL('defaults.json?v=5',base));if(!response.ok)throw new Error('Default locations could not load.');bundled=await response.json();
+    bundled=await loadDefaults();
     await Promise.all(['card','card_expanded','card_fallback','default','random','plains','village','disconnect','disconnect_highlighted','select','select_highlighted','unselect','unselect_highlighted','button','button_highlighted','button_disabled','tab_button','tab_button_selected','empty_slot','send_request','shop','tab_top_selected_1','tab_top_selected_2','tab_top_unselected_1','experience_bar_background','experience_bar_progress'].map(async name=>{
       const image=new Image();image.src=name.startsWith('button')?new URL('../../kit/assets/widget/'+name+'.png',base):new URL((name==='shop'?'../../kit/assets/shop.png?v=2':name+'.png'),base);await image.decode();images.set(name,image);
     }));
@@ -1252,5 +1259,5 @@ document.addEventListener('visibilitychange',()=>{
   if(document.hidden){hiddenAt=clock();if(frame)cancelAnimationFrame(frame);frame=0;music.pause();stopSounds();stopSpeech();}
   else{if(hiddenAt){const paused=clock()-hiddenAt;if(started>=0)started+=paused;opened+=paused;transition.started+=paused;kitConfirmationStarted+=paused;if(revealedAt>=0)revealedAt+=paused;partyMotion.shiftTime(paused);partyPageAt+=paused;for(const [id,time] of partyMembers)partyMembers.set(id,time+paused);carousel?.shiftTime(paused);for(const card of outgoingCards)card.started+=paused;musicTick+=Math.floor(paused/50);if(cards){cards.confirmationStarted+=paused;cards.renderedAt+=paused;for(const card of cards.cards)card.started+=paused;}hiddenAt=0;}if(!['intro','complete'].includes(session.phase))music.play().catch(()=>{});if(!frame)frame=requestAnimationFrame(render);}
 });
-globalThis.HeritageFlowPreview={open,openShop,cardPreview,monitorPreview,catalog:async output=>{await loadArt();return {choices:F.catalog(output,bundled),translations:bundled.translations};}};
+globalThis.HeritageFlowPreview={open,openShop,cardPreview,monitorPreview,defaults:loadDefaults,catalog:async output=>{await loadArt();return {choices:F.catalog(output,bundled),translations:bundled.translations};}};
 })();

@@ -2,6 +2,7 @@
 'use strict';
 const copy=value=>JSON.parse(JSON.stringify(value)),equal=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
 const kinds=['kits','intros'];
+const bundledKits=state=>(typeof module!=='undefined'?require('./engine.js'):HeritagePack).bundledKits(state);
 const empty=kind=>({version:2,active:'',[kind]:[]});
 const library=(value,kind)=>copy(value??empty(kind));
 const draft=(value,kind,id)=>value?.[kind]?.find(entry=>entry.id===id)?.state??null;
@@ -61,7 +62,8 @@ function assign(pack,ids,{kitIds,intro}={}){
   if(!targets.length||targets.length!==new Set(ids).size)throw new Error('Choose available locations.');
   if(kitIds){
     if(!kitIds.length)throw new Error('Choose at least one kit.');
-    for(const id of kitIds){if(id==='bundled-empty'&&result.keepKits)continue;const kit=result.kits.find(kit=>kit.id===id);if(!kit)throw new Error('This kit is unavailable.');kit.included=true;}
+    const stock=new Set(bundledKits(result).map(entry=>entry.id));
+    for(const id of kitIds){if(stock.has(id))continue;const kit=result.kits.find(kit=>kit.id===id);if(!kit)throw new Error('This kit is unavailable.');kit.included=true;}
     for(const entry of targets){entry.kitMode='selected';entry.kits=[...new Set(kitIds)];}
   }
   if(intro!==undefined)for(const entry of targets)entry.intro=intro;
@@ -85,16 +87,18 @@ function reorderCards(pack,ids,spawns=[]){
   return result;
 }
 function reorderKits(pack,ids){
-  const available=[...pack.kits.map(entry=>entry.id),...(pack.keepKits?['bundled-empty']:[])];
+  const available=[...pack.kits.map(entry=>entry.id),...bundledKits(pack).map(entry=>entry.id)];
   if(ids.length!==available.length||new Set(ids).size!==ids.length||ids.some(id=>!available.includes(id)))throw new Error('Choose each kit once when reordering.');
   const result=copy(pack);result.kitOrder=[...ids];return result;
 }
 function duplicateDraft(pack,libraries,kind,id,locationId,newId,destination=null){
   const collection=kind==='kit'?'kits':kind==='intro'?'intros':null;if(!collection)throw new Error('Unknown draft kind.');
   const value=workspace(pack,libraries),entries=value.libraries[collection][collection],source=entries.find(entry=>entry.id===id),location=value.pack.locations.find(entry=>entry.id===locationId);
-  if(!location||!source&&(kind!=='kit'||!['builtin-empty','bundled-empty'].includes(id)))throw new Error('Choose an available draft and location.');
+  const stock=kind==='kit'?bundledKits(pack).find(entry=>entry.id===id)?.document:null;
+  if(!location||!source&&!stock&&(kind!=='kit'||id!=='builtin-empty'))throw new Error('Choose an available draft and location.');
   if(entries.some(entry=>entry.id===newId))throw new Error('The new draft ID is already in use.');
-  const cloned=source?copy(source):{state:{source:JSON.stringify({title:'Empty-handed',items:[]}),document:{title:'Empty-handed',items:[]}}};cloned.id=newId;
+  const document=stock??{title:'Empty-handed',items:[]};
+  const cloned=source?copy(source):{state:{source:JSON.stringify(document),document:copy(document)}};cloned.id=newId;
   if(collection==='kits'){
     const document=JSON.parse(cloned.state.source);document.title=(document.title||document.title_key||'Kit')+' copy';delete document.title_key;cloned.state.source=JSON.stringify(document,null,2);cloned.state.document=copy(document);cloned.state.validDocument=copy(document);cloned.state.drafts=[];cloned.state.cursor=null;cloned.state.error=null;
     const base=document.title.toLowerCase().replace(/[^a-z0-9_-]+/g,'_').replace(/^_+|_+$/g,'')||'kit_copy';let path=base,index=2;while(value.pack.kits.some(entry=>entry.path===path))path=base+'_'+index++;
@@ -115,7 +119,7 @@ function privateCopy(pack,libraries,kind,id,locationId,newId){
   value.libraries[collection][collection].push(cloned);value.libraries[collection].active=newId;
   if(collection==='kits'){
     const original=value.pack.kits.find(entry=>entry.id===id);if(!original)throw new Error('This kit is not in the pack.');
-    const available=location.kitMode==='selected'?location.kits:[...value.pack.kits.filter(entry=>entry.included).map(entry=>entry.id),...(value.pack.keepKits?['bundled-empty']:[])];
+    const available=location.kitMode==='selected'?location.kits:[...value.pack.kits.filter(entry=>entry.included).map(entry=>entry.id),...bundledKits(value.pack).map(entry=>entry.id)];
     const base=original.path+'_copy';let path=base,index=2;while(value.pack.kits.some(entry=>entry.path===path))path=base+'_'+index++;
     if(value.pack.kitOrder){const order=value.pack.kitOrder,at=order.indexOf(id);order.splice(at<0?order.length:at+1,0,newId);}
     value.pack.kits.push({id:newId,path,included:true});location.kitMode='selected';location.kits=[...new Set(available.map(value=>value===id?newId:value))];if(!location.kits.includes(newId))location.kits.push(newId);
