@@ -1,17 +1,23 @@
 package com.jvn.kingdomsheritage.server;
 
+import com.jvn.kingdomsheritage.HeritageConfig;
 import com.jvn.kingdomsheritage.data.HeritageException;
 import com.jvn.kingdomsheritage.data.SpawnDefinition;
+import com.jvn.kingdomsheritage.server.StructureSearchCursor.Candidate;
+import com.jvn.kingdomsheritage.server.StructureSearchCursor.Group;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.function.Supplier;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.LevelHeightAccessor;
+import net.minecraft.world.level.chunk.ChunkGeneratorStructureState;
 import net.minecraft.world.level.chunk.status.ChunkStatus;
 import net.minecraft.world.level.levelgen.structure.Structure;
 import net.minecraft.world.level.levelgen.structure.StructureCheck;
@@ -22,99 +28,100 @@ import net.minecraft.world.level.levelgen.structure.placement.RandomSpreadStruct
 import net.minecraft.world.level.levelgen.structure.placement.StructurePlacement;
 
 final class StructureSpawnSearch implements AutoCloseable {
-    private record Group(StructurePlacement placement, List<Holder<Structure>> structures) {}
-    private record Candidate(Group group, ChunkPos chunk) {}
     private record Probe(Candidate candidate, boolean loaded, boolean present) {}
+    private static final ExecutorService WORKERS = Executors.newFixedThreadPool(2, task -> {
+        var thread = new Thread(task, "heritage-structure-search");
+        thread.setDaemon(true);
+        return thread;
+    });
     private final ServerLevel level;
-    private final BlockPos origin;
     private final SpawnChunks chunks;
-    private final StructureCheck presenceCheck;
-    private final List<Group> spread = new ArrayList<>();
-    private final CompletableFuture<List<Candidate>> ringCandidates;
-    private Iterator<Candidate> concentric;
-    private final int radius;
-    private final int rings;
-    private int ring;
-    private int group;
-    private Iterator<BlockPos> offsets;
+    private final Supplier<StructureCheck> presenceChecks;
+    private final ChunkGeneratorStructureState state;
+    private final CompletableFuture<StructureSearchCursor> candidates;
+    private StructureSearchCursor cursor;
     private Iterator<Probe> candidateBatch = java.util.Collections.emptyIterator();
     private CompletableFuture<Candidate> probing;
     private Candidate pending;
     private boolean exhausted;
+    private boolean rejected;
     private volatile boolean closed;
     private StructureStart result;
-    private BlockPos resultLocation;
-    private boolean foundInRing;
-    private boolean scanningRings = true;
-    private boolean complete;
 
     StructureSpawnSearch(ServerLevel level, SpawnDefinition definition, BlockPos origin, SpawnChunks chunks) {
         this.level = level;
-        this.origin = origin;
         this.chunks = chunks;
         if (!level.getServer().getWorldData().worldGenOptions().generateStructures()) {
             throw new HeritageException("structures_disabled", "Structure generation is disabled in this world");
         }
-        radius = SpawnResolver.searchRadius(definition);
+        int radius = SpawnResolver.searchRadius(definition);
+        int initialRadius = Math.min(radius, HeritageConfig.SEARCH_RADIUS.get());
         var source = level.getChunkSource();
         var generator = source.getGenerator();
-        presenceCheck = new StructureCheck(source.chunkScanner(), level.registryAccess(), level.getStructureManager(),
+        presenceChecks = () -> new StructureCheck(source.chunkScanner(), level.registryAccess(), level.getStructureManager(),
                 level.dimension(), generator, source.randomState(), LevelHeightAccessor.create(level.getMinBuildHeight(), level.getHeight()),
                 generator.getBiomeSource(), level.getSeed(), level.getServer().getFixerUpper());
-        var state = level.getChunkSource().getGeneratorState();
+        state = source.getGeneratorState();
         var placements = new LinkedHashMap<StructurePlacement, List<Holder<Structure>>>();
         for (var holder : StructureSpawnResolver.targets(level, definition)) {
             for (var placement : state.getPlacementsForStructure(holder)) {
                 placements.computeIfAbsent(placement, key -> new ArrayList<>()).add(holder);
             }
         }
+        var spread = new ArrayList<Group>();
         var concentricGroups = new ArrayList<Group>();
-        int spacing = Integer.MAX_VALUE;
         for (var entry : placements.entrySet()) {
-            var value = new Group(entry.getKey(), entry.getValue());
-            if (entry.getKey() instanceof RandomSpreadStructurePlacement random) {
-                spread.add(value);
-                spacing = Math.min(spacing, random.spacing());
-            } else if (entry.getKey() instanceof ConcentricRingsStructurePlacement) {
-                concentricGroups.add(value);
-            }
+            var value = new Group(entry.getKey(), List.copyOf(entry.getValue()));
+            if (entry.getKey() instanceof RandomSpreadStructurePlacement) spread.add(value);
+            else if (entry.getKey() instanceof ConcentricRingsStructurePlacement) concentricGroups.add(value);
         }
-        ringCandidates = concentricGroups.isEmpty() ? CompletableFuture.completedFuture(List.of())
-                : CompletableFuture.supplyAsync(() -> {
-                    var candidates = new ArrayList<Candidate>();
-                    for (var value : concentricGroups) {
-                        var positions = state.getRingPositionsFor((ConcentricRingsStructurePlacement) value.placement);
-                        if (positions != null) for (var pos : positions) candidates.add(new Candidate(value, pos));
-                    }
-                    candidates.sort(java.util.Comparator.comparingDouble(candidate -> distance(candidate.group.placement.getLocatePos(candidate.chunk))));
-                    return candidates;
-                });
-        rings = spacing == Integer.MAX_VALUE ? 0 : Math.max(1, (int) Math.ceil(radius / (16.0 * spacing)));
+        if (spread.isEmpty() && concentricGroups.isEmpty()) {
+            throw new HeritageException("structure_placement", "No supported structure placements are available for this target in this dimension");
+        }
+        candidates = CompletableFuture.supplyAsync(() -> {
+            var rings = new ArrayList<Candidate>();
+            for (var value : concentricGroups) {
+                if (closed) break;
+                var positions = state.getRingPositionsFor((ConcentricRingsStructurePlacement) value.placement());
+                if (positions != null) for (var pos : positions) rings.add(new Candidate(value, pos));
+            }
+            rings.sort(java.util.Comparator.comparingDouble(candidate -> {
+                var location = candidate.group().placement().getLocatePos(candidate.chunk());
+                double x = (double) location.getX() - origin.getX();
+                double z = (double) location.getZ() - origin.getZ();
+                return x * x + z * z;
+            }));
+            return new StructureSearchCursor(state.getLevelSeed(), origin, initialRadius, radius, spread, rings);
+        }, WORKERS);
     }
 
     StructureStart result() { return result; }
 
+    void next() {
+        result = null;
+        rejected = true;
+    }
+
     boolean step(long deadline) {
         if (closed) return false;
-        if (complete) return true;
-        if (concentric == null) {
-            if (!ringCandidates.isDone()) return false;
-            concentric = ringCandidates.join().iterator();
+        if (result != null) return true;
+        if (cursor == null) {
+            if (!candidates.isDone()) return false;
+            cursor = candidates.join();
         }
         for (int work = 0; work < 128 && System.nanoTime() < deadline; work++) {
-            if (pending == null && probing == null && exhausted) {
-                if (result == null || distance(resultLocation) > (double) radius * radius) {
-                    throw new HeritageException("not_found", "No matching location found within the configured search radius");
-                }
-                complete = true;
-                return true;
-            }
             if (pending == null) {
                 if (probing == null) {
-                    if (!candidateBatch.hasNext()) candidateBatch = probes(deadline).iterator();
+                    if (!candidateBatch.hasNext()) {
+                        if (exhausted) {
+                            if (rejected) throw new HeritageException("structure_room", "No safe standing room found inside this structure within the search limit");
+                            throw new HeritageException("not_found", "No matching location found within the configured search radius");
+                        }
+                        candidateBatch = probes(deadline).iterator();
+                    }
                     if (!candidateBatch.hasNext()) continue;
                     var batch = candidateBatch;
-                    probing = CompletableFuture.supplyAsync(() -> probe(batch));
+                    probing = CompletableFuture.supplyAsync(() -> probe(batch), WORKERS);
                     return false;
                 }
                 if (!probing.isDone()) return false;
@@ -123,31 +130,20 @@ final class StructureSpawnSearch implements AutoCloseable {
                 if (pending == null) continue;
             }
             var candidate = pending;
-            var placement = candidate.group.placement;
-            var pos = candidate.chunk;
-            BlockPos location = placement.getLocatePos(pos);
-            if (distance(location) > (double) radius * radius || !level.getWorldBorder().isWithinBounds(location)) {
+            var location = candidate.group().placement().getLocatePos(candidate.chunk());
+            if (!level.getWorldBorder().isWithinBounds(location)) {
                 pending = null;
                 continue;
             }
-            var chunk = chunks.structure(pos);
+            var chunk = chunks.structure(candidate.chunk());
             if (chunk == null) return false;
-            for (var holder : candidate.group.structures) {
+            pending = null;
+            for (var holder : candidate.group().structures()) {
                 var start = chunk.getStartForStructure(holder.value());
                 if (start == null || !start.isValid()) continue;
-                if (result == null || distance(location) < distance(resultLocation)) {
-                    result = start;
-                    resultLocation = location;
-                }
-                candidateBatch = java.util.Collections.emptyIterator();
-                if (!scanningRings) {
-                    foundInRing = true;
-                    offsets = null;
-                    group++;
-                }
-                break;
+                result = start;
+                return true;
             }
-            pending = null;
         }
         return false;
     }
@@ -155,91 +151,51 @@ final class StructureSpawnSearch implements AutoCloseable {
     @Override
     public void close() {
         closed = true;
-        ringCandidates.cancel(false);
+        candidates.cancel(false);
         if (probing != null) probing.cancel(false);
     }
 
     private List<Probe> probes(long deadline) {
         var batch = new ArrayList<Probe>();
         for (int work = 0; work < 128 && System.nanoTime() < deadline; work++) {
-            var candidate = next();
+            var candidate = cursor.next();
             if (candidate == null) {
                 exhausted = true;
                 break;
             }
-            var placement = candidate.group.placement;
-            var pos = candidate.chunk;
-            var location = placement.getLocatePos(pos);
-            if (distance(location) <= (double) radius * radius && level.getWorldBorder().isWithinBounds(location)
-                    && placement.isStructureChunk(level.getChunkSource().getGeneratorState(), pos.x, pos.z)) {
+            var pos = candidate.chunk();
+            var location = candidate.group().placement().getLocatePos(pos);
+            if (cursor.includes(candidate) && level.getWorldBorder().isWithinBounds(location)) {
                 var holder = level.getChunkSource().chunkMap.getVisibleChunkIfPresent(pos.toLong());
                 var loaded = holder == null ? null : holder.getChunkIfPresent(ChunkStatus.STRUCTURE_STARTS);
-                boolean present = loaded != null && candidate.group.structures.stream().anyMatch(target -> {
+                boolean present = loaded != null && candidate.group().structures().stream().anyMatch(target -> {
                     var start = loaded.getStartForStructure(target.value());
                     return start != null && start.isValid();
                 });
                 batch.add(new Probe(candidate, loaded != null, present));
             }
-            if (scanningRings ? !concentric.hasNext() : !offsets.hasNext()) break;
         }
         return batch;
     }
 
     private Candidate probe(Iterator<Probe> batch) {
+        // discard vanilla's per-chunk caches between slices to bound sparse-search memory
+        var presenceCheck = presenceChecks.get();
         long deadline = System.nanoTime() + 20000000;
         while (!closed && batch.hasNext() && System.nanoTime() < deadline) {
             var probe = batch.next();
+            var candidate = probe.candidate;
+            if (!candidate.group().placement().isStructureChunk(state, candidate.chunk().x, candidate.chunk().z)) continue;
             if (probe.loaded) {
-                if (probe.present) return probe.candidate;
+                if (probe.present) return candidate;
                 continue;
             }
-            var candidate = probe.candidate;
-            for (var target : candidate.group.structures) {
+            for (var target : candidate.group().structures()) {
                 if (closed) return null;
-                if (presenceCheck.checkStart(candidate.chunk, target.value(), candidate.group.placement, false)
+                if (presenceCheck.checkStart(candidate.chunk(), target.value(), candidate.group().placement(), false)
                         != StructureCheckResult.START_NOT_PRESENT) return candidate;
             }
         }
         return null;
-    }
-
-    private Candidate next() {
-        if (scanningRings) {
-            if (concentric.hasNext()) {
-                var candidate = concentric.next();
-                double candidateDistance = distance(candidate.group.placement.getLocatePos(candidate.chunk));
-                if (candidateDistance <= (double) radius * radius
-                        && (result == null || candidateDistance < distance(resultLocation))) return candidate;
-            }
-            scanningRings = false;
-        }
-        if (spread.isEmpty()) return null;
-        while (ring <= rings) {
-            if (group >= spread.size()) {
-                if (foundInRing) return null;
-                ring++;
-                group = 0;
-                if (ring > rings) return null;
-            }
-            var value = spread.get(group);
-            var placement = (RandomSpreadStructurePlacement) value.placement;
-            if (offsets == null) offsets = SpawnResolver.ring(BlockPos.ZERO, ring);
-            if (offsets.hasNext()) {
-                var offset = offsets.next();
-                var pos = placement.getPotentialStructureChunk(level.getChunkSource().getGeneratorState().getLevelSeed(),
-                        (origin.getX() >> 4) + placement.spacing() * offset.getX(),
-                        (origin.getZ() >> 4) + placement.spacing() * offset.getZ());
-                return new Candidate(value, pos);
-            }
-            offsets = null;
-            group++;
-        }
-        return null;
-    }
-
-    private double distance(BlockPos position) {
-        double x = (double) position.getX() - origin.getX();
-        double z = (double) position.getZ() - origin.getZ();
-        return x * x + z * z;
     }
 }

@@ -16,6 +16,8 @@ public final class HeritageConfig {
     public static final ModConfigSpec.BooleanValue HOMELAND_RESPAWN;
     public static final ModConfigSpec.IntValue RANDOM_RADIUS;
     public static final ModConfigSpec.IntValue SEARCH_RADIUS;
+    public static final ModConfigSpec.IntValue STRUCTURE_SEARCH_RADIUS;
+    public static final ModConfigSpec.IntValue BIOME_SEARCH_RADIUS;
     public static final ModConfigSpec.ConfigValue<List<? extends String>> SCREEN_ORDER;
     public static final ModConfigSpec.ConfigValue<List<? extends String>> DISABLED_SCREENS;
 
@@ -23,6 +25,10 @@ public final class HeritageConfig {
         var builder = new ModConfigSpec.Builder();
         RANDOM_RADIUS = builder.defineInRange("randomSpawnRadius", 2000, 16, 30000);
         SEARCH_RADIUS = builder.defineInRange("locationSearchRadius", 6400, 256, 30000);
+        STRUCTURE_SEARCH_RADIUS = builder.comment("Maximum radius for expanding structure searches without an explicit search_radius. Location Search Radius controls the initial area.")
+                .defineInRange("structureSearchRadius", 100000, 256, 1000000);
+        BIOME_SEARCH_RADIUS = builder.comment("Maximum radius for biome searches without an explicit search_radius.")
+                .defineInRange("biomeSearchRadius", 100000, 256, 1000000);
         INVENTORY_POLICY = builder.defineEnum("inventoryPolicy", InventoryPolicy.MERGE);
         EXEMPT_EXISTING_PLAYERS = builder.define("exemptExistingPlayers", true);
         HOMELAND_RESPAWN = builder.define("homelandRespawn", false);

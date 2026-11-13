@@ -8,7 +8,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.stream.Collectors;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
 import net.minecraft.core.Holder;
 import net.minecraft.core.QuartPos;
 import net.minecraft.core.registries.Registries;
@@ -25,7 +24,7 @@ final class BiomeSpawnSearch implements AutoCloseable {
     private final Climate.Sampler sampler;
     private final BlockPos origin;
     private final Set<Holder<Biome>> targets;
-    private final Iterator<BlockPos.MutableBlockPos> columns;
+    private final Iterator<BlockPos> columns;
     private final int[] heights;
     private final double minX, maxX, minZ, maxZ;
     private CompletableFuture<BlockPos> pending;
@@ -43,8 +42,7 @@ final class BiomeSpawnSearch implements AutoCloseable {
                 .filter(holder -> definition.targetTag() ? holder.is(TagKey.create(Registries.BIOME, definition.target()))
                         : holder.is(ResourceKey.create(Registries.BIOME, definition.target())))
                 .collect(Collectors.toUnmodifiableSet());
-        columns = BlockPos.spiralAround(BlockPos.ZERO, SpawnResolver.searchRadius(definition) / 32,
-                Direction.EAST, Direction.SOUTH).iterator();
+        columns = new BiomeSearchCursor(SpawnResolver.searchRadius(definition));
         int minY = level.getMinBuildHeight() + 1;
         int maxY = level.dimensionType().hasCeiling()
                 ? Math.min(level.getMaxBuildHeight() - 1, level.getMinBuildHeight() + level.dimensionType().logicalHeight() - 1)

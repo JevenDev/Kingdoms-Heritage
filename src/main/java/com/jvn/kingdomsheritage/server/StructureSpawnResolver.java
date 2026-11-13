@@ -101,7 +101,18 @@ final class StructureSpawnResolver {
             }
             for (int work = 0; work < 512 && System.nanoTime() < deadline; work++) {
                 if (remaining <= 0 || piece == null && pieceIndex >= pieces.size()) {
-                    if (pass == 1) throw new HeritageException("structure_room", "No safe standing room found inside this structure within the search limit");
+                    if (pass == 1) {
+                        locator.next();
+                        chunks.close();
+                        pieces = null;
+                        piece = null;
+                        pieceIndex = 0;
+                        remaining = 262144;
+                        pass = definition.piece() == null ? 1 : 0;
+                        matching.clear();
+                        visitedChunks.clear();
+                        return false;
+                    }
                     pass = 1;
                     pieceIndex = 0;
                     piece = null;

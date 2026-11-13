@@ -193,7 +193,12 @@ public final class SpawnResolver {
     }
 
     static int searchRadius(SpawnDefinition definition) {
-        return definition.searchRadius() == 0 ? HeritageConfig.SEARCH_RADIUS.get() : definition.searchRadius();
+        if (definition.searchRadius() != 0) return definition.searchRadius();
+        return switch (definition.kind()) {
+            case STRUCTURE -> Math.max(HeritageConfig.SEARCH_RADIUS.get(), HeritageConfig.STRUCTURE_SEARCH_RADIUS.get());
+            case BIOME -> Math.max(HeritageConfig.SEARCH_RADIUS.get(), HeritageConfig.BIOME_SEARCH_RADIUS.get());
+            default -> HeritageConfig.SEARCH_RADIUS.get();
+        };
     }
 
     static void validateBiome(ServerLevel level, SpawnDefinition definition) {
