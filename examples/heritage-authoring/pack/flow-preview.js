@@ -140,7 +140,7 @@ async function loadOverlayShader(source,toast=false){
 }
 let defaultsLoading;
 function loadDefaults(){
-  return defaultsLoading??=fetch(new URL('defaults.json?v=8',base)).then(response=>{
+  return defaultsLoading??=fetch(new URL('defaults.json?v=9',base)).then(response=>{
     if(!response.ok)throw new Error('Bundled locations and kits could not load.');
     return response.json();
   }).catch(error=>{defaultsLoading=null;throw error;});

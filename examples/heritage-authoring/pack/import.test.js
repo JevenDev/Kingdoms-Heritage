@@ -18,6 +18,37 @@ function compare(expected,actual){
 }
 function bundled(output){return Zip.zip([{path:'story-data.zip',content:Zip.zip(output.files)},{path:'story-resources.zip',content:Zip.zip(output.resourceFiles)}]);}
 
+test('partial bundled kit overrides retain every other bundled kit',async()=>{
+  const stock=require('./assets/defaults.json');
+  for(const disabled of [['default'],['miner'],['default','miner'],stock.kits.map(kit=>kit.id.split(':')[1])]) {
+    const files=[
+      {path:'pack.mcmeta',content:JSON.stringify({pack:{pack_format:48,description:'Partial overrides'}})},
+      {path:'data/story/heritage/spawns/home.json',content:JSON.stringify({title:'Home',type:'default'})},
+      {path:'data/story/heritage/kits/custom.json',content:JSON.stringify({title:'Custom',items:[]})},
+      ...disabled.map(id=>({path:'data/kingdomsheritage/heritage/kits/'+id+'.json',content:'{"enabled":false}'}))
+    ];
+    const project=await Import.read(Zip.zip(files),'partial.zip',ids()),output=rebuilt(project);
+    const expected=stock.kits.filter(kit=>!disabled.includes(kit.id.split(':')[1])).map(kit=>kit.id).concat('story:custom').sort();
+    assert.deepEqual(Flow.catalog(output,stock).kits.map(kit=>kit.id).sort(),expected);
+    assert.deepEqual(output.files.filter(file=>file.path.includes('/kits/')&&JSON.parse(file.content).enabled===false).map(file=>file.path).sort(),
+      disabled.map(id=>'data/kingdomsheritage/heritage/kits/'+id+'.json').sort());
+    compare(output.files,rebuilt(await Import.read(Zip.zip(output.files),'again.zip',ids())).files);
+  }
+});
+
+test('shorthand kit IDs and mixed tag namespaces survive import and preview',async()=>{
+  for(const selector of ['starter','minecraft:starter','#starter','#minecraft:starter']) {
+    const files=[
+      {path:'pack.mcmeta',content:JSON.stringify({pack:{pack_format:48,description:'Shorthand'}})},
+      {path:'data/minecraft/heritage/spawns/home.json',content:JSON.stringify({title:'Home',type:'default',kits:[selector]})},
+      {path:'data/minecraft/heritage/kits/starter.json',content:JSON.stringify({title:'Starter',tags:['starter'],items:[]})}
+    ];
+    const project=await Import.read(Zip.zip(files),'short.zip',ids()),output=rebuilt(project);
+    assert.deepEqual(JSON.parse(output.files.find(file=>file.path.endsWith('/spawns/home.json')).content).kits,[selector]);
+    assert.deepEqual(Flow.catalog(output,require('./assets/defaults.json')).spawns.find(spawn=>spawn.id==='minecraft:home').kits,['minecraft:starter']);
+  }
+});
+
 test('a datapack export reopens as editable locations and kits without changing its files',async()=>{
   const state=initial(),output=Pack.build(state,{kits:[kit],intros:[]});assert.deepEqual(output.errors,[]);
   const project=await Import.read(Zip.zip(output.files),'story.zip',ids()),result=rebuilt(project);

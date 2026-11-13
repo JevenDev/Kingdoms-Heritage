@@ -1,5 +1,11 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict'),P=require('./engine.js'),R=require('./rich-text.js');
+test('dialogue conditions match the shared game cases',()=>{
+  for(const entry of require('../../../src/test/resources/dialogue-conditions.json')) {
+    const facts=Object.hasOwn(entry,'fact')?{n:entry.fact}:{};
+    assert.equal(P.condition(entry.when,facts),entry.matches,entry.name);
+  }
+});
 const plain=(source,names)=>P.parse(source,names).map(glyph=>glyph.ch).join('');
 const resolved=(config,names={})=>{const value=P.dialogue({...P.packDefaults,...config},names);return plain(value.text,value.names);};
 test('variables use pack defaults, preserve component styles and accept extension overrides',()=>{

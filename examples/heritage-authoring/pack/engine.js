@@ -6,6 +6,7 @@ const fieldError=(field,message)=>Object.assign(new Error(message),{field});
 const labels={search_radius:'Search distance',random_radius:'Random spawn distance',order:'Position in the menu',title:'Location name'};
 const object=value=>value!==null&&typeof value==='object'&&!Array.isArray(value);
 const copy=value=>JSON.parse(JSON.stringify(value));
+const resourceId=value=>value.includes(':')?value:'minecraft:'+value;
 const types=['default','random','biome','structure','fixed','pool'];
 const bundledSpawns=['default','random','plains','village'];
 const selectionPath='data/kingdomsheritage/heritage/selection.json';
@@ -209,6 +210,25 @@ function orderedKitIds(state,catalog){
   };
   return ids.sort((a,b)=>{if(ranks.has(a)||ranks.has(b))return (ranks.get(a)??Infinity)-(ranks.get(b)??Infinity);const first=definition(a),second=definition(b),[an,ap]=first.id.split(':'),[bn,bp]=second.id.split(':');return first.order-second.order||(ap<bp?-1:ap>bp?1:an<bn?-1:an>bn?1:0);});
 }
+function locationDocument(entry,namespace,{strict=true,resolveIntro,kits}) {
+  const document=copy(entry.document??{}),type=entry.fields?.type;
+  for(const key of [...fields,'pool','intro','kits','enabled'])if(key!=='outline'||entry.fields?.outline!==undefined)delete document[key];
+  const relevant=fields.filter(key=>key!=='piece'||type==='structure').filter(key=>key!=='target'||['biome','structure'].includes(type)).filter(key=>!['x','y','z'].includes(key)||type==='fixed');
+  Object.assign(document,settings(entry.fields??{},relevant,strict));
+  if(usesPicture(entry))document.image=pictureId(namespace,entry.path);
+  else if(entry.imageMode==='upload')delete document.image;
+  if(!strict&&entry.fields?.title==='')document.title='';
+  if(type==='pool')document.pool=(entry.destinations??[]).map((destination,index)=>{
+    try {
+      const value=settings(destination,destinationFields,strict);
+      if(typeof value.intro==='string')value.intro=resolveIntro(value.intro);
+      return value;
+    }catch(error){throw Object.assign(new Error('Place '+(index+1)+': '+error.message),{field:error.field,path:error.path,destination:index});}
+  });
+  if(entry.intro)document.intro=resolveIntro(entry.intro);
+  document.kits=copy(kits);
+  return document;
+}
 function previewFiles(state,catalog) {
   const files=[],kitIds=new Map(),namespace=state.namespace??'',ranks=new Map(orderedKitIds(state,catalog).map((id,index)=>[id,index]));
   for(const selected of state.kits.filter(entry=>entry.included)) {
@@ -222,22 +242,9 @@ function previewFiles(state,catalog) {
   }
   if(state.keepLocations&&object(state.bundledLocations))for(const [id,document] of Object.entries(state.bundledLocations)){const name=id.replace('kingdomsheritage:',''),path='data/kingdomsheritage/heritage/spawns/'+name+'.json';if(bundledSpawns.includes(name)&&object(document)&&!state.locations.some(entry=>state.namespace==='kingdomsheritage'&&entry.path===name))files.push({path,content:JSON.stringify(document,null,2)});}
   for(const entry of state.locations) {
-    const document=copy(entry.document??{}),type=entry.fields?.type;
-    for(const key of [...fields,'pool','intro','kits','enabled'])if(key!=='outline'||entry.fields?.outline!==undefined)delete document[key];
-    const relevant=fields.filter(key=>key!=='piece'||type==='structure').filter(key=>key!=='target'||['biome','structure'].includes(type)).filter(key=>!['x','y','z'].includes(key)||type==='fixed');
-    Object.assign(document,settings(entry.fields??{},relevant,false));
-    if(usesPicture(entry))document.image=pictureId(namespace,entry.path);
-    else if(entry.imageMode==='upload')delete document.image;
-    if(entry.fields?.title==='')document.title='';
-    const intro=id=>catalog.intros.find(draft=>draft.id===id)?.document??null;
-    if(entry.intro)document.intro=copy(intro(entry.intro));
-    if(type==='pool')document.pool=entry.destinations.map(destination=>{
-      const value=settings(destination,destinationFields,false);
-      if(typeof value.intro==='string')value.intro=copy(intro(value.intro));
-      return value;
-    });
     const ids=entry.kitMode==='selected'?entry.kits:[...kitIds.keys()];
-    document.kits=ids.map(id=>kitIds.get(id)??id);
+    const document=locationDocument(entry,namespace,{strict:false,kits:ids.map(id=>kitIds.get(id)??id),
+      resolveIntro:id=>copy(catalog.intros.find(draft=>draft.id===id)?.document??null)});
     files.push({path:'data/'+namespace+'/heritage/spawns/'+entry.path+'.json',content:JSON.stringify(document,null,2)+'\n'});
   }
   files.push({path:selectionPath,content:JSON.stringify(selectionDocument(state),null,2)+'\n'});
@@ -309,23 +316,8 @@ function build(state,catalog) {
   if(locations.length<1)errors.push('Add at least one starting location.');
   const spawnIds=new Set(state.keepLocations?bundledSpawns.map(id=>'kingdomsheritage:'+id):[]);
   for(const entry of locations)report('Location '+(entry.fields?.title||entry.path||'Untitled'),()=>{
-    const path=fileId(entry.path,'Location file name'),document=copy(entry.document??{});
-    for(const key of [...fields,'pool','intro','kits','enabled'])if(key!=='outline'||entry.fields?.outline!==undefined)delete document[key];
-    const type=entry.fields?.type;
-    const relevant=fields.filter(key=>key!=='piece'||type==='structure').filter(key=>key!=='target'||['biome','structure'].includes(type)).filter(key=>!['x','y','z'].includes(key)||type==='fixed');
-    const values=settings(entry.fields??{},relevant);
-    Object.assign(document,values);
+    const path=fileId(entry.path,'Location file name');
     const picture=usesPicture(entry)?pictureBytes(entry.picture):null;
-    if(picture)document.image=pictureId(namespace,path);
-    else if(entry.imageMode==='upload')delete document.image;
-    if(type==='pool')document.pool=(entry.destinations??[]).map((destination,index)=>{
-      try {
-        const values=settings(destination,destinationFields);
-        if(typeof values.intro==='string')values.intro=linkedIntro(values.intro,catalog);
-        return values;
-      }catch(error){throw Object.assign(new Error('Place '+(index+1)+': '+error.message),{field:error.field,path:error.path,destination:index});}
-    });
-    if(entry.intro)document.intro=linkedIntro(entry.intro,catalog);
     const ids=entry.kitMode==='selected'?entry.kits:[...kitIds.keys()];
     if(!Array.isArray(ids))throw fieldError('kits','Choose allowed kits.');
     const allowed=ids.map(id=>{
@@ -333,10 +325,10 @@ function build(state,catalog) {
       return kitIds.get(id);
     });
     if(!allowed.length)throw fieldError('kits','Choose at least one allowed kit.');
-    document.kits=[...new Set(allowed)];
+    const document=locationDocument(entry,namespace,{kits:[...new Set(allowed)],resolveIntro:id=>linkedIntro(id,catalog)});
     const imported=entry.importedKitSelectors;
     if(Array.isArray(imported)){
-      const matching=[...documents].filter(([id,kit])=>imported.some(selector=>selector.startsWith('#')?(kit.tags??[]).includes(selector.slice(1)):selector===id)).map(([id])=>id);
+      const matching=[...documents].filter(([id,kit])=>imported.some(selector=>selector.startsWith('#')?(kit.tags??[]).some(tag=>resourceId(tag)===resourceId(selector.slice(1))):resourceId(selector)===id)).map(([id])=>id);
       if(!imported.length&&entry.kitMode!=='selected'||imported.length&&document.kits.length===matching.length&&document.kits.every(id=>matching.includes(id)))document.kits=copy(imported);
     }
     if(document.kits.length>128)throw fieldError('kits','A location can allow at most 128 kits.');

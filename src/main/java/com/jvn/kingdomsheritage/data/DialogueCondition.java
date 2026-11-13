@@ -66,13 +66,15 @@ public final class DialogueCondition {
         String tag = json.get("tag").getAsString();
         boolean present = context.present(tag);
         if (json.has("present") && json.get("present").getAsBoolean() != present) return false;
-        if (json.has("equals") && (!present || !context.fact(tag).orElse("").equals(json.get("equals").getAsString()))) return false;
-        if (json.has("min") || json.has("max")) {
+        String raw = context.fact(tag).orElse("");
+        boolean numericEquals = json.has("equals") && json.getAsJsonPrimitive("equals").isNumber();
+        if (json.has("equals") && (!present || !numericEquals && !raw.equals(json.get("equals").getAsString()))) return false;
+        if (numericEquals || json.has("min") || json.has("max")) {
             if (!present) return false;
-            String raw = context.fact(tag).orElse("");
             if (!raw.matches("-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?")) return false;
             double number = Double.parseDouble(raw);
-            if (!Double.isFinite(number) || json.has("min") && number < json.get("min").getAsDouble()
+            if (!Double.isFinite(number) || numericEquals && number != json.get("equals").getAsDouble()
+                    || json.has("min") && number < json.get("min").getAsDouble()
                     || json.has("max") && number > json.get("max").getAsDouble()) return false;
         }
         return true;

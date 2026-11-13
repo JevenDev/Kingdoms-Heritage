@@ -104,11 +104,12 @@ function condition(value,facts) {
   if(value.not)return !condition(value.not,facts);
   const raw=facts[value.tag],present=raw!==undefined&&raw!==null&&String(raw)!=='';
   if(value.present!==undefined&&value.present!==present)return false;
-  if(value.equals!==undefined&&(!present||String(raw)!==String(value.equals)))return false;
-  if(value.min!==undefined||value.max!==undefined){
+  const numericEquals=typeof value.equals==='number';
+  if(value.equals!==undefined&&(!present||!numericEquals&&String(raw)!==String(value.equals)))return false;
+  if(numericEquals||value.min!==undefined||value.max!==undefined){
     if(!present||!/^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$/.test(String(raw)))return false;
     const number=Number(raw);
-    if(!Number.isFinite(number)||value.min!==undefined&&number<value.min||value.max!==undefined&&number>value.max)return false;
+    if(!Number.isFinite(number)||numericEquals&&number!==value.equals||value.min!==undefined&&number<value.min||value.max!==undefined&&number>value.max)return false;
   }
   return true;
 }

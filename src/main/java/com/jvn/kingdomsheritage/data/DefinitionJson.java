@@ -43,8 +43,9 @@ public final class DefinitionJson {
                 throw new IllegalArgumentException(key + " entries must be resource ID strings");
             }
             String value = element.getAsString();
-            ResourceLocation.parse(tags && value.startsWith("#") ? value.substring(1) : value);
-            values.add(value);
+            boolean tag = tags && value.startsWith("#");
+            var id = ResourceLocation.parse(tag ? value.substring(1) : value);
+            values.add((tag ? "#" : "") + id);
         }
         return List.copyOf(values);
     }

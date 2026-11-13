@@ -1,0 +1,22 @@
+[
+  {"name":"integer", "fact":"1", "when":{"tag":"n","equals":1}, "matches":true},
+  {"name":"decimal equality", "fact":"1", "when":{"tag":"n","equals":1.0}, "matches":true},
+  {"name":"exponent equality", "fact":"1", "when":{"tag":"n","equals":1e0}, "matches":true},
+  {"name":"decimal fact", "fact":"1.0", "when":{"tag":"n","equals":1}, "matches":true},
+  {"name":"exponent fact", "fact":"1e0", "when":{"tag":"n","equals":1}, "matches":true},
+  {"name":"negative zero", "fact":"-0", "when":{"tag":"n","equals":0}, "matches":true},
+  {"name":"different number", "fact":"1.5", "when":{"tag":"n","equals":1}, "matches":false},
+  {"name":"text stays exact", "fact":"1.0", "when":{"tag":"n","equals":"1"}, "matches":false},
+  {"name":"matching text", "fact":"1.0", "when":{"tag":"n","equals":"1.0"}, "matches":true},
+  {"name":"boolean", "fact":"true", "when":{"tag":"n","equals":true}, "matches":true},
+  {"name":"boolean is not numeric", "fact":"true", "when":{"tag":"n","equals":1}, "matches":false},
+  {"name":"missing fact", "when":{"tag":"n","equals":0}, "matches":false},
+  {"name":"empty fact", "fact":"", "when":{"tag":"n","equals":0}, "matches":false},
+  {"name":"whitespace", "fact":" 1", "when":{"tag":"n","equals":1}, "matches":false},
+  {"name":"hex", "fact":"0x1", "when":{"tag":"n","equals":1}, "matches":false},
+  {"name":"leading zero", "fact":"01", "when":{"tag":"n","equals":1}, "matches":false},
+  {"name":"nonfinite", "fact":"1e999", "when":{"tag":"n","min":0}, "matches":false},
+  {"name":"bounds still apply", "fact":"1", "when":{"tag":"n","equals":1.0,"min":2}, "matches":false},
+  {"name":"inclusive bounds", "fact":"1.0", "when":{"tag":"n","equals":1e0,"min":1,"max":1}, "matches":true},
+  {"name":"negated number", "fact":"1", "when":{"not":{"tag":"n","equals":1.0}}, "matches":false}
+]

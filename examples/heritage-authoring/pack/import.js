@@ -50,11 +50,7 @@ async function read(bytes,name='Imported pack.zip',createId=()=>crypto.randomUUI
   const libraries={kits:{version:2,active:'',kits:[]},intros:{version:2,active:'',intros:[]}},kits=new Map(),catalog={kits:[],intros:[]};
   const stock=new Set(Pack.bundledKits(state).map(entry=>entry.resource));
   const overrides=definitions.filter(entry=>entry.kind==='kits'&&stock.has(entry.namespace+':'+entry.id));
-  const defaultKit=overrides.find(entry=>entry.id==='default');
-  const usesOtherStock=overrides.some(entry=>entry.id!=='default'&&entry.document.enabled!==false)
-    ||definitions.some(entry=>entry.kind==='spawns'&&Array.isArray(entry.document.kits)
-      &&entry.document.kits.some(id=>id!=='kingdomsheritage:default'&&stock.has(id)));
-  if(defaultKit?.document.enabled===false&&!usesOtherStock)state.keepKits=false;
+  state.keepKits=![...stock].every(id=>overrides.some(entry=>entry.namespace+':'+entry.id===id&&entry.document.enabled===false));
   if(state.keepKits)for(const entry of overrides){
     Kit.read(JSON.stringify(entry.document));
     (state.bundledKits??={})[entry.namespace+':'+entry.id]=Pack.copy(entry.document);
@@ -89,7 +85,7 @@ async function read(bytes,name='Imported pack.zip',createId=()=>crypto.randomUUI
     if(document.kits?.length){
       location.kitMode='selected';
       for(const selector of document.kits){
-        const matches=[...kits].filter(([id,kit])=>selector.startsWith('#')?(kit.document.tags??[]).includes(selector.slice(1)):id===(selector.includes(':')?selector:'minecraft:'+selector));
+        const matches=[...kits].filter(([id,kit])=>selector.startsWith('#')?(kit.document.tags??[]).some(tag=>Kit.normalize(tag)===Kit.normalize(selector.slice(1))):id===Kit.normalize(selector));
         if(!matches.length)throw new Error(entry.path+' references an unavailable kit or tag: '+selector+'. Include its kits in the datapack.');
         for(const [,kit] of matches)if(!location.kits.includes(kit.id))location.kits.push(kit.id);
       }

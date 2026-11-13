@@ -28,6 +28,31 @@ function archiveFiles(bytes) {
   assert.equal(view.getUint16(bytes.length-12,true),entries.size);
   return entries;
 }
+test('unfinished packs build location previews through the export transformation',()=>{
+  for(const type of ['default','biome','structure','fixed','pool']) {
+    const input=state(),entry=input.locations[0];
+    entry.document={custom:{preserved:true},outline:false,target:'obsolete:target',x:999,pool:[{type:'default'}]};
+    entry.fields={title:'Home',type,dimension:'minecraft:overworld',order:'3',target:type==='structure'?'#minecraft:village':'minecraft:plains',piece:'minecraft:village/plains/houses/plains_small_house_1',x:'20',y:'70',z:'-10'};
+    entry.picture=picture();entry.intro='arrival';
+    entry.destinations=[{type:'fixed',x:'5',y:'70',z:'9',intro:'alternate'},{type:'default',intro:null}];
+    const library={kits:[],intros:[{id:'arrival',document:{text:'Welcome'},error:''},{id:'alternate',document:{text:'Elsewhere'},error:''}]};
+    const exported=Pack.build(input,library);assert.deepEqual(exported.errors,[]);
+    const unfinished=Pack.build({...input,description:''},library);assert.ok(unfinished.errors.length);assert.deepEqual(unfinished.files,[]);
+    assert.deepEqual(spawn(unfinished),spawn(exported));
+    assert.deepEqual(entry.document.custom,{preserved:true});assert.equal(entry.destinations[0].intro,'alternate');
+  }
+});
+
+test('incomplete location fields remain previewable while export stays strict',()=>{
+  const input=state(),entry=input.locations[0];
+  entry.fields={title:'',type:'pool'};entry.intro='missing';
+  entry.destinations=[{type:'fixed',x:'unfinished',y:'70',z:'5',intro:'missing'},{type:'default',intro:null}];
+  const result=Pack.build(input,catalog),document=spawn(result);
+  assert.ok(result.errors.length);assert.deepEqual(result.files,[]);
+  assert.equal(document.title,'');assert.equal(document.intro,null);
+  assert.equal(document.pool[0].x,'unfinished');assert.equal(document.pool[0].intro,null);assert.equal(document.pool[1].intro,null);
+});
+
 test('existing projects retain player scaling without a resource pack',()=>{
   const input=state(),result=Pack.build(input,catalog);
   assert.deepEqual(result.errors,[]);

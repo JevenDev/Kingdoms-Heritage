@@ -63,38 +63,6 @@
       "id": "kingdomsheritage:random"
     },
     {
-      "title": "Plains",
-      "subtitle": "Open grasslands",
-      "image": "kingdomsheritage:textures/gui/locations/plains.png",
-      "type": "biome",
-      "order": 3,
-      "target": "minecraft:plains",
-      "title_key": "heritage.kingdomsheritage.spawns.plains.title",
-      "subtitle_key": "heritage.kingdomsheritage.spawns.plains.subtitle",
-      "intro": {
-        "text": "You woke up in a {biome}...",
-        "subtitle": "... How did you get here?",
-        "title_position": "left_center",
-        "subtitle_position": "right_center",
-        "title_coordinates": {
-          "width": 35,
-          "x": 7.1,
-          "y": 63.1
-        },
-        "subtitle_coordinates": {
-          "width": 38.2,
-          "x": 56.4,
-          "y": 71.2
-        },
-        "cinematic_bars": true,
-        "hide_hud_during_bars": true,
-        "title": true,
-        "animation": "letter_by_letter",
-        "blip": true
-      },
-      "id": "kingdomsheritage:plains"
-    },
-    {
       "title": "Village",
       "subtitle": "Nearby settlement",
       "image": "kingdomsheritage:textures/gui/locations/village.png",
@@ -125,6 +93,38 @@
         "blip": true
       },
       "id": "kingdomsheritage:village"
+    },
+    {
+      "title": "Plains",
+      "subtitle": "Open grasslands",
+      "image": "kingdomsheritage:textures/gui/locations/plains.png",
+      "type": "biome",
+      "order": 3,
+      "target": "minecraft:plains",
+      "title_key": "heritage.kingdomsheritage.spawns.plains.title",
+      "subtitle_key": "heritage.kingdomsheritage.spawns.plains.subtitle",
+      "intro": {
+        "text": "You woke up in a {biome}...",
+        "subtitle": "... How did you get here?",
+        "title_position": "left_center",
+        "subtitle_position": "right_center",
+        "title_coordinates": {
+          "width": 35,
+          "x": 7.1,
+          "y": 63.1
+        },
+        "subtitle_coordinates": {
+          "width": 38.2,
+          "x": 56.4,
+          "y": 71.2
+        },
+        "cinematic_bars": true,
+        "hide_hud_during_bars": true,
+        "title": true,
+        "animation": "letter_by_letter",
+        "blip": true
+      },
+      "id": "kingdomsheritage:plains"
     }
   ],
   "kits": [
@@ -1701,6 +1701,10 @@
     "kingdomsheritage.configuration.selectionMusicMode.tooltip": "Applies the next time you enter character creation. Alternate switches songs each session. Original and Solace always play the selected track.",
     "kingdomsheritage.configuration.randomSpawnRadius": "Random Spawn Radius",
     "kingdomsheritage.configuration.locationSearchRadius": "Location Search Radius",
+    "kingdomsheritage.configuration.structureSearchRadius": "Structure Search Radius",
+    "kingdomsheritage.configuration.structureSearchRadius.tooltip": "Expands structure searches beyond Location Search Radius up to this distance. Explicit location search_radius values take priority.",
+    "kingdomsheritage.configuration.biomeSearchRadius": "Biome Search Radius",
+    "kingdomsheritage.configuration.biomeSearchRadius.tooltip": "Maximum distance for biome searches. Explicit location search_radius values take priority.",
     "kingdomsheritage.configuration.inventoryPolicy": "Starting Inventory Policy",
     "kingdomsheritage.configuration.exemptExistingPlayers": "Exempt Existing Players",
     "kingdomsheritage.configuration.homelandRespawn": "Respawn at Homeland",
@@ -1798,6 +1802,7 @@
     "error.kingdomsheritage.fixed": "The configured location is obstructed or unsafe",
     "error.kingdomsheritage.not_found": "No matching location found within the configured search radius",
     "error.kingdomsheritage.biome": "Unknown biome: %s",
+    "error.kingdomsheritage.structure_placement": "No supported structure placements are available for this target in this dimension",
     "error.kingdomsheritage.structures_disabled": "Structure generation is disabled in this world",
     "error.kingdomsheritage.structure": "Unknown or empty structure target: %s",
     "error.kingdomsheritage.structure_room": "No safe standing room found inside this structure within the search limit",
