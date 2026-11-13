@@ -3,6 +3,7 @@ package com.jvn.kingdomsheritage.api;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.jvn.kingdomsheritage.HeritageConfig;
+import com.jvn.kingdomsheritage.data.FlowDecision;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -113,8 +114,9 @@ public final class HeritageFlow {
     public static JsonObject validate(ResourceLocation id, ServerPlayer player, SelectionState selection, JsonObject value) {
         var registration = REGISTRY.get(id);
         if (registration == null) throw new IllegalArgumentException("Unknown Heritage flow step: " + id);
+        FlowDecision.validate(value);
         JsonObject accepted = Objects.requireNonNull(registration.validator().validate(player, selection, value.deepCopy()), "accepted decision");
-        if (accepted.toString().length() > 16384) throw new IllegalArgumentException("Heritage decision exceeds 16384 characters");
+        FlowDecision.validate(accepted);
         return accepted.deepCopy();
     }
 

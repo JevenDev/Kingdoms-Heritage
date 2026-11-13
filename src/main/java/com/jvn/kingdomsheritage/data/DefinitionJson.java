@@ -11,6 +11,22 @@ import net.minecraft.util.GsonHelper;
 public final class DefinitionJson {
     private DefinitionJson() {}
 
+    static int integer(JsonObject json, String key, int fallback) {
+        return json.has(key) ? integer(json, key) : fallback;
+    }
+
+    static int integer(JsonObject json, String key) {
+        var value = json.get(key);
+        if (value != null && value.isJsonPrimitive() && value.getAsJsonPrimitive().isNumber()) {
+            try {
+                return value.getAsBigDecimal().intValueExact();
+            } catch (ArithmeticException | NumberFormatException error) {
+                throw new IllegalArgumentException(key + " must be a 32-bit integer", error);
+            }
+        }
+        throw new IllegalArgumentException(key + " must be a 32-bit integer");
+    }
+
     public static String text(JsonObject json, String key, int max, boolean optional) {
         if (!json.has(key) && json.has(key + "_key")) return text(json, key + "_key", max, false);
         String value = optional ? GsonHelper.getAsString(json, key, "") : GsonHelper.getAsString(json, key);

@@ -3,6 +3,7 @@ package com.jvn.kingdomsheritage.network;
 import com.jvn.kingdomsheritage.KingdomsHeritage;
 import com.jvn.kingdomsheritage.server.SelectionManager;
 import com.jvn.kingdomsheritage.data.CatalogPayload;
+import com.jvn.kingdomsheritage.data.FlowDecision;
 import com.jvn.kingdomsheritage.data.KitShop;
 import java.util.ArrayList;
 import java.util.List;
@@ -128,10 +129,10 @@ public final class HeritageNetwork {
                     buffer.writeByte(value.action);
                     buffer.writeUtf(value.spawn, 256);
                     buffer.writeUtf(value.kit, 256);
-                    buffer.writeUtf(value.value, 16384);
+                    buffer.writeUtf(value.value, FlowDecision.MAX_CHARACTERS);
                     buffer.writeLong(value.version);
                 }, buffer -> new FlowAction(buffer.readUUID(), buffer.readUUID(), buffer.readLong(), buffer.readResourceLocation(),
-                        buffer.readUnsignedByte(), buffer.readUtf(256), buffer.readUtf(256), buffer.readUtf(16384), buffer.readLong()));
+                        buffer.readUnsignedByte(), buffer.readUtf(256), buffer.readUtf(256), buffer.readUtf(FlowDecision.MAX_CHARACTERS), buffer.readLong()));
         @Override public Type<FlowAction> type() { return TYPE; }
     }
 

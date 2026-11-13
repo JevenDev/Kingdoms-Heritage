@@ -1,10 +1,9 @@
 package com.jvn.kingdomsheritage.server;
 
 import com.google.gson.JsonObject;
-import com.google.gson.JsonParseException;
-import com.google.gson.JsonParser;
 import com.jvn.kingdomsheritage.api.HeritageFlow;
 import com.jvn.kingdomsheritage.api.ScreenStep;
+import com.jvn.kingdomsheritage.data.FlowDecision;
 import com.jvn.kingdomsheritage.data.HeritageCatalog;
 import com.jvn.kingdomsheritage.network.HeritageNetwork;
 import java.util.HashMap;
@@ -188,7 +187,7 @@ public final class SelectionSteps {
                 else progress.ready.add(player.getUUID());
             } else if (request.action() == HeritageNetwork.FlowAction.SUBMIT) {
                 if (request.version() != progress.version) throw new IllegalArgumentException("The shared decision changed. Please confirm the latest version");
-                JsonObject value = parse(request.value());
+                JsonObject value = FlowDecision.parse(request.value());
                 boolean decides = !step.partyPolicy().leaderDecides() || leader(player).equals(player.getUUID());
                 if (!decides && (!progress.values.containsKey(leader(player)) || !progress.values.get(leader(player)).equals(value))) {
                     throw new IllegalArgumentException("Only the party leader can change this decision");
@@ -215,16 +214,6 @@ public final class SelectionSteps {
             }
         } catch (IllegalArgumentException error) {
             sendError(player, request.step(), error.getMessage() == null ? "Invalid Heritage decision" : error.getMessage());
-        }
-    }
-
-    private static JsonObject parse(String value) {
-        try {
-            var parsed = JsonParser.parseString(value);
-            if (!parsed.isJsonObject()) throw new IllegalArgumentException("A Heritage decision must be a JSON object");
-            return parsed.getAsJsonObject();
-        } catch (JsonParseException error) {
-            throw new IllegalArgumentException("Invalid Heritage decision JSON", error);
         }
     }
 

@@ -49,16 +49,16 @@ public record SpawnDefinition(ResourceLocation id, String title, String descript
         if (piece != null && kind != Kind.STRUCTURE) throw new IllegalArgumentException("Only structure locations support a preferred piece");
         ResourceLocation image = ResourceLocation.parse(GsonHelper.getAsString(json, "image",
                 "kingdomsheritage:textures/gui/campaign_select_screen/campaign_select_screen_card_fallback.png"));
-        int x = GsonHelper.getAsInt(json, "x", 0);
-        int y = GsonHelper.getAsInt(json, "y", 64);
-        int z = GsonHelper.getAsInt(json, "z", 0);
+        int x = DefinitionJson.integer(json, "x", 0);
+        int y = DefinitionJson.integer(json, "y", 64);
+        int z = DefinitionJson.integer(json, "z", 0);
         if (Math.abs((long) x) > 29999984 || Math.abs((long) z) > 29999984) {
             throw new IllegalArgumentException("Fixed location is outside Minecraft's world limits");
         }
         if (kind == Kind.FIXED && (!json.has("x") || !json.has("y") || !json.has("z"))) {
             throw new IllegalArgumentException("Fixed locations require x, y and z");
         }
-        return new SpawnDefinition(id, title, description, image, GsonHelper.getAsInt(json, "order", 0),
+        return new SpawnDefinition(id, title, description, image, DefinitionJson.integer(json, "order", 0),
                 kind, dimension, target, x, y, z, targetTag, piece, DefinitionJson.ids(json, "kits", true),
                 radius(json, "search_radius"), radius(json, "random_radius"),
                 DefinitionJson.text(json, "title_key", 256, true), DefinitionJson.text(json, "description_key", 256, true),
@@ -119,7 +119,7 @@ public record SpawnDefinition(ResourceLocation id, String title, String descript
 
     private static int radius(JsonObject json, String key) {
         if (!json.has(key)) return 0;
-        int value = GsonHelper.getAsInt(json, key);
+        int value = DefinitionJson.integer(json, key);
         if (value < 16 || value > 30000) throw new IllegalArgumentException(key + " must be between 16 and 30000 blocks");
         return value;
     }

@@ -124,6 +124,7 @@ public final class SelectionManager {
         player.setNoGravity(true);
         if (player.level() != level || player.distanceToSqr(spawn.getX() + 0.5, y, spawn.getZ() + 0.5) > 0.0001) {
             player.teleportTo(level, spawn.getX() + 0.5, y, spawn.getZ() + 0.5, player.getYRot(), player.getXRot());
+            player.connection.resetPosition();
         }
         player.setDeltaMovement(Vec3.ZERO);
         player.fallDistance = 0;

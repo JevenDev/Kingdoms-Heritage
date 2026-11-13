@@ -33,7 +33,7 @@ public record KitDefinition(ResourceLocation id, String title, String descriptio
     public static KitDefinition parse(ResourceLocation id, JsonObject json) {
         String title = DefinitionJson.text(json, "title", 120, false);
         String description = DefinitionJson.text(json, "description", 4000, true);
-        int selectedSlot = GsonHelper.getAsInt(json, "selected_slot", 0);
+        int selectedSlot = DefinitionJson.integer(json, "selected_slot", 0);
         if (selectedSlot < 0 || selectedSlot > 8) throw new IllegalArgumentException("selected_slot must be 0 to 8");
         KitShop shop = json.has("shop") ? KitShop.parse(GsonHelper.getAsJsonObject(json, "shop")) : null;
         JsonArray array = shop != null && !json.has("items") ? new JsonArray() : GsonHelper.getAsJsonArray(json, "items");
@@ -47,7 +47,7 @@ public record KitDefinition(ResourceLocation id, String title, String descriptio
                 throw new IllegalArgumentException("Unknown inventory: " + inventory);
             }
             String slot = GsonHelper.getAsString(entry, "slot", "");
-            int index = GsonHelper.getAsInt(entry, "index");
+            int index = DefinitionJson.integer(entry, "index");
             boolean cosmetic = GsonHelper.getAsBoolean(entry, "cosmetic", false);
             if (index < 0 || index > 255 || (inventory.equals("player") && (index > 40 || cosmetic || !slot.isEmpty()))) {
                 throw new IllegalArgumentException("Invalid slot in " + inventory + ": " + index);
@@ -60,7 +60,7 @@ public record KitDefinition(ResourceLocation id, String title, String descriptio
             }
             entries.add(new Entry(inventory, slot, index, cosmetic, GsonHelper.getAsJsonObject(entry, "item").deepCopy()));
         }
-        return new KitDefinition(id, title, description, GsonHelper.getAsInt(json, "order", 0), selectedSlot, List.copyOf(entries),
+        return new KitDefinition(id, title, description, DefinitionJson.integer(json, "order", 0), selectedSlot, List.copyOf(entries),
                 DefinitionJson.ids(json, "tags", false), DefinitionJson.text(json, "title_key", 256, true),
                 DefinitionJson.text(json, "description_key", 256, true), shop);
     }
