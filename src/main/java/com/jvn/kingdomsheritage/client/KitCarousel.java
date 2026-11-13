@@ -103,10 +103,12 @@ final class KitCarousel {
                 renderCard(graphics, bounds, tabs, tabWidth, () -> drawInventory.render(index, 1));
                 continue;
             }
+            var captureBounds = tabWidth == 0 ? bounds : new Rect2i(bounds.getX() - tabWidth, bounds.getY(),
+                    bounds.getWidth() + tabWidth, bounds.getHeight());
             Frame frame = frames.computeIfAbsent(index, ignored -> new Frame());
             boolean looking = pose.look > 0;
             if (index == selected || looking || frame.looking || now - frame.captured >= 120 || frame.captured == 0) {
-                frame.preview.capture(graphics,
+                frame.preview.capture(graphics, captureBounds,
                         () -> renderCard(graphics, bounds, tabs, tabWidth, () -> drawInventory.render(index, pose.look)));
                 frame.captured = now;
                 frame.looking = looking;
@@ -115,8 +117,6 @@ final class KitCarousel {
             frame.hover = Mth.lerp(response, frame.hover, index == hovered ? 1 : 0);
             frame.rendered = now;
             float opacity = Math.min(1, pose.opacity + frame.hover * 0.2F) * visibility;
-            var captureBounds = tabWidth == 0 ? bounds : new Rect2i(bounds.getX() - tabWidth, bounds.getY(),
-                    bounds.getWidth() + tabWidth, bounds.getHeight());
             frame.preview.draw(graphics, captureBounds, pose.x - tabWidth * pose.scale, pose.y, pose.scale, 0, opacity);
             if (index != selected) {
                 var font = Minecraft.getInstance().font;
