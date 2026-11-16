@@ -63,16 +63,15 @@ test('the documented shop examples match their templates and load in the kit cre
   }
 });
 
-test('dialogue reference links resolve to local pages, sections and downloadable sources', () => {
-  const reference = pages.get('dialogue').markdown;
+test('documentation links resolve to local pages, sections and downloadable sources', () => {
   const slug = value => value.toLowerCase().replaceAll("'", '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-  for (const match of reference.matchAll(/\[[^\]]+\]\(([^)]+)\)/g)) {
+  for (const page of pages.values()) for (const match of page.markdown.matchAll(/\[[^\]]+\]\(([^)]+)\)/g)) {
     const href = match[1];
     if (href.startsWith('#/')) {
       const [id, section] = href.slice(2).split('/');
       assert.ok(pages.has(id), href);
       if (section) assert.ok([...pages.get(id).markdown.matchAll(/^#{1,6} (.+)$/gm)].some(heading => slug(heading[1]) === section), href);
-    } else assert.ok(fs.existsSync(path.join(root, href)), href);
+    } else if (!/^https?:|^#/.test(href)) assert.ok(fs.existsSync(path.join(root, href.split(/[?#]/)[0])), href);
   }
 });
 

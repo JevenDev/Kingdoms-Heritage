@@ -29,7 +29,7 @@ ul, ol { padding-left: 22px; margin: 16px 0; }
 li { margin: 6px 0; }
 strong { color: var(--text); font-weight: 600; }
 code, pre { font-family: Monocraft, monospace; font-variant-ligatures: none; font-kerning: none; }
-:not(pre)>code { font-size: var(--json-font-size); color: var(--text); background: var(--code); border-radius: 3px; padding: 1px 5px; overflow-wrap: anywhere; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+:not(pre)>code { font-size: var(--json-font-size); color: var(--text); background: var(--code); border-radius: 3px; padding: 1px 5px; white-space: nowrap; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
 .code-block { background: var(--code); margin: 20px 0 26px; }
 .code-toolbar { display: flex; justify-content: space-between; align-items: center; min-height: 34px; padding: 4px 8px 0 16px; font-size: 11px; color: var(--faint); }
 pre { font-size: var(--json-font-size); line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; padding: 12px 16px 18px; tab-size: 2; color: var(--muted); }

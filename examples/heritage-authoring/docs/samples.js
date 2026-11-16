@@ -119,7 +119,7 @@ async function mount(samples) {
     const main=P.parse(config.text,{biome:'Plains',structure:'Savanna Village',dimension:'Overworld'});
     const sub=P.parse(config.subtitle,{},main.length+1);
     sample.canvas.width=sample.tall?640:400;sample.canvas.height=sample.tall?360:160;
-    const blocks=P.layout(config,main,sub,sample.canvas.width/2,sample.canvas.height/2,config.cinematic_bars&&config.bar_style==='random'?-7:0,advance);
+    const blocks=P.layout(config,main,sub,sample.canvas.width/2,sample.canvas.height/2,advance);
     const all=[...main,{ch:'\n',index:main.length,effect:{}},...sub];
     return {...sample,config,blocks,all,ends:config.animation==='word_by_word'?P.wordEnds(all):[],animated:sample.reveal||all.some(g=>P.active(g.effect)||g.effect.obfuscated),visible:false};
   });
