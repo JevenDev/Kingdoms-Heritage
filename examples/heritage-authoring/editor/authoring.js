@@ -6,6 +6,9 @@ function create(config){
   const $=id=>document.getElementById(id),W=HeritageWorkflow,stages=embedded?config.stages.filter(stage=>stage.id!=='review'):config.stages,first=stages[0].id;
   const shared=document.createElement('div'),sharedText=document.createElement('p'),copyLocal=document.createElement('button');shared.className='author-shared-context';sharedText.className='hint';copyLocal.type='button';copyLocal.textContent='Make a copy for this location';shared.append(sharedText,copyLocal);document.querySelector('.author-content > .document-toolbar').after(shared);
   if(config.kind==='kit'){
+    const catalog=document.createElement('button');catalog.id='toggle-item-catalog';catalog.type='button';catalog.textContent='Item catalog';catalog.setAttribute('aria-expanded','true');catalog.setAttribute('aria-controls','item-browser');document.querySelector('.author-content > .document-toolbar').append(catalog);catalog.addEventListener('click',()=>{const collapsed=document.body.classList.toggle('catalog-collapsed');catalog.setAttribute('aria-expanded',String(!collapsed));window.dispatchEvent(new Event('resize'));});
+    const shopWorkspace=document.querySelector('.shop-workspace'),shopEditor=document.createElement('div');shopEditor.className='shop-editor';
+    shopWorkspace.prepend($('shop-preview'));shopEditor.append(document.querySelector('.shop-setup'),$('shop-pages'));shopWorkspace.append(shopEditor);
     const toolbar=document.querySelector('.author-content > .document-toolbar'),history=document.createElement('div');history.className='intro-history-actions';history.setAttribute('role','group');history.setAttribute('aria-label','Kit history');history.append($('undo'),$('redo'));toolbar.querySelector('.document-actions-menu').before(history);toolbar.querySelector('.document-file-actions').prepend($('json-tab'));toolbar.append(document.querySelector('.author-footer'));document.querySelector('.kit-inventory-panel').append(document.querySelector('.kit-extra-equipment'));
   }
   const actions=document.querySelector('.document-toolbar .document-file-actions');actions.append($('author-use-another'),$('author-preview-pack'));$('author-stage-status').classList.add('sr-only');
@@ -19,7 +22,8 @@ function create(config){
     let searchFocus;document.addEventListener('keydown',event=>{if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='k'&&!document.querySelector('dialog[open]')){event.preventDefault();event.stopPropagation();searchFocus=document.activeElement;window.parent.postMessage({type:'heritage:author-search',token:embeddedRoute.get('session')},location.origin);}});
     window.addEventListener('message',event=>{if(event.source===parent&&event.origin===location.origin&&event.data?.type==='heritage:author-search-close'&&event.data.token===embeddedRoute.get('session')){window.focus();if(searchFocus?.isConnected)searchFocus.focus({preventScroll:true});}});
     globalThis.HeritageEmbeddedEditor={flush:()=>{const persisted=config.persist();return {...embeddedStatus(),persisted};}};
-    document.addEventListener('click',event=>{if(event.target.closest('#duplicate-'+config.kind))attachPending=true;if(event.target.closest('#delete-'+config.kind))attachPending=false;},{capture:true});
+    document.addEventListener('change',event=>{if(event.target.matches('#example,#import')&&embeddedRoute.get('library')!=='1')attachPending=true;},{capture:true});
+    document.addEventListener('click',event=>{if(event.target.closest('#duplicate-'+config.kind)&&embeddedRoute.get('library')!=='1')attachPending=true;if(event.target.closest('#delete-'+config.kind))attachPending=false;},{capture:true});
     window.addEventListener('message',event=>{if(event.source===parent&&event.origin===location.origin&&event.data?.type==='heritage:author-usage'&&event.data.token===embeddedRoute.get('session'))sharedUsage(event.data.count,event.data.places);});
     window.addEventListener('message',event=>{if(event.source===parent&&event.origin===location.origin&&event.data?.type==='heritage:author-connected'&&event.data.token===embeddedRoute.get('session')&&event.data.id===config.active())attachPending=false;});
     for(const link of document.querySelectorAll('a[href]')){link.target='_blank';link.rel='noopener';}
@@ -27,6 +31,7 @@ function create(config){
   }
   const source=()=>W.context(location.search,localStorage.getItem(HeritageProject.keys.packs));
   const report=message=>{$('author-feedback').textContent=message;};
+  if(config.kind==='kit')HeritageKitWorkspace.create(report);
   function reveal(){const issue=config.issue();if(!issue)return;show(issue.stage);const field=$(issue.field);if(field){for(let parent=field.parentElement;parent;parent=parent.parentElement)if(parent.tagName==='DETAILS')parent.open=true;field.focus();}report(issue.message);}
   function show(value,{focus=true,route=true}={}){
     if(focus)report('');
@@ -40,7 +45,6 @@ function create(config){
     $('author-back').hidden=index<=0;$('author-next').hidden=embedded||current==='review'||current==='json';$('author-stage-status').textContent=index<0?'Advanced editor':(index+1)+' of '+stages.length;
     $('author-next').textContent='Next';$('author-next').setAttribute('aria-label','Continue to '+(stages[index+1]?.label??'review'));document.querySelector('.author-finish').hidden=current!=='review';
     $('json-tab').hidden=current==='json';$(config.kind==='kit'?'details-tab':'text-tab').hidden=current!=='json';
-    if($('inventory'))$('inventory').inert=current!=='inventory';
     if(route){const url=new URL(location.href);url.searchParams.set('edit',current);history.replaceState(null,'',url);}
     config.stageChanged?.(current);refresh();if(embedded)window.parent.postMessage({type:'heritage:author-stage',token:embeddedRoute.get('session'),kind:config.kind,id:config.active(),stage:current},location.origin);
     if(focus){$('author-heading').focus({preventScroll:true});document.querySelector('.author-scroll-content').scrollTop=0;}
@@ -77,7 +81,7 @@ function create(config){
   document.querySelector('.workflow-nav').addEventListener('click',event=>{const link=event.target.closest('[data-pack-stage]');if(link&&['preview','export'].includes(link.dataset.packStage)&&!config.prepare()){event.preventDefault();reveal();}});
   for(const link of [$('use-in-pack'),$('author-preview-pack')])link.addEventListener('click',event=>{if(!config.prepare()){event.preventDefault();reveal();}});
   $('author-use-another').addEventListener('click',async()=>{
-    if(busy||!config.prepare()){reveal();return;}busy=true;refresh();
+    if(busy||!config.prepare()){reveal();return;}if(embedded){window.parent.postMessage({type:'heritage:author-use-another',token:embeddedRoute.get('session')},location.origin);return;}busy=true;refresh();
     try{
       await navigator.locks.request('heritage-editor:heritage.packAssembler.v1',{ifAvailable:true},lock=>{
         if(!lock)throw new Error('Close the pack builder tab before connecting another '+config.kind+'. Your draft is saved.');
@@ -103,7 +107,7 @@ function create(config){
   });
   const compact=matchMedia('(max-width:850px)'),collection=$('entry-collection');collection.open=!compact.matches;compact.addEventListener('change',()=>{collection.open=!compact.matches;});
   window.addEventListener('storage',event=>{if(event.key===HeritageProject.keys.packs)refresh();});
-  const requested=new URLSearchParams(location.search).get('edit');show(config.issue()?.stage??requested??first,{focus:false});
+  const requested=new URLSearchParams(location.search).get('edit');show(config.issue()?.stage??requested??(config.kind==='kit'?'inventory':first),{focus:false});
   if(embedded)requestAnimationFrame(()=>config.persist());
   return {show,refresh,reveal,saved,get current(){return current;}};
 }

@@ -22,8 +22,7 @@ final class KitStatPanel {
     private static final int STAT_SIZE = 9;
     private static final int GAP = 3;
     private static final int GROUP_GAP = 6;
-    private static final int INFO_SIZE = 11;
-    static final int HEIGHT = INFO_SIZE;
+    static final int HEIGHT = STAT_SIZE;
     private static final String TEXT = "screen.kingdomsheritage.kit_stats.";
 
     private KitStatPanel() {}
@@ -38,13 +37,13 @@ final class KitStatPanel {
     }
 
     private static boolean hasInfo(KitStats.Preview stats) {
-        return stats.bonuses().purse() > 0 || stats.bonuses().attributes().stream().anyMatch(KitStatPanel::showInInfo);
+        return stats.bonuses().attributes().stream().anyMatch(KitStatPanel::showInInfo);
     }
 
     static int width(Font font, KitStats.Preview stats) {
         return statWidth(font, Integer.toString(stats.armor())) + statWidth(font, number(stats.health()))
                 + statWidth(font, Integer.toString(stats.hunger())) + GROUP_GAP * 2
-                + (hasInfo(stats) ? INFO_SIZE + GROUP_GAP : 0);
+                + (hasInfo(stats) ? STAT_SIZE + GROUP_GAP : 0);
     }
 
     private static int statWidth(Font font, String value) {
@@ -57,8 +56,8 @@ final class KitStatPanel {
         graphics.pose().pushPose();
         graphics.pose().translate(0, 0, 550);
         if (hasInfo(stats)) {
-            graphics.blitSprite(icon("info"), x, y, INFO_SIZE, INFO_SIZE);
-            if (inside(mouseX, mouseY, x, y, INFO_SIZE, INFO_SIZE)) {
+            graphics.blitSprite(icon("info"), x, y, STAT_SIZE, STAT_SIZE);
+            if (inside(mouseX, mouseY, x, y, STAT_SIZE, STAT_SIZE)) {
                 var lines = new ArrayList<Component>();
                 for (var bonus : stats.bonuses().attributes()) {
                     if (!showInInfo(bonus)) continue;
@@ -73,12 +72,9 @@ final class KitStatPanel {
                     lines.add(Component.translatable(TEXT + operation.getSerializedName(),
                             Component.translatable(key), (value >= 0 ? "+" : "") + amount));
                 }
-                if (stats.bonuses().purse() > 0) {
-                    lines.add(Component.translatable(TEXT + "purse", Long.toString(stats.bonuses().purse())));
-                }
                 graphics.renderComponentTooltip(font, lines, tooltipX, tooltipY);
             }
-            x += INFO_SIZE + GROUP_GAP;
+            x += STAT_SIZE + GROUP_GAP;
         }
         int statY = y + (HEIGHT - STAT_SIZE) / 2;
         x += drawStat(graphics, font, "armor", Integer.toString(stats.armor()), x, statY, mouseX, mouseY, tooltipX, tooltipY,

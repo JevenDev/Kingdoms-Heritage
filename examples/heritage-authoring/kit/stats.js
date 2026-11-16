@@ -16,6 +16,50 @@ const normalize=id=>id.includes(':')?id:'minecraft:'+id;
 const object=value=>value!==null&&typeof value==='object'&&!Array.isArray(value);
 const issue=(message,path)=>Object.assign(new Error(message),{path});
 
+let itemAttributes={},itemDurability={};
+function configure(attributes,durability={}){itemAttributes=attributes;itemDurability=durability;}
+function durability(stack){
+  const parts=stack.components??{},maximum=parts['!minecraft:max_damage']!==undefined?0:parts['minecraft:max_damage']??itemDurability[normalize(stack.id)]??0,damage=parts['minecraft:damage']??0;
+  if(parts['minecraft:unbreakable']!==undefined||!Number.isFinite(maximum)||maximum<=0||!Number.isFinite(damage)||damage<=0)return null;
+  return {maximum,remaining:Math.max(0,maximum-damage),width:Math.max(0,Math.round(13-damage*13/maximum)),hue:Math.max(0,1-damage/maximum)*120};
+}
+function equipmentModifiers(stack){
+  const component=stack.components?.['minecraft:attribute_modifiers'];
+  if(stack.components?.['!minecraft:attribute_modifiers']!==undefined)return [];
+  const values=component===undefined?itemAttributes[normalize(stack.id)]:Array.isArray(component)?component:component?.modifiers;
+  return Array.isArray(values)?values.filter(value=>value&&typeof value.type==='string'&&typeof value.id==='string'&&Number.isFinite(value.amount)):[];
+}
+function matchesSlot(group,slot){
+  return group===undefined||group==='any'||group===slot||group==='hand'&&['mainhand','offhand'].includes(slot)||group==='armor'&&['feet','legs','chest','head'].includes(slot);
+}
+function project(base,modifiers,min,max){
+  let added=base;
+  for(const value of modifiers)if((value.operation??'add_value')==='add_value')added+=value.amount;
+  let result=added;
+  for(const value of modifiers)if(value.operation==='add_multiplied_base')result+=added*value.amount;
+  for(const value of modifiers)if(value.operation==='add_multiplied_total')result*=1+value.amount;
+  return Number.isNaN(result)?min:Math.min(max,Math.max(min,result));
+}
+function preview(kit){
+  if(kit.enabled===false)kit={};
+  const modifiers=new Map(),unknown=[];
+  const add=(type,value)=>{if(typeof type!=='string'||typeof value.id!=='string'||!Number.isFinite(value.amount))return;type=normalize(type);if(!modifiers.has(type))modifiers.set(type,new Map());modifiers.get(type).set(normalize(value.id),value);};
+  const order=[kit.selected_slot??0,40,36,37,38,39];
+  for(const entry of [...(kit.items??[])].sort((a,b)=>order.indexOf(a.index)-order.indexOf(b.index))){
+    if((entry.inventory??'player')!=='player'){if(!entry.cosmetic)unknown.push(entry.item.id);continue;}
+    const slot=entry.index===(kit.selected_slot??0)?'mainhand':({36:'feet',37:'legs',38:'chest',39:'head',40:'offhand'})[entry.index];
+    if(!slot)continue;
+    const stack=entry.item,id=normalize(stack.id);
+    if(!id.startsWith('minecraft:')&&stack.components?.['minecraft:attribute_modifiers']===undefined)unknown.push(id);
+    for(const value of equipmentModifiers(stack))if(matchesSlot(value.slot,slot))add(value.type,value);
+  }
+  const bonuses=Array.isArray(kit.attributes)?kit.attributes.filter(bonus=>typeof bonus?.attribute==='string'&&Number.isFinite(bonus.amount)):[];
+  for(const bonus of bonuses)add(bonus.attribute,{...bonus,id:'kingdomsheritage:starting_kit'});
+  const values=id=>[...(modifiers.get(id)?.values()??[])],maximum=Math.fround(project(20,values(maxHealth),1,1024));
+  return {armor:Math.floor(project(0,values(armor),0,30)),health:Math.min(maximum,Number.isFinite(kit.starting_health)?Math.fround(kit.starting_health):20),maxHealth:maximum,hunger:kit.starting_hunger??20,bonuses:bonuses.filter(bonus=>![armor,maxHealth].includes(normalize(bonus.attribute))),unknown};
+}
+const number=value=>Math.abs(value)>=1_000_000?value.toExponential(1):String(Number(value.toFixed(2)));
+
 function validate(kit) {
   const {starting_health:health,starting_hunger:hunger,attributes}=kit;
   if(health!==undefined&&(!Number.isFinite(health)||health<1||health>3.4028234663852886e38)){
@@ -95,13 +139,27 @@ function purseCounts(kit) {
   return object(value)?{gold:value.gold??0,silver:value.silver??0,bronze:value.bronze??0}:splitPurse(BigInt(value??0));
 }
 
+const purseBalance=kit=>coinTotal(purseCounts(kit));
+const coinId=coin=>'numismaticoverhaul:'+coin+'_coin';
+
 function pursePreview(kit) {
-  return Object.entries(splitPurse(coinTotal(purseCounts(kit)))).filter(([,count])=>count>0);
+  if(kit.enabled===false)return [];
+  return Object.entries(splitPurse(purseBalance(kit)))
+    .filter(([,count])=>count>0)
+    .map(([coin,count])=>[coin,Math.min(count,2_147_483_647)]);
 }
 
 function setCoin(kit,coin,value) {
   const counts=Object.fromEntries(Object.entries(purseCounts(kit)).map(([name,count])=>[name,BigInt(count)]));
   counts[coin]=coinAmount(value||'0',[...pursePath,coin]);
+  writePurse(kit,counts);
+}
+
+function setPurseBalance(kit,balance) {
+  writePurse(kit,splitPurse(balance));
+}
+
+function writePurse(kit,counts) {
   const total=coinTotal(counts),resources=kit.starting_resources??{};
   if(total===0n)delete resources[purseId];
   else resources[purseId]=Object.values(counts).some(count=>count>BigInt(Number.MAX_SAFE_INTEGER))?splitPurse(total):
@@ -130,7 +188,7 @@ function setModifier(kit,id,amount,operation) {
   else delete kit.attributes;
 }
 
-const api={purseId,maxHealth,armor,operations,attributeId,normalize,validate,validatePurse,purseCounts,pursePreview,setCoin,modifier,setModifier};
+const api={configure,durability,equipmentModifiers,matchesSlot,project,preview,number,purseId,maxHealth,armor,operations,attributeId,normalize,validate,validatePurse,purseCounts,pursePreview,purseBalance,denominations,coinId,coinTotal,splitPurse,setPurseBalance,setCoin,modifier,setModifier};
 if(typeof module!=='undefined')module.exports=api;
 else globalThis.HeritageKitStats=api;
 })();

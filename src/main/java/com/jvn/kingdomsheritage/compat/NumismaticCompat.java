@@ -9,13 +9,21 @@ import net.neoforged.fml.ModList;
 public final class NumismaticCompat {
     private NumismaticCompat() {}
 
+    public static boolean available() {
+        return ModList.get().isLoaded("numismaticoverhaul") && ReforgedAgain.ACCESS != null;
+    }
+
     public static void requirePurse() {
-        if (!ModList.get().isLoaded("numismaticoverhaul") || ReforgedAgain.ACCESS == null) {
+        if (!available()) {
             throw new HeritageException("numismatic_purse", "This kit requires Numismatic Overhaul Reforged Again for its purse grant");
         }
     }
 
     public static long balance(ServerPlayer player) {
+        return balance((Player) player);
+    }
+
+    public static long balance(Player player) {
         requirePurse();
         return (long) invoke(ReforgedAgain.ACCESS.get(), player);
     }

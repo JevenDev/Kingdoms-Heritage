@@ -52,3 +52,28 @@ test('resuming preserves valid selected kits and destinations in the same native
 test('resume handles removed kits, pool entries and intros without selecting another location',()=>{
   const value=choices(),session=new F.Session(value);session.resume({phase:'intro',spawnId:'test:forest',kitId:'missing',poolIndex:99});assert.equal(session.spawn.id,'test:forest');assert.equal(session.kit.id,'test:ranger');assert.equal(session.poolIndex,0);session.resume({phase:'intro',spawnId:'test:forest',kitId:'test:ranger',poolIndex:2});assert.equal(session.phase,'review');assert.equal(session.resume({phase:'intro',spawnId:'missing'}),false);assert.equal(session.phase,'location');
 });
+
+test('changed paths exclude partial and removed routes and follow current location and kit order',()=>{
+  const value=choices(),ledger=new C.Ledger(),routes=C.page(value,{});
+  for(const route of [...routes].reverse())ledger.record('pack',route,all,{},100);
+  value.kits[0].title='Updated ranger';
+  let changed=ledger.changed('pack',value,{});assert.equal(changed.length,4);assert.deepEqual(changed.map(route=>route.key),C.page(value,{}).filter(route=>route.kitId==='test:ranger').map(route=>route.key));
+  assert.equal(ledger.changed('pack',value,{},'test:home').length,1);assert.equal(ledger.changed('other',value,{}).length,0);
+  value.spawns.shift();assert.equal(ledger.changed('pack',value,{}).length,2);assert.ok(ledger.changed('pack',value,{}).every(route=>route.spawnId==='test:home'));
+  const partial=new C.Ledger();partial.record('pack',routes[0],['location'],{},100);assert.equal(partial.changed('pack',value,{}).length,0);
+});
+
+test('changed preview resumes at the earliest changed stage and retains its exact destination',()=>{
+  const value=choices(),ledger=new C.Ledger(),before=C.scene(value,{},'test:forest','test:ranger',0);ledger.record('pack',before,all,{},100);
+  value.spawns[0].intro.text='New arrival';let route=C.scene(value,{},'test:forest','test:ranger',0),resume=ledger.resumeChanged('pack',route);
+  assert.deepEqual(resume,{spawnId:'test:forest',kitId:'test:ranger',poolIndex:0,phase:'intro'});
+  const session=new F.Session(value);assert.equal(session.resume(resume),true);assert.equal(session.arrival.intro.text,'New arrival');
+  value.kits[0].items[0].item.count=2;route=C.scene(value,{},'test:forest','test:ranger',0);assert.equal(ledger.resumeChanged('pack',route).phase,'kit');
+  value.spawns[0].title='New location';route=C.scene(value,{},'test:forest','test:ranger',0);assert.equal(ledger.resumeChanged('pack',route).phase,'location-confirm');
+});
+
+test('changed shop arrivals start at the shop so the tested loadout can be chosen again',()=>{
+  const value=choices(),ledger=new C.Ledger();value.kits[0].shop={budget:2,offers:[{cost:1,item:{id:'minecraft:bread'}}]};
+  const before=C.scene(value,{},'test:forest','test:ranger',0);ledger.record('pack',before,all,{},100);value.spawns[0].intro.text='New shop arrival';
+  const route=C.scene(value,{},'test:forest','test:ranger',0);assert.equal(ledger.resumeChanged('pack',route).phase,'kit-shop');
+});

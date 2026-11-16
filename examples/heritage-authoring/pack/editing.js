@@ -57,14 +57,21 @@ class History {
   get canUndo(){return this.index>0;}
   get canRedo(){return this.index<this.actions.length;}
 }
-function assign(pack,ids,{kitIds,intro}={}){
+function assign(pack,ids,{kitIds,intro,kitMode='replace'}={}){
   const result=copy(pack),targets=result.locations.filter(entry=>ids.includes(entry.id));
   if(!targets.length||targets.length!==new Set(ids).size)throw new Error('Choose available locations.');
   if(kitIds){
     if(!kitIds.length)throw new Error('Choose at least one kit.');
-    const stock=new Set(bundledKits(result).map(entry=>entry.id));
-    for(const id of kitIds){if(stock.has(id))continue;const kit=result.kits.find(kit=>kit.id===id);if(!kit)throw new Error('This kit is unavailable.');kit.included=true;}
-    for(const entry of targets){entry.kitMode='selected';entry.kits=[...new Set(kitIds)];}
+    if(!['add','replace','remove'].includes(kitMode))throw new Error('Choose an available assignment mode.');
+    const stock=new Set(bundledKits(result).map(entry=>entry.id)),included=[...result.kits.filter(kit=>kit.included).map(kit=>kit.id),...stock];
+    for(const id of kitIds)if(!stock.has(id)&&!result.kits.some(kit=>kit.id===id))throw new Error('This kit is unavailable.');
+    for(const entry of targets){
+      const previous=entry.kitMode==='selected'?entry.kits:included;
+      const next=kitMode==='add'?[...previous,...kitIds]:kitMode==='remove'?previous.filter(id=>!kitIds.includes(id)):kitIds;
+      if(!next.length)throw new Error((entry.fields.title||'A location')+' must retain at least one kit.');
+      entry.kitMode='selected';entry.kits=[...new Set(next)];
+    }
+    if(kitMode!=='remove')for(const kit of result.kits)if(kitIds.includes(kit.id))kit.included=true;
   }
   if(intro!==undefined)for(const entry of targets)entry.intro=intro;
   return result;

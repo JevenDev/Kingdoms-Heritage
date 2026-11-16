@@ -51,6 +51,10 @@ final class KitPreview {
         return (kit == null || policy == InventoryPolicy.PRESERVE ? KitStats.EMPTY : kit.stats()).preview(player, original, expected);
     }
 
+    long purseGrant() {
+        return expected == null ? 0 : kit.stats().purse();
+    }
+
     int purchaseIndex(int slot) {
         return expected == null ? -1 : expected.purchaseIndex(slot);
     }

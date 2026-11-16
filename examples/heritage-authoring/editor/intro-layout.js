@@ -18,7 +18,7 @@ function create(config){
   mode.insertBefore(styles.button,$('text-mode-visual'));
   styles.dialog.addEventListener('click',event=>{if(event.target.closest('#apply-effect,#apply-color,#apply-gradient')){styles.dialog.close();config.textFocus();}});
   const monitor=document.createElement('div');monitor.className='intro-preview-monitor';$('preview').before(monitor);monitor.append($('preview'));monitor.after(document.querySelector('.playback'));
-  const footer=document.querySelector('.preview-footer');heading.insertBefore($('phase'),setup.button);heading.insertBefore(footer.querySelector('label'),setup.button);heading.insertBefore(document.querySelector('.position-toolbar'),setup.button);heading.insertBefore($('pack-preview-scale'),setup.button);footer.remove();$('position-help').classList.add('sr-only');
+  const footer=document.querySelector('.preview-footer');heading.insertBefore($('phase'),setup.button);heading.insertBefore(footer.querySelector('label'),setup.button);$('appearance-panel').prepend(document.querySelector('.position-toolbar'));heading.insertBefore($('pack-preview-scale'),setup.button);footer.remove();$('position-help').classList.add('sr-only');
   return {monitor,settings:setup.dialog,styles:styles.dialog,help:help.dialog};
 }
 globalThis.HeritageIntroLayout={create};

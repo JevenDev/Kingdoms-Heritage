@@ -43,6 +43,20 @@ class Ledger {
     let tested=0,changed=0,partial=0;for(const key of Object.keys(this.value.packs[pack]??{})){const [spawn,kit,pool]=JSON.parse(key),route=scene(choices,images,spawn,kit,pool);if(!route)continue;const status=this.status(pack,route).state;if(status==='tested')tested++;else if(status==='changed')changed++;else if(status==='partial')partial++;}
     return {total:count(choices),tested,changed,partial};
   }
+  changed(pack,choices,images,filter=''){
+    const routes=[];
+    for(const key of Object.keys(this.value.packs[pack]??{})){
+      const [spawn,kit,pool]=JSON.parse(key);if(filter&&spawn!==filter)continue;
+      const route=scene(choices,images,spawn,kit,pool);if(route&&this.status(pack,route).state==='changed')routes.push(route);
+    }
+    const spawns=new Map(choices.spawns.map((entry,index)=>[entry.id,index])),kits=new Map(choices.kits.map((entry,index)=>[entry.id,index]));
+    return routes.sort((a,b)=>spawns.get(a.spawnId)-spawns.get(b.spawnId)||kits.get(a.kitId)-kits.get(b.kitId)||(a.poolIndex??0)-(b.poolIndex??0));
+  }
+  resumeChanged(pack,route){
+    const record=this.value.packs[pack]?.[route.key],part=Object.keys(route.parts).find(key=>record?.parts[key]!==route.parts[key]);
+    const phase={location:'location-confirm',kit:'kit',arrival:'review',intro:'intro'}[part]??'location-confirm';
+    return {spawnId:route.spawnId,kitId:route.kitId,poolIndex:route.poolIndex,phase:route.kit.shop&&['review','intro'].includes(phase)?'kit-shop':phase};
+  }
   serialize(){return JSON.parse(JSON.stringify(this.value));}
 }
 const api={hash,pictures,scene,count,page,Ledger};if(typeof module!=='undefined')module.exports=api;else globalThis.HeritageCoverage=api;

@@ -176,7 +176,7 @@ function layout(document,{mode='player',profiles,cosmetics=false,offset=0,purse}
   const inventoryFile=mode==='accessories'?'accessories/gui/container/accessories_inventory.png':'inventory.png';
   blit(inventoryFile,result.inventoryX,result.inventoryY,0,0,176,166);
   if(mode==='player'&&document.enabled!==false&&purse?.length){
-    result.controls.push({key:'purse',kind:'purse',label:'Edit Numismatic purse',x:160,y:5,width:11,height:13});
+    result.controls.push({key:'purse',kind:'purse',label:'Purse',x:160,y:5,width:11,height:13});
   }
   for(const position of K.positions)result.slots.push({...position,id:position.index,inventory:'player',x:position.index===40&&mode==='accessories'?result.inventoryX+152:position.x+result.inventoryX,y:position.y+result.inventoryY});
   return result;

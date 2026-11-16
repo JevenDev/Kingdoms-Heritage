@@ -98,10 +98,7 @@ function create(config) {
   const addButton=form.querySelector('button'),testShop=$('shop-test'),previous=$('shop-prev'),next=$('shop-next');
   const columnsInput=$('shop-columns'),addPage=$('shop-add-page'),panel=$('shop-tray-panel');
   const sectionsPanel=$('shop-sections'),sectionList=$('shop-section-list'),addSection=$('shop-add-section');
-  const narrow=matchMedia('(max-width:550px)'),preview=$('shop-preview');
-  const fitPreview=()=>{preview.open=!narrow.matches;};
-  fitPreview();narrow.addEventListener('change',fitPreview);
-  const inlineTabs=$('shop-inline-tabs'),meter=$('shop-preview-bar');
+  const preview=$('shop-preview'),inlineTabs=$('shop-inline-tabs');
   let page=0,draftPage=false,selection=-1,activeSection='',rows=[],cells=[],sectionRows=[],tabs=[],locked=false;
   let drawnColumns=0;
   const texture=new Image();
@@ -236,6 +233,10 @@ function create(config) {
       }
     }
   }
+  function offerTooltip(index){
+    const offer=config.getKit().shop?.offers[index];if(!offer)return [];
+    return [...T.tooltip(offer.item),T.parse('Price: '+offer.cost+' points',{color:T.colors.gold}),T.parse('Purchase limit: '+(offer.limit??1),{color:T.colors.gray})];
+  }
   function makeRow(){
     const element=label('li','shop-offer'),identity=label('div','shop-offer-item');
     const icon=label('span','shop-offer-icon'),name=label('span','shop-offer-name'),position=label('span','shop-offer-number');
@@ -245,6 +246,7 @@ function create(config) {
     hint.id='shop-budget-hint-'+rows.length;hint.hidden=true;
     const row={element,icon,name,position,hint};
     identity.addEventListener('pointerdown',event=>dragOffer(event,row.index));
+    V.bindTooltip(identity,()=>offerTooltip(row.index));
     for(const [field,title,min,max,help] of [
       ['count','Count',1,99,'Items the player gets each time they buy this offer.'],
       ['cost','Price',0,1000000,'Shop points charged for one purchase. Use 0 to make it free.'],
@@ -322,6 +324,7 @@ function create(config) {
     if(!cell.button){
       cell.button=button('',()=>{highlight(cell.index);focusRow(cell.index,'count');});
       cell.button.className='shop-cell';
+      V.bindTooltip(cell.button,()=>offerTooltip(cell.index));
       cell.button.addEventListener('pointerdown',event=>dragOffer(event,cell.index));
       cell.icon=label('span','');
       cell.cost=label('span','shop-cell-cost');
@@ -361,7 +364,6 @@ function create(config) {
     $('shop-empty').textContent=reason?.message??'Pick an item from the browser or enter an ID to start a shop.';
     $('shop-pages').hidden=!offers.length;
     renderSections(sections,!!offers.length);renderInlineTabs(sections);
-    meter.alt='0 / '+(shop?.budget??0)+' points spent';
     $('shop-page').textContent=indices.length||draftPage?'Page '+(page+1)+' of '+pageCount+' · Columns '+(page*columns+1)+'–'+Math.min(MAX_POSITION_COLUMN,(page+1)*columns):'No offers in this section.';
     previous.disabled=page===0;next.disabled=page+1===pageCount;
     addPage.disabled=addButton.disabled||!layout.slots.length||draftPage||pages*columns>=MAX_POSITION_COLUMN;
@@ -371,7 +373,7 @@ function create(config) {
       const row=rows[offset],offer=offers[index],name=T.name(offer.item),position=indices.indexOf(index);
       row.index=index;row.element.dataset.slot='offer:'+index;
       row.previous=indices[position-1];row.next=indices[position+1];row.position.textContent=String(index+1);
-      iconFor(row.icon,offer.item);row.name.textContent=name;row.name.title=offer.item.id;
+      iconFor(row.icon,offer.item);row.name.textContent=name;
       row.count.value=offer.item.count??1;row.count.max=K.maxCount(offer.item);
       row.cost.value=offer.cost;row.limit.value=offer.limit??1;
       row.sectionLabel.hidden=!sections.length;row.section.disabled=locked;

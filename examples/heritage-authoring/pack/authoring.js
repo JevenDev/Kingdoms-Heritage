@@ -3,6 +3,7 @@
 function create(config){
   const $=id=>document.getElementById(id),E=HeritageEditing,histories=new Map(),selected=new Set(),checkpointKey='heritage.packCheckpoints.v1';
   let selecting=false,busy=false,dragged='',bulkKind='kits';
+  const modeLabel=document.createElement('label'),mode=document.createElement('select');modeLabel.className='stack';modeLabel.textContent='Kit assignment';mode.id='bulk-kit-mode';mode.append(new Option('Add kits','add'),new Option('Replace kit choices','replace'),new Option('Remove kits','remove'));modeLabel.append(mode);$('bulk-kits').before(modeLabel);
   const current=()=>{const value=config.read();if(!histories.has(value.id))histories.set(value.id,new E.History(value.pack,value.libraries));return {value,history:histories.get(value.id)};};
   const report=message=>{$('project-status').textContent=message;};
   function refresh(){
@@ -10,7 +11,7 @@ function create(config){
     $('pack-undo').dataset.tooltip=JSON.stringify(['Undo pack edit',history.canUndo?'Ctrl+Z. Undo '+history.actions[history.index-1].label.toLowerCase()+'.':'No pack edits to undo.']);$('pack-redo').dataset.tooltip=JSON.stringify(['Redo pack edit',history.canRedo?'Ctrl+Y. Redo '+history.actions[history.index].label.toLowerCase()+'.':'No pack edits to redo.']);
     const ids=new Set(config.read().pack.locations.map(entry=>entry.id));for(const id of selected)if(!ids.has(id))selected.delete(id);
     $('select-locations').textContent=selecting?'Done':'Select';$('select-locations').setAttribute('aria-pressed',String(selecting));
-    $('location-selection-controls').hidden=!selecting;$('location-selection-status').hidden=!selecting;$('location-selection-status').textContent=selected.size+' selected';$('bulk-location-actions').hidden=selected.size<2;
+    $('location-selection-controls').hidden=!selecting;$('location-selection-status').hidden=!selecting;$('location-selection-status').textContent=selected.size+' selected';$('bulk-location-actions').hidden=!selected.size;
   }
   function capture(options){try{const {value,history}=current();history.record(value.pack,value.libraries,options);refresh();}catch(error){report('Pack history could not record this change: '+error.message);}}
   async function restore(direction){
@@ -63,7 +64,7 @@ function create(config){
   });
   $('select-locations').addEventListener('click',()=>{selecting=!selecting;if(!selecting)selected.clear();config.locations();refresh();});
   $('clear-location-selection').addEventListener('click',()=>{selected.clear();config.locations();refresh();});
-  $('select-all-locations').addEventListener('click',()=>{for(const entry of config.read().pack.locations)selected.add(entry.id);config.locations();refresh();});
+  $('select-all-locations').addEventListener('click',()=>{for(const id of config.visible?.()??config.read().pack.locations.map(entry=>entry.id))selected.add(id);config.locations();refresh();});
   function decorate(row,entry){
     row.dataset.locationRow=entry.id;row.draggable=true;row.classList.toggle('selecting',selecting);
     if(selecting){const field=document.createElement('input');field.type='checkbox';field.checked=selected.has(entry.id);field.dataset.selectLocation=entry.id;field.setAttribute('aria-label','Select '+(entry.fields.title||'Untitled location'));row.prepend(field);}
@@ -87,11 +88,11 @@ function create(config){
     [ids[index],ids[next]]=[ids[next],ids[index]];config.reorder(ids);$('locations').querySelector('[data-open-location="'+CSS.escape(button.dataset.openLocation)+'"]').focus();
   });
   function openBulk(kind){
-    bulkKind=kind;$('bulk-kits').hidden=kind!=='kits';$('bulk-intro-field').hidden=kind!=='intro';$('bulk-heading').textContent=(kind==='kits'?'Assign kits':'Assign intro')+' to '+selected.size+' locations';$('bulk-status').textContent='';
-    $('bulk-help').textContent=kind==='kits'?'Replaces kit choices for the selected locations.':'Changes the default intro. Pool destination overrides are kept.';
+    bulkKind=kind;modeLabel.hidden=kind!=='kits';mode.value='add';$('bulk-kits').hidden=kind!=='kits';$('bulk-intro-field').hidden=kind!=='intro';$('bulk-heading').textContent=(kind==='kits'?'Assign kits':'Assign intro')+' to '+selected.size+' location'+(selected.size===1?'':'s');$('bulk-status').textContent='';
+    $('bulk-help').textContent=kind==='kits'?'Adds the chosen kits while keeping existing choices.':'Changes the default intro. Pool destination overrides are kept.';
     if(kind==='kits'){
       const list=$('bulk-kits');list.replaceChildren();for(const kit of config.kits()){
-        const label=document.createElement('label'),field=document.createElement('input');label.className='check';field.type='checkbox';field.value=kit.id;field.checked=config.read().pack.locations.filter(entry=>selected.has(entry.id)).every(entry=>config.kitIds(entry).includes(kit.id));label.append(field,document.createTextNode(kit.name));list.append(label);
+        const label=document.createElement('label'),field=document.createElement('input');label.className='check';field.type='checkbox';field.value=kit.id;field.checked=false;label.append(field,document.createTextNode(kit.name));list.append(label);
       }
     }else{
       const select=$('bulk-intro');select.replaceChildren(new Option('Choose an intro…',':choose'),new Option('No intro',''),...config.intros().map(entry=>new Option(entry.name,entry.id)));select.options[0].disabled=true;select.value=':choose';
@@ -100,8 +101,9 @@ function create(config){
   }
   function bulkReady(){$('apply-bulk').disabled=bulkKind==='kits'?!$('bulk-kits').querySelector('input:checked'):$('bulk-intro').value===':choose';}
   $('bulk-assign-kits').addEventListener('click',()=>openBulk('kits'));$('bulk-assign-intro').addEventListener('click',()=>openBulk('intro'));
+  mode.addEventListener('change',()=>{$('bulk-help').textContent={add:'Adds the chosen kits while keeping existing choices.',replace:'Replaces all kit choices for the selected locations.',remove:'Removes the chosen kits while keeping other choices. Every location must retain at least one kit.'}[mode.value];});
   $('bulk-form').addEventListener('change',bulkReady);
-  $('bulk-form').addEventListener('submit',event=>{event.preventDefault();try{const changes=bulkKind==='kits'?{kitIds:[...$('bulk-kits').querySelectorAll('input:checked')].map(field=>field.value)}:{intro:$('bulk-intro').value};if(config.bulk([...selected],changes))$('bulk-dialog').close();}catch(error){$('bulk-status').textContent=error.message;}});
+  $('bulk-form').addEventListener('submit',event=>{event.preventDefault();try{const changes=bulkKind==='kits'?{kitIds:[...$('bulk-kits').querySelectorAll('input:checked')].map(field=>field.value),kitMode:mode.value}:{intro:$('bulk-intro').value};if(config.bulk([...selected],changes))$('bulk-dialog').close();}catch(error){$('bulk-status').textContent=error.message;}});
   async function localCopy(){
     const context=config.shared();if(!context||busy)return;busy=true;refresh();
     try{

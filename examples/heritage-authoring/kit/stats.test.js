@@ -4,7 +4,7 @@ const test=require('node:test'),assert=require('node:assert/strict');
 require('./catalog.js');
 const Kit=require('./engine.js'),Stats=require('./stats.js');
 require('./equipment-data.js');
-const Equipment=require('./equipment.js');
+const Equipment=require('./equipment.js'),Mouse=require('./mouse.js');
 
 const listedPurse=purse=>'{"title":"Starter","items":[],"starting_resources":{"numismaticoverhaul:purse":'+purse+'}}';
 const readPurse=purse=>Kit.read(listedPurse(purse)).document;
@@ -31,13 +31,29 @@ test('the inventory purse uses normalized coins and only appears in a funded pla
   const purse=Stats.pursePreview(kit);
   assert.deepEqual(purse,[['gold',1],['silver',1],['bronze',25]]);
   const [control]=Equipment.layout(kit,{purse}).controls;
-  assert.deepEqual(control,{key:'purse',kind:'purse',label:'Edit Numismatic purse',x:160,y:5,width:11,height:13});
+  assert.deepEqual(control,{key:'purse',kind:'purse',label:'Purse',x:160,y:5,width:11,height:13});
   for(const mode of ['curios','accessories']){
     assert.equal(Equipment.layout(kit,{mode,purse}).controls.some(control=>control.kind==='purse'),false);
   }
   assert.deepEqual(Stats.pursePreview(readPurse('{"gold":0,"bronze":0}')),[]);
+  assert.deepEqual(Stats.pursePreview(readPurse('{"gold":2147483648}')),[['gold',2147483647]]);
   assert.deepEqual(Equipment.layout(readPurse('0'),{purse:[]}).controls,[]);
   assert.deepEqual(Equipment.layout({...kit,enabled:false},{purse}).controls,[]);
+});
+
+test('withdrawing from a kit purse merges coin stacks and preserves currency',()=>{
+  const kit=readPurse('125');
+  kit.items.push({index:0,item:{id:Stats.coinId('bronze'),count:97}});
+  const next=Mouse.withdrawPurse(kit,105n);
+  assert.equal(Stats.purseBalance(next),20n);
+  assert.deepEqual(Kit.itemAt(next,0),{id:Stats.coinId('bronze'),count:99});
+  assert.deepEqual(Kit.itemAt(next,1),{id:Stats.coinId('silver'),count:1});
+  assert.deepEqual(Kit.itemAt(next,2),{id:Stats.coinId('bronze'),count:3});
+  assert.equal(Stats.purseBalance(kit),125n);
+  assert.equal(Kit.itemAt(kit,0).count,97);
+  assert.throws(()=>Mouse.withdrawPurse(kit,126n),/purse balance/);
+  assert.throws(()=>Mouse.withdrawPurse(kit,105n,slot=>slot===0),/Make room/);
+  assert.equal(Kit.itemAt(kit,0).count,97);
 });
 
 test('large purse amounts survive JSON reformatting and visual edits exactly',()=>{
@@ -92,4 +108,53 @@ test('invalid stats report the path for the JSON editor',()=>{
       assert.deepEqual(error.path,expected);return true;
     });
   }
+});
+
+Stats.configure(require('./assets/attributes.json'),require('./assets/durability.json'));
+const worn=(index,id,components)=>({index,item:{id,components}});
+const bonus=(attribute,amount,operation='add_value')=>({attribute,amount,operation});
+const custom=(type,amount,operation='add_value',slot='any',id='test:bonus')=>({type,id,amount,operation,slot});
+
+test('stat previews include equipped armor and fresh player health and hunger',()=>{
+  const kit={items:[worn(38,'minecraft:leather_chestplate'),worn(0,'minecraft:diamond_helmet')]},before=JSON.stringify(kit);
+  assert.deepEqual(Stats.preview(kit),{armor:3,health:20,maxHealth:20,hunger:20,bonuses:[],unknown:[]});
+  assert.equal(JSON.stringify(kit),before);
+  kit.items[1].index=39;assert.equal(Stats.preview(kit).armor,6);
+});
+
+test('stat previews apply additions then adjusted base and total multipliers before native clamping',()=>{
+  const kit={starting_health:70,starting_hunger:7,items:[worn(38,'minecraft:iron_chestplate',{'minecraft:attribute_modifiers':{modifiers:[custom(Stats.maxHealth,10),custom(Stats.maxHealth,.5,'add_multiplied_base','chest','test:base')]}})],attributes:[bonus(Stats.maxHealth,.5,'add_multiplied_total'),bonus(Stats.armor,40)]};
+  const value=Stats.preview(kit);assert.equal(value.maxHealth,67.5);assert.equal(value.health,67.5);assert.equal(value.armor,30);assert.equal(value.hunger,7);
+  kit.attributes=[bonus(Stats.maxHealth,-100),bonus(Stats.armor,-10)];assert.equal(Stats.preview(kit).maxHealth,1);assert.equal(Stats.preview(kit).armor,0);
+});
+
+test('explicit components replace defaults, respect slot groups and replace duplicate modifier IDs',()=>{
+  const modifiers=[custom(Stats.armor,4,'add_value','hand')];
+  const kit={selected_slot:2,items:[worn(38,'minecraft:diamond_chestplate',{'minecraft:attribute_modifiers':[]}),worn(2,'minecraft:stick',{'minecraft:attribute_modifiers':modifiers}),worn(40,'minecraft:stick',{'minecraft:attribute_modifiers':modifiers})]};
+  assert.equal(Stats.preview(kit).armor,4);kit.items[2].index=5;assert.equal(Stats.preview(kit).armor,4);kit.selected_slot=0;assert.equal(Stats.preview(kit).armor,0);
+  kit.items=[worn(38,'minecraft:diamond_chestplate',{'!minecraft:attribute_modifiers':{}})];assert.equal(Stats.preview(kit).armor,0);
+});
+
+test('extra attributes retain their operations and disabled kits have no grants',()=>{
+  const kit={starting_health:10,starting_hunger:5,attributes:[bonus('generic.armor',2),bonus('generic.max_health',4),bonus('minecraft:generic.movement_speed',.2,'add_multiplied_total'),bonus('custom:mana',10)]};
+  assert.deepEqual(Stats.preview(kit).bonuses,kit.attributes.slice(2));
+  assert.deepEqual(Stats.preview({...kit,enabled:false}),Stats.preview({}));
+});
+
+test('unknown mod equipment is identified without inventing its native attributes',()=>{
+  assert.deepEqual(Stats.preview({items:[worn(38,'custom:coat')]}).unknown,['custom:coat']);
+  assert.deepEqual(Stats.preview({items:[worn(38,'custom:coat',{'minecraft:attribute_modifiers':[]})]}).unknown,[]);
+});
+
+test('stat icons stay synchronized with the game sprites',()=>{
+  const fs=require('node:fs'),path=require('node:path');
+  for(const name of ['armor','health','hunger','info'])assert.deepEqual(fs.readFileSync(path.join(__dirname,'assets/stats',name+'.png')),fs.readFileSync(path.join(__dirname,'../../../src/main/resources/assets/kingdomsheritage/textures/gui/sprites/kit/stat_icon_'+name+'.png')));
+});
+
+test('damaged item previews use native durability defaults, overrides and unbreakable rules',()=>{
+  const sword={id:'minecraft:diamond_sword',components:{'minecraft:damage':780}};
+  assert.equal(Stats.durability(sword).maximum,1561);assert.equal(Stats.durability(sword).width,7);
+  sword.components['minecraft:max_damage']=1000;assert.equal(Stats.durability(sword).remaining,220);
+  sword.components['minecraft:unbreakable']={};assert.equal(Stats.durability(sword),null);
+  assert.equal(Stats.durability({id:'minecraft:stick',components:{'minecraft:damage':1}}),null);
 });

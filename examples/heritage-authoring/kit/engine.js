@@ -7,6 +7,10 @@ const MAX_COUNT=2147483647;
 const stats=typeof module!=='undefined'?require('./stats.js'):HeritageKitStats;
 const JsonEditor=typeof module!=='undefined'?require('../editor/json-editor.js'):HeritageJsonEditor;
 const items=new Map(HeritageItems.items.map(item=>[item.id,item]));
+for(const coin of Object.keys(stats.denominations)){
+  const id=stats.coinId(coin);
+  items.set(id,{id,name:coin[0].toUpperCase()+coin.slice(1)+' Coin',max:99,coin});
+}
 const issue=(message,path=[])=>Object.assign(new Error(message),{path});
 const integer=(value,min,max,name,path=[])=>{if(!Number.isInteger(value)||value<min||value>max)throw issue(name+' must be a whole number from '+min+' to '+max+'.',path);};
 function itemWarnings(entry) {

@@ -2,19 +2,23 @@
 'use strict';
 function create(config){
   const $=id=>document.getElementById(id),C=HeritageCoverage,key='heritage.previewCoverage.v1',pending=new Map();
-  let ledger,blocked=false,message='',revision=0,filter='',offset=0,lastPack='',snapshot=null,opening=false,rows=[];
+  let ledger,blocked=false,message='',revision=0,filter='',offset=0,lastPack='',snapshot=null,opening=false,rows=[],changedOnly=false;
   try{ledger=new C.Ledger(localStorage.getItem(key));}catch(error){ledger=new C.Ledger();blocked=true;message='Saved preview coverage could not load and was kept. New results are available for this session. '+error.message;}
+  const stateField=document.createElement('label'),stateSelect=document.createElement('select'),changedButton=document.createElement('button');
+  stateField.className='stack coverage-filter';stateField.textContent='Preview status';stateSelect.setAttribute('aria-label','Filter preview status');stateSelect.replaceChildren(new Option('All paths','all'),new Option('Changed since preview','changed'));stateField.append(stateSelect);const filters=document.createElement('div'),locationField=$('coverage-location').parentElement;filters.className='coverage-filters';locationField.before(filters);filters.append(locationField,stateField);
+  changedButton.type='button';changedButton.textContent='Preview next changed path';changedButton.hidden=true;$('preview-flow').after(changedButton);
   const report=text=>{$('coverage-status').textContent=text;};
   const name=(value,kind,translations)=>HeritageFlow.label(value,kind,translations);
   function resumeState(){const value=config.get();$('resume-preview').hidden=!pending.has(value.id);$('resume-preview').disabled=opening||!!value.output?.errors.length;}
   function refresh(){
     resumeState();const request=++revision,value=config.get();if(!config.visible())return;
-    if(value.id!==lastPack){lastPack=value.id;filter='';offset=0;}
-    if(value.output.errors.length){$('coverage-summary').textContent='Resolve the pack issues to inspect preview paths.';config.summary?.('Unavailable');$('coverage-rows').replaceChildren();$('coverage-pagination').hidden=true;return;}
+    if(value.id!==lastPack){lastPack=value.id;filter='';offset=0;changedOnly=false;}
+    if(value.output.errors.length){changedButton.hidden=true;$('coverage-summary').textContent='Resolve the pack issues to inspect preview paths.';config.summary?.('Unavailable');$('coverage-rows').replaceChildren();$('coverage-pagination').hidden=true;return;}
     HeritageFlowPreview.catalog(value.output).then(data=>{
       if(request!==revision||value.id!==config.get().id)return;const choices=data.choices,images=C.pictures(value.output),summary=ledger.summary(value.id,choices,images),select=$('coverage-location');
       select.replaceChildren(new Option('All locations',''),...choices.spawns.map(spawn=>new Option(name(spawn,'title',data.translations),spawn.id)));if(!choices.spawns.some(spawn=>spawn.id===filter))filter='';select.value=filter;
-      const total=C.count(choices,filter);offset=Math.max(0,Math.min(offset,Math.floor(Math.max(0,total-1)/25)*25));rows=C.page(choices,images,{filter,offset});
+      const changed=ledger.changed(value.id,choices,images,filter),total=changedOnly?changed.length:C.count(choices,filter);offset=Math.max(0,Math.min(offset,Math.floor(Math.max(0,total-1)/25)*25));rows=changedOnly?changed.slice(offset,offset+25):C.page(choices,images,{filter,offset});
+      stateSelect.value=changedOnly?'changed':'all';changedButton.hidden=!summary.changed;changedButton.textContent='Preview next changed path ('+summary.changed+')';
       const text=summary.tested+' of '+summary.total+' paths previewed in the browser'+(summary.changed?' · '+summary.changed+' changed since preview':'')+(summary.partial?' · '+summary.partial+' partly previewed':'');
       $('coverage-summary').textContent=text;config.summary?.(text);
       const body=$('coverage-rows');body.replaceChildren();
@@ -24,7 +28,7 @@ function create(config){
         const actions=document.createElement('td'),tryPath=document.createElement('button');tryPath.type='button';tryPath.dataset.tryPath=index;tryPath.textContent='Preview path';actions.append(tryPath);
         if(config.editable(route)){const edit=document.createElement('button');edit.type='button';edit.dataset.editPath=index;edit.textContent='Edit location';actions.append(edit);}row.append(actions);body.append(row);
       }
-      $('coverage-pagination').hidden=total<=25;$('coverage-page').textContent=total?'Paths '+(offset+1)+'–'+Math.min(offset+25,total)+' of '+total:'No playable paths';$('coverage-previous').disabled=offset===0;$('coverage-next').disabled=offset+25>=total;report(message);
+      $('coverage-pagination').hidden=total<=25;$('coverage-page').textContent=total?'Paths '+(offset+1)+'–'+Math.min(offset+25,total)+' of '+total:changedOnly?'No paths changed since preview':'No playable paths';$('coverage-previous').disabled=offset===0;$('coverage-next').disabled=offset+25>=total;report(message||(changedOnly&&!total?'No paths changed since preview.':''));
     }).catch(error=>{if(request===revision){report('Preview paths could not load: '+error.message);config.summary?.('Preview coverage unavailable: '+error.message);}});
   }
   async function open(options={}){
@@ -33,9 +37,10 @@ function create(config){
       if(!config.prepare())return;const value=config.get();if(value.output.errors.length){report('Resolve the highlighted pack issues before previewing.');return;}
       const data=await HeritageFlowPreview.catalog(value.output);if(value.id!==config.get().id||value.output!==config.get().output){report('The pack changed while the preview was loading. Start it again to use the latest version.');return;}
       let target=options.route??(options.resume?pending.get(value.id):null);
+      if(options.changed){const route=ledger.changed(value.id,data.choices,C.pictures(value.output))[0];if(!route){report('No paths changed since preview.');refresh();return;}target=ledger.resumeChanged(value.id,route);}
       if(options.spawnId){const first=C.page(data.choices,C.pictures(value.output),{filter:options.spawnId,limit:1})[0];if(!first){report('This location has no playable path. Check its kits and destinations.');return;}target={spawnId:first.spawnId,kitId:first.kitId,poolIndex:first.poolIndex};}
       if(options.route&&!C.scene(data.choices,C.pictures(value.output),target.spawnId,target.kitId,target.poolIndex)){report('That path changed. Choose an available path.');return;}
-      snapshot={id:value.id,choices:data.choices,images:C.pictures(value.output)};config.started();await HeritageFlowPreview.open(value.output,value.state,options.resume?{resume:target}:target?{route:target}:{});
+      snapshot={id:value.id,choices:data.choices,images:C.pictures(value.output)};config.started();await HeritageFlowPreview.open(value.output,value.state,options.resume||options.changed?{resume:target}:target?{route:target}:{});
     }catch(error){report('Preview could not open: '+error.message);}finally{opening=false;resumeState();}
   }
   function complete(detail){
@@ -44,6 +49,8 @@ function create(config){
     if(!blocked){try{HeritageProject.write(localStorage,{[key]:ledger.serialize()});message='';}catch(error){message='Preview completed. Preview results could not be saved: '+error.message;}}
     if(done&&detail.phase==='complete')config.completed();refresh();
   }
+  stateSelect.addEventListener('change',()=>{changedOnly=stateSelect.value==='changed';offset=0;refresh();});
+  changedButton.addEventListener('click',()=>open({changed:true}));
   $('coverage-location').addEventListener('change',event=>{filter=event.target.value;offset=0;refresh();});
   $('coverage-previous').addEventListener('click',()=>{offset=Math.max(0,offset-25);refresh();});$('coverage-next').addEventListener('click',()=>{offset+=25;refresh();});
   $('coverage-rows').addEventListener('click',event=>{

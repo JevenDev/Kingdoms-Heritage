@@ -50,7 +50,6 @@
   "screen.kingdomsheritage.kit_stats.add_value": "%s %s",
   "screen.kingdomsheritage.kit_stats.add_multiplied_base": "%s %s of base",
   "screen.kingdomsheritage.kit_stats.add_multiplied_total": "%s %s of total",
-  "screen.kingdomsheritage.kit_stats.purse": "Numismatic purse +%s",
   "screen.kingdomsheritage.kit": "Choose your starting kit",
   "screen.kingdomsheritage.previous_kit": "Previous kit",
   "screen.kingdomsheritage.next_kit": "Next kit",

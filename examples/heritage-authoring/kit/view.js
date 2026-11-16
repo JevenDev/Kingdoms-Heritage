@@ -1,6 +1,8 @@
 (() => {
 'use strict';
 const K=HeritageKit,T=HeritageItemText,images=new Map(),glyphs=new Map(),tints=new Map(),glyphChoices=new Map();
+const purseTitleColor='#bd9838';
+const coinImage=coin=>'numismatic/'+coin+'_coin.png';
 let assetPromise,playerGeometry,tooltip,tooltipKey='',tooltipState=null,tooltipFrame=null;
 const reducedMotion=matchMedia('(prefers-reduced-motion: reduce)');
 const assetBase=new URL('assets/',document.currentScript.src),atlasUrls=[0,1].map(page=>new URL('items-'+page+'.png',assetBase).href);
@@ -8,7 +10,7 @@ function image(name) {return images.get(name);}
 async function assets() {
   if(assetPromise)return assetPromise;
   assetPromise=(async()=>{
-    const files=[...HeritagePlayerData.textures.map(texture=>texture.file),...Object.keys(HeritageEquipmentData.assets),'inventory.png','steve.png','items-0.png','items-1.png','numismatic/purse_widget.png',...['helmet','chestplate','leggings','boots','shield'].map(slot=>'empty_armor_slot_'+slot+'.png'),'armor/leather_layer_1_overlay.png','armor/leather_layer_2_overlay.png',...['leather','chainmail','iron','gold','diamond','netherite','turtle'].flatMap(material=>[1,2].map(layer=>'armor/'+material+'_layer_'+layer+'.png')).filter(file=>!file.includes('turtle_layer_2'))];
+    const files=[...HeritagePlayerData.textures.map(texture=>texture.file),...Object.keys(HeritageEquipmentData.assets),...['armor','health','hunger','info',...['armor','health','hunger'].flatMap(kind=>['empty','half','full'].map(state=>kind+'_'+state))].map(name=>'stats/'+name+'.png'),'inventory.png','steve.png','items-0.png','items-1.png','numismatic/purse_widget.png',...['gold','silver','bronze'].map(coinImage),...['helmet','chestplate','leggings','boots','shield'].map(slot=>'empty_armor_slot_'+slot+'.png'),'armor/leather_layer_1_overlay.png','armor/leather_layer_2_overlay.png',...['leather','chainmail','iron','gold','diamond','netherite','turtle'].flatMap(material=>[1,2].map(layer=>'armor/'+material+'_layer_'+layer+'.png')).filter(file=>!file.includes('turtle_layer_2'))];
     const base=assetBase;
     await Promise.all([fetch(new URL('player/models.bin',base)).then(response=>{if(!response.ok)throw new Error('Player models could not load.');return response.arrayBuffer();}).then(buffer=>{playerGeometry=buffer;}),...files.map(async file=>{const img=new Image();img.src=new URL(file,base);await img.decode();images.set(file,img);})]);
     for(const provider of HeritageAssets.providers) {
@@ -25,6 +27,7 @@ async function assets() {
     glyphs.get(' ').advance=4;
     for(const [ch,glyph] of glyphs){if(!glyphChoices.has(glyph.advance))glyphChoices.set(glyph.advance,[]);glyphChoices.get(glyph.advance).push(ch);}
     const response=await fetch(new URL('text.json',base));if(!response.ok)throw new Error('Item text data could not load.');T.configure(await response.json());
+    const attributes=await fetch(new URL('attributes.json',base));if(!attributes.ok)throw new Error('Item attributes could not load.');const durability=await fetch(new URL('durability.json',base));if(!durability.ok)throw new Error('Item durability could not load.');HeritageKitStats.configure(await attributes.json(),await durability.json());
   })();
   return assetPromise;
 }
@@ -43,7 +46,10 @@ function icon(id) {
   const node=document.createElement('span'),item=K.items.get(K.normalize(id));
   node.className='mc-item';node.setAttribute('aria-hidden','true');
   if(item?.page!==undefined) {node.style.backgroundImage='url("'+atlasUrls[item.page]+'")';node.style.backgroundPosition=-item.x+'px '+(-item.y)+'px';}
-  else {
+  else if(item?.coin){
+    node.classList.add('mc-mod-icon');
+    node.style.backgroundImage='url("'+new URL(coinImage(item.coin),assetBase).href+'")';
+  }else {
     node.classList.add('mc-missing');
     const show=sprite=>{
       if(!sprite)return;
@@ -56,11 +62,13 @@ function icon(id) {
 function item(ctx,stack,x,y,onMissing,offsetX=0) {
   const data=K.items.get(K.normalize(stack.id)),iconX=x+offsetX;
   if(data?.page!==undefined)ctx.drawImage(image('items-'+data.page+'.png'),data.x,data.y,32,32,iconX,y,16,16);
+  else if(data?.coin&&image(coinImage(data.coin)))ctx.drawImage(image(coinImage(data.coin)),iconX,y,16,16);
   else if(data?.sprite)ctx.drawImage(data.sprite.canvas,iconX,y,16,16);
   else {
     if(data?.loadIcon&&data.sprite===undefined)onMissing?.(data);
     ctx.fillStyle='#000';ctx.fillRect(iconX,y,16,16);ctx.fillStyle='#f0f';ctx.fillRect(iconX,y,8,8);ctx.fillRect(iconX+8,y+8,8,8);
   }
+  const bar=HeritageKitStats.durability(stack);if(bar){ctx.fillStyle='#000';ctx.fillRect(x+2,y+13,13,2);ctx.fillStyle='hsl('+bar.hue+' 100% 50%)';ctx.fillRect(x+2,y+13,bar.width,1);}
   if((stack.count??1)>1) {const count=String(stack.count);text(ctx,count,x+17-textWidth(count),y+9,'#fff',true);}
 }
 function glyphAdvance(glyph){return (glyphs.get(glyph.ch)||glyphs.get('?')).advance+(glyph.bold?1:0);}
@@ -86,32 +94,61 @@ function drawTooltipText(ctx,line,x,y,tick){
     }
   }
 }
-function showTooltip(lines,x,y,host=document.body){
+function showTooltip(lines,x,y,owner,coins=[],hud=null){
   if(!glyphs.size)return;
   if(!lines.length){hideTooltip();return;}
-  if(!tooltip){tooltip=document.createElement('canvas');tooltip.className='mc-tooltip';document.body.append(tooltip);}
+  if(!tooltip){tooltip=document.createElement('canvas');tooltip.id='inventory-tooltip';tooltip.className='mc-tooltip';tooltip.setAttribute('popover','manual');document.body.append(tooltip);}
+  if(tooltipState?.owner!==owner){hideTooltip();owner.setAttribute('aria-describedby',((owner.getAttribute('aria-describedby')||'')+' '+tooltip.id).trim());}
+  const host=owner.closest('dialog[open]')??document.body;
   if(tooltip.parentElement!==host)host.append(tooltip);
-  tooltipState={lines,x,y,host};
+  tooltipState={lines,x,y,owner,coins,hud};
   const styled=lines.map((line,index)=>Array.isArray(line)?line:T.parse(line,{color:index?'#aaaaaa':'#ffffff'}));
   const limit=Math.max(20,Math.min(280,Math.floor((innerWidth-20)/2)-8)),wrapped=T.wrap(styled,limit,glyphAdvance);
   const animated=wrapped.some(line=>line.some(glyph=>glyph.obfuscated))&&!reducedMotion.matches,tick=animated?Math.floor(performance.now()/50):0;
-  const width=Math.max(...wrapped.map(line=>line.reduce((sum,glyph)=>sum+glyphAdvance(glyph),0)))+8,height=(wrapped.length===1?8:wrapped.length*10)+8,key=JSON.stringify([wrapped,width,tick]);
+  const width=Math.max(...wrapped.map(line=>line.reduce((sum,glyph)=>sum+glyphAdvance(glyph),0)),
+    ...coins.map(([,count])=>12+textWidth(String(count))),hud?Math.min(10,hud.slots)*8+1:0)+8;
+  const hudHeight=hud?9+Math.max(0,Math.ceil(hud.slots/10)-1)*Math.max(3,10-Math.max(0,Math.ceil(hud.slots/10)-2))+2:0;
+  const rows=wrapped.length+coins.length,height=(rows===1?8:rows*10)+8+hudHeight,key=JSON.stringify([wrapped,coins,hud,width,tick]);
   if(key!==tooltipKey){
     tooltipKey=key;tooltip.width=width*2;tooltip.height=height*2;
     const ctx=tooltip.getContext('2d');ctx.scale(2,2);ctx.imageSmoothingEnabled=false;ctx.fillStyle='#100010f0';ctx.fillRect(1,0,width-2,height);ctx.fillRect(0,1,width,height-2);
     const border=ctx.createLinearGradient(0,0,0,height);border.addColorStop(0,'#5000ff50');border.addColorStop(1,'#28007f50');ctx.fillStyle=border;ctx.fillRect(1,1,width-2,1);ctx.fillRect(1,height-2,width-2,1);ctx.fillRect(1,1,1,height-2);ctx.fillRect(width-2,1,1,height-2);
-    wrapped.forEach((line,index)=>drawTooltipText(ctx,line,4,4+index*10+(index?2:0),tick));
-    tooltip.setAttribute('role','tooltip');tooltip.setAttribute('aria-label',wrapped.map(line=>line.map(glyph=>glyph.ch).join('')).join('\n'));
+    if(hud)drawHud(ctx,hud,4,4);
+    wrapped.forEach((line,index)=>drawTooltipText(ctx,line,4,4+hudHeight+index*10+(index?2:0),tick));
+    for(const [index,[coin,count]] of coins.entries()){
+      const row=6+hudHeight+(wrapped.length+index)*10;
+      ctx.drawImage(image(coinImage(coin)),0,row-5,16,16);
+      drawTooltipText(ctx,Array.from(String(count),ch=>({ch,color:T.colors.gray})),16,row,tick);
+    }
+    const textLines=wrapped.map(line=>line.map(glyph=>glyph.ch).join(''));
+    tooltip.setAttribute('role','tooltip');
+    tooltip.setAttribute('aria-label',[...textLines,...coins.map(([coin,count])=>count+' '+coin)].join('\n'));
   }
   const bounds=globalThis.HeritageSession?.viewportBounds?.()??{left:0,top:0,right:innerWidth,bottom:innerHeight};
   tooltip.hidden=false;tooltip.style.left=Math.max(bounds.left+4,Math.min(x+12,bounds.right-width*2-4))+'px';tooltip.style.top=Math.max(bounds.top+4,Math.min(y-12,bounds.bottom-height*2-4))+'px';
-  if(animated&&!tooltipFrame)tooltipFrame=requestAnimationFrame(()=>{tooltipFrame=null;if(tooltipState)showTooltip(tooltipState.lines,tooltipState.x,tooltipState.y,tooltipState.host);});
+  if(!tooltip.matches(':popover-open'))tooltip.showPopover();
+  tooltipState.animated=animated;if(!tooltipFrame)tooltipFrame=requestAnimationFrame(updateTooltip);
 }
-function hideTooltip(){if(tooltip)tooltip.hidden=true;tooltipState=null;if(tooltipFrame){cancelAnimationFrame(tooltipFrame);tooltipFrame=null;}}
-function bindTooltip(node,lines) {
-  node.addEventListener('pointermove',event=>showTooltip(typeof lines==='function'?lines():lines,event.clientX,event.clientY,node.closest('dialog[open]')??document.body));
+function updateTooltip(){
+  tooltipFrame=null;const state=tooltipState;if(!state)return;
+  if(!state.owner.isConnected||!state.owner.checkVisibility()){hideTooltip();return;}
+  if(state.animated)showTooltip(state.lines,state.x,state.y,state.owner,state.coins,state.hud);
+  else tooltipFrame=requestAnimationFrame(updateTooltip);
+}
+function hideTooltip(){
+  if(tooltipState){
+    const owner=tooltipState.owner,ids=(owner.getAttribute('aria-describedby')||'').split(' ').filter(id=>id&&id!==tooltip.id);
+    if(ids.length)owner.setAttribute('aria-describedby',ids.join(' '));else owner.removeAttribute('aria-describedby');
+  }
+  if(tooltip){if(tooltip.matches(':popover-open'))tooltip.hidePopover();tooltip.hidden=true;}
+  tooltipState=null;if(tooltipFrame){cancelAnimationFrame(tooltipFrame);tooltipFrame=null;}
+}
+function bindTooltip(node,lines,coins,hud) {
+  const show=(x,y)=>showTooltip(typeof lines==='function'?lines():lines,x,y,node,coins?.(),hud?.());
+  node.addEventListener('pointermove',event=>show(event.clientX,event.clientY));
   node.addEventListener('pointerleave',hideTooltip);
-  node.addEventListener('focus',()=>{const r=node.getBoundingClientRect();showTooltip(typeof lines==='function'?lines():lines,r.right,r.top,node.closest('dialog[open]')??document.body);});
+  const showAtControl=()=>{const r=node.getBoundingClientRect();show(r.right,r.top);};
+  node.addEventListener('focus',showAtControl);
   node.addEventListener('blur',hideTooltip);
 }
 function setupTooltips(screen='kit') {
@@ -304,12 +341,130 @@ function dragStart(event,payload,onDrop,options={}) {
   source.addEventListener('lostpointercapture',cancel);
   return cleanup;
 }
+function createPursePopup(inventory,toggle,control) {
+  const stats=HeritageKitStats,coins=Object.keys(stats.denominations);
+  const element=document.createElement('div'),canvas=document.createElement('canvas');
+  element.className='mc-purse-popup';element.hidden=true;element.setAttribute('role','group');
+  const panelWidth=37,panelHeight=59,countColumn=12,buttons=[];
+  canvas.width=panelWidth;canvas.height=panelHeight;canvas.setAttribute('aria-hidden','true');element.append(canvas);
+  toggle.setAttribute('aria-expanded','false');
+  function render() {
+    const sheet=image('numismatic/purse_widget.png');
+    if(element.hidden||!sheet||!glyphs.size)return;
+    const counts=stats.purseCounts(inventory.kit);
+    const extra=Math.max(0,...coins.map(coin=>textWidth(String(counts[coin]))-12));
+    const panel={x:control.x-30-extra,y:control.y+15,width:panelWidth+extra,height:panelHeight};
+    if(canvas.width!==panel.width||!element.style.width){
+      canvas.width=panel.width;
+      inventory.position(element,panel);
+      for(const {button,x,y,width,height} of buttons){
+        const left=x>=countColumn?x+extra:x,buttonWidth=x<countColumn?width+extra:width;
+        Object.assign(button.style,{left:left/panel.width*100+'%',top:y/panelHeight*100+'%',
+          width:buttonWidth/panel.width*100+'%',height:height/panelHeight*100+'%'});
+      }
+    }
+    const ctx=canvas.getContext('2d');ctx.imageSmoothingEnabled=false;
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    function blit(u,v,x,y,width,height){
+      if(extra&&x<countColumn){
+        const left=countColumn-x,right=width-left-1;
+        ctx.drawImage(sheet,u,v,left,height,x,y,left,height);
+        ctx.drawImage(sheet,u+left,v,1,height,countColumn,y,extra+1,height);
+        ctx.drawImage(sheet,u+left+1,v,right,height,countColumn+extra+1,y,right,height);
+      }else{
+        ctx.drawImage(sheet,u,v,width,height,x+(x>=countColumn?extra:0),y,width,height);
+      }
+    }
+    blit(0,0,0,0,panelWidth,panelHeight);
+    coins.forEach((coin,index)=>text(ctx,String(counts[coin]),5,12+index*12));
+    for(const {button,x,y,width,height,u,v} of buttons){
+      const sourceY=v+(button.matches(':hover,:focus-visible')?height:0);
+      blit(u,sourceY,x,y,width,height);
+    }
+    element.setAttribute('aria-label','Purse balance. '+coins.map(coin=>counts[coin]+' '+coin).join(', '));
+  }
+  function addButton(label,x,y,width,height,u,v,press) {
+    const button=document.createElement('button');button.type='button';button.className='mc-control';
+    button.setAttribute('aria-label',label);
+    button.addEventListener('click',press);
+    for(const event of ['pointerenter','pointerleave','focus','blur'])button.addEventListener(event,render);
+    buttons.push({button,x,y,width,height,u,v});element.append(button);
+  }
+  function close() {
+    element.hidden=true;toggle.setAttribute('aria-expanded','false');
+  }
+  coins.forEach((coin,index)=>{
+    for(const step of [1,-1]){
+      addButton((step>0?'Add ':'Remove ')+coin+' '+(step>0?'to':'from')+' purse',18,10+index*12+(step<0?6:0),9,5,step>0?37:46,24,event=>{
+        if(step<0&&!stats.purseCounts(inventory.kit)[coin])return;
+        inventory.callbacks.onAdjustPurse?.(coin,BigInt(step*(event.shiftKey?10:1)));
+      });
+    }
+  });
+  addButton('Withdraw purse balance',3,46,24,8,37,0,()=>{
+    const value=stats.purseBalance(inventory.kit);
+    if(value>0n)inventory.callbacks.onWithdrawPurse?.(value);
+  });
+  toggle.addEventListener('click',()=>{
+    if(!inventory.editable)return;hideTooltip();
+    if(!element.hidden){close();return;}
+    element.hidden=false;toggle.setAttribute('aria-expanded','true');render();
+  });
+  for(const node of [element,toggle])node.addEventListener('keydown',event=>{
+    if(event.key!=='Escape'||element.hidden)return;
+    event.stopPropagation();close();toggle.focus();hideTooltip();
+  });
+  return {element,refresh:render,close};
+}
+
+function drawHud(ctx,{kind,filled,slots},x,y){
+  const rows=Math.ceil(slots/10),step=Math.max(3,10-Math.max(0,rows-2));
+  for(let i=slots-1;i>=0;i--){
+    const left=x+(kind==='hunger'?9-i%10:i%10)*8,top=y+(rows-1-Math.floor(i/10))*step,points=filled-2*i;
+    ctx.drawImage(image('stats/'+kind+'_empty.png'),left,top,9,9);
+    if(points>0)ctx.drawImage(image('stats/'+kind+'_'+(points===1?'half':'full')+'.png'),left,top,9,9);
+  }
+}
+class StatPanel {
+  constructor(host){
+    this.element=document.createElement('div');this.element.className='mc-stats';this.element.hidden=true;this.element.setAttribute('role','group');this.element.setAttribute('aria-label','Starting stats');
+    this.canvas=document.createElement('canvas');this.canvas.setAttribute('aria-hidden','true');this.element.append(this.canvas);host.append(this.element);this.buttons=new Map();this.scale=2;
+    assets().then(()=>{this.ready=true;if(this.kit)this.set(this.kit);},error=>{this.element.hidden=false;this.element.textContent=error.message;});
+  }
+  set(kit){
+    this.kit=kit;if(!this.ready)return;
+    const stats=HeritageKitStats.preview(kit),key=JSON.stringify(stats);this.element.hidden=false;if(key===this.key)return;this.key=key;
+    const n=HeritageKitStats.number,attribute=id=>T.plain(T.parse({translate:'attribute.name.'+id.replace('minecraft:',''),fallback:id}));
+    const info=stats.bonuses.map(bonus=>attribute(bonus.attribute)+' '+(bonus.amount>=0?'+':'')+n(bonus.amount*((bonus.operation??'add_value')==='add_value'?1:100))+({add_value:'',add_multiplied_base:'% of base',add_multiplied_total:'% of total'}[bonus.operation??'add_value']));
+    if(stats.unknown.length)info.push('Mod equipment attributes need an in-game check: '+[...new Set(stats.unknown)].join(', '));
+    const rows=[...(info.length?[{kind:'info',value:'',lines:info}]:[]),
+      {kind:'armor',value:String(stats.armor),lines:[stats.armor+' armor points'],hud:{kind:'armor',filled:stats.armor,slots:10}},
+      {kind:'health',value:n(stats.health),lines:[n(stats.health)+' / '+n(stats.maxHealth)+' health points'],hud:{kind:'health',filled:Math.ceil(stats.health),slots:Math.ceil(stats.maxHealth/2)}},
+      {kind:'hunger',value:String(stats.hunger),lines:[stats.hunger+' / 20 hunger points'],hud:{kind:'hunger',filled:stats.hunger,slots:10}}];
+    let x=0;
+    for(const row of rows){row.x=x;row.width=9+(row.value?3+textWidth(row.value):0);x+=row.width+6;}
+    this.width=x-6;this.canvas.width=this.width*2;this.canvas.height=18;const ctx=this.canvas.getContext('2d');ctx.scale(2,2);ctx.imageSmoothingEnabled=false;
+    for(const row of rows){
+      ctx.drawImage(image('stats/'+row.kind+'.png'),row.x,0,9,9);if(row.value)text(ctx,row.value,row.x+12,0,'#fff',true);
+      let button=this.buttons.get(row.kind);
+      if(!button){button=document.createElement('button');button.type='button';button.dataset.stat=row.kind;this.buttons.set(row.kind,button);this.element.append(button);bindTooltip(button,()=>button.stat.lines,null,()=>button.stat.hud);}
+      button.stat=row;button.hidden=false;button.setAttribute('aria-label',row.lines.join('. '));button.style.left=row.x/this.width*100+'%';button.style.width=row.width/this.width*100+'%';
+    }
+    for(const [kind,button] of this.buttons)if(!rows.some(row=>row.kind===kind))button.hidden=true;
+    this.resize(this.scale);this.element.hidden=false;
+  }
+  resize(scale){this.scale=scale;if(!this.width)return;this.element.style.width=this.width*scale+'px';this.element.style.height=9*scale+'px';}
+  place(x,y,scale){if(!this.width)return;this.resize(scale);Object.assign(this.element.style,{position:'absolute',left:x-this.width*scale/2+'px',top:y+'px',margin:'0'});}
+  destroy(){this.element.remove();}
+}
+
 class Inventory {
-  constructor(host,{editable=false,onSelect,onMove,onDrop,onClick,onCollect,onClone,getCursor,getWarnings,onControl,isSelecting,getSelection,onToggleSelection,onMovePreview,onMovePreviewEnd,scaleWidth=0,scaleHeight=0,fillHost=false}={}) {
-    this.host=host;this.callbacks={onSelect,onMove,onDrop,onClick,onCollect,onClone,getCursor,getWarnings,onControl,isSelecting,getSelection,onToggleSelection,onMovePreview,onMovePreviewEnd};this.kit={items:[]};this.options={mode:'player'};this.selected=0;this.hover=null;this.aim={x:-12,y:0};this.scaleWidth=scaleWidth;this.scaleHeight=scaleHeight;this.fillHost=fillHost;this.editable=editable;this.ready=false;this.visible=true;this.dirty=true;this.bounds=null;
+  constructor(host,{editable=false,onSelect,onMove,onDrop,onClick,onCollect,onClone,getCursor,getWarnings,onControl,isSelecting,getSelection,onToggleSelection,onMovePreview,onMovePreviewEnd,onAdjustPurse,onWithdrawPurse,scaleWidth=0,scaleHeight=0,fillHost=false}={}) {
+    this.host=host;this.callbacks={onSelect,onMove,onDrop,onClick,onCollect,onClone,getCursor,getWarnings,onControl,isSelecting,getSelection,onToggleSelection,onMovePreview,onMovePreviewEnd,onAdjustPurse,onWithdrawPurse};this.kit={items:[]};this.options={mode:'player'};this.selected=0;this.hover=null;this.aim={x:-12,y:0};this.scaleWidth=scaleWidth;this.scaleHeight=scaleHeight;this.fillHost=fillHost;this.editable=editable;this.ready=false;this.visible=true;this.dirty=true;this.bounds=null;
     this.frame=document.createElement('div');this.frame.className='mc-inventory';this.frame.dataset.editable=String(editable);this.frame.setAttribute('aria-busy','true');
     this.canvas=document.createElement('canvas');this.canvas.setAttribute('aria-hidden','true');this.background=document.createElement('canvas');
-    this.frame.append(this.canvas);host.replaceChildren(this.frame);this.buttons=new Map();this.controls=new Map();this.entries=new Map();this.stacks=new Map();
+    this.slotControls=document.createElement('div');
+    this.frame.append(this.canvas,this.slotControls);host.replaceChildren(this.frame);if(!fillHost){this.statPanel=new StatPanel(host);host.insertBefore(this.statPanel.element,this.frame);}this.buttons=new Map();this.controls=new Map();this.entries=new Map();this.stacks=new Map();
     const pendingIcons=new Set();
     let iconFrame=0;
     this.requestIcon=data=>{
@@ -352,7 +507,7 @@ class Inventory {
       const maximum=Number.parseFloat(getComputedStyle(this.host).maxHeight),available=this.editable&&Number.isFinite(maximum)?Math.min(this.host.clientWidth,maximum*Math.max(this.layout.width,this.scaleWidth)/Math.max(this.layout.height,this.scaleHeight)):this.host.clientWidth;
       scale=HeritagePlayer.guiScale(Math.max(this.layout.width,this.scaleWidth),available,ratio);
       this.frame.style.width=this.layout.width*scale/ratio+'px';this.frame.style.height=this.layout.height*scale/ratio+'px';
-      this.host.style.overflowX=this.host.clientWidth<this.layout.width*scale/ratio?'auto':'';
+      this.host.style.overflowX=this.host.clientWidth<this.layout.width*scale/ratio?'auto':'';this.statPanel?.resize(scale/ratio);
     }
     const width=this.layout.width*scale,height=this.layout.height*scale;
     this.scale=scale;
@@ -396,7 +551,7 @@ class Inventory {
           });
         });
       }
-      this.frame.append(button);this.buttons.set(value,button);
+      this.slotControls.append(button);this.buttons.set(value,button);
     }
     for(const control of this.layout.controls) {
       let node=this.controls.get(control.key);
@@ -406,18 +561,24 @@ class Inventory {
           node.type='range';node.min=0;node.step=1;
           node.addEventListener('input',()=>this.callbacks.onControl?.({...this.layout.controls.find(item=>item.key===control.key),value:Number(node.value)}));
         }else{
-          node.type='button';node.addEventListener('click',()=>this.callbacks.onControl?.(this.layout.controls.find(item=>item.key===control.key)));
+          node.type='button';
+          if(control.kind==='purse')this.pursePopup=createPursePopup(this,node,control);
+          else node.addEventListener('click',()=>this.callbacks.onControl?.(this.layout.controls.find(item=>item.key===control.key)));
           node.addEventListener('pointerenter',()=>{this.hoverControl=control.key;this.draw();});node.addEventListener('pointerleave',()=>{this.hoverControl=null;this.draw();});
         }
-        bindTooltip(node,()=>control.kind==='purse'
-          ?[T.parse('Purse',{color:T.colors.gold}),...this.options.purse.map(([coin,count])=>count+' '+coin)]
-          :[this.layout.controls.find(item=>item.key===control.key)?.label||'Equipment control']);
-        this.frame.append(node);this.controls.set(control.key,node);
+        if(control.kind==='purse')bindTooltip(node,[T.parse(control.label,{color:purseTitleColor})],()=>this.options.purse);
+        else bindTooltip(node,()=>[this.layout.controls.find(item=>item.key===control.key)?.label||'Equipment control']);
+        (control.kind==='purse'?this.frame:this.slotControls).append(node);
+        if(control.kind==='purse')this.frame.append(this.pursePopup.element);
+        this.controls.set(control.key,node);
       }
       this.position(node,control);node.setAttribute('aria-label',control.label);node.disabled=control.disabled??false;
       if(control.kind==='scroll'){node.max=control.max;node.value=control.value;node.classList.add('mc-native-scroll');}
     }
-    for(const [key,node] of this.controls)if(!this.layout.controls.some(control=>control.key===key)){node.remove();this.controls.delete(key);}
+    for(const [key,node] of this.controls)if(!this.layout.controls.some(control=>control.key===key)){
+      node.remove();this.controls.delete(key);
+      if(key==='purse'){this.pursePopup.element.remove();this.pursePopup=null;}
+    }
     if(focused!==null){const value=/^\d+$/.test(focused)?Number(focused):focused;this.buttons.get(value)?.focus({preventScroll:true});}
   }
   entry(value){return (this.previewEntries??this.entries).get(value);}
@@ -444,9 +605,9 @@ class Inventory {
     if(!this.buttons.has(value))this.buttons.values().next().value?.setAttribute('tabindex','0');
     if(focus)this.buttons.get(value)?.focus({preventScroll:true});this.draw();
   }
-  set(kit,options=this.options) {
+  set(kit,options=this.sourceOptions??this.options) {
     this.cancelDrag?.();
-    this.options=options;this.kit=kit.enabled===false?{items:[]}:kit;
+    this.sourceOptions=options;this.options={...options,purse:options.purse??HeritageKitStats.pursePreview(kit)};options=this.options;this.kit=kit.enabled===false?{items:[]}:kit;
     this.entries=new Map((this.kit.items||[]).map(entry=>[HeritageEquipment.id(entry),entry]));
     this.stacks=new Map((this.kit.items||[]).filter(entry=>(entry.inventory??'player')==='player').map(entry=>[entry.index,entry.item]));
     const layout=HeritageEquipment.layout(this.kit,options),layoutKey=JSON.stringify(layout);
@@ -454,12 +615,13 @@ class Inventory {
       this.layout=layout;this.layoutKey=layoutKey;this.dirty=true;this.bounds=null;this.hover=this.hoverControl=null;hideTooltip();
       this.fit();this.buildSlots();
     }
+    this.pursePopup?.refresh();
     const key=JSON.stringify([this.kit.items,this.kit.selected_slot,this.options.hideCrafting===true]);if(key!==this.contentKey){this.dirty=true;this.contentKey=key;}
     this.labels();
     this.select(this.selected);
   }
   destroy() {
-    this.cancelDrag?.();
+    this.cancelDrag?.();this.statPanel?.destroy();
     document.removeEventListener('pointermove',this.pointer);document.removeEventListener('scroll',this.invalidate,true);window.removeEventListener('resize',this.refit);
     this.resize.disconnect();this.visibility.disconnect();if(this.frameRequest)cancelAnimationFrame(this.frameRequest);hideTooltip();
   }
@@ -495,6 +657,7 @@ class Inventory {
   }
   draw(hiddenStackSlot=null) {
     if(!this.ready||!this.visible)return;
+    if(this.statPanel){if(this.options.showStats===false)this.statPanel.element.hidden=true;else this.statPanel.set(this.previewKit??this.kit);}
     const {width,height,inventoryX,inventoryY,playerX}=this.layout,ctx=this.canvas.getContext('2d');ctx.setTransform(this.scale,0,0,this.scale,0,0);ctx.imageSmoothingEnabled=false;ctx.clearRect(0,0,width,height);
     if(this.options.modelOnly){
       const scale=Math.max(1,Math.floor(height/2))/16;
@@ -503,7 +666,8 @@ class Inventory {
     }
     if(this.dirty||this.renderedHiddenStackSlot!==hiddenStackSlot)this.renderBase(hiddenStackSlot);
     ctx.drawImage(this.background,0,0,width,height);
-    const purse=this.layout.controls.find(control=>control.kind==='purse');
+    const purseCoins=this.previewKit?HeritageKitStats.pursePreview(this.previewKit):this.options.purse;
+    const purse=this.layout.mode==='player'&&purseCoins?.length?{x:inventoryX+160,y:inventoryY+5,width:11,height:13,key:'purse'}:null;
     if(purse){
       const {x,y,width,height}=purse,hovered=this.hoverControl===purse.key;
       ctx.drawImage(image('numismatic/purse_widget.png'),62,hovered?height:0,width,height,x,y,width,height);
@@ -522,5 +686,9 @@ class Inventory {
   }
 }
 window.addEventListener('heritage:viewport-change',hideTooltip);
-globalThis.HeritageInventory={Inventory,item,icon,assets,bindTooltip,hideTooltip,dragStart,setCursor,setupTooltips};
+window.addEventListener('blur',hideTooltip);
+document.addEventListener('visibilitychange',hideTooltip);
+document.addEventListener('pointerdown',hideTooltip);
+document.addEventListener('keydown',event=>{if(event.key==='Escape')hideTooltip();});
+globalThis.HeritageInventory={Inventory,StatPanel,item,icon,assets,bindTooltip,hideTooltip,dragStart,setCursor,setupTooltips};
 })();

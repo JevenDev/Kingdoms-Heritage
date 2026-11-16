@@ -84,3 +84,17 @@ test('grouped history growth recalculates the memory budget and preserves image 
 test('selecting another location does not create an edit or mutate history snapshots',()=>{
   const initial=pack(),libraries=libs(),history=new E.History(initial,libraries),next={...initial,active:'b'};assert.equal(history.record(next,libraries),false);assert.equal(history.actions.length,0);assert.equal(initial.active,'a');next.locations[0].fields.title='Changed';assert.equal(history.present.pack.locations[0].fields.title,'Forest');
 });
+
+test('adding kits preserves existing choices and snapshots all-kit locations',()=>{
+  const before=pack();before.kits.push({id:'new',path:'new',included:false});const original=clone(before);
+  const after=E.assign(before,['a','b'],{kitIds:['new','k'],kitMode:'add'});
+  assert.deepEqual(after.locations[0].kits,['k','other','bundled-empty','kingdomsheritage:miner','kingdomsheritage:adventurer','kingdomsheritage:byo','new']);
+  assert.deepEqual(after.locations[1].kits,['k','new']);assert.equal(after.kits.at(-1).included,true);assert.deepEqual(before,original);
+});
+test('removing kits preserves other choices and rejects empty assignments atomically',()=>{
+  const before=pack();before.kits.push({id:'unused',path:'unused',included:false});const original=clone(before);
+  const after=E.assign(before,['a'],{kitIds:['other','unused'],kitMode:'remove'});
+  assert.equal(after.locations[0].kits.includes('k'),true);assert.equal(after.locations[0].kits.includes('other'),false);assert.deepEqual(after.locations[1],before.locations[1]);assert.equal(after.kits.at(-1).included,false);
+  assert.throws(()=>E.assign(before,['a','b'],{kitIds:['k'],kitMode:'remove'}),/Village must retain at least one kit/);assert.deepEqual(before,original);
+  assert.throws(()=>E.assign(before,['a'],{kitIds:['missing'],kitMode:'add'}),/unavailable/);assert.throws(()=>E.assign(before,['a'],{kitIds:['k'],kitMode:'unknown'}),/assignment mode/);
+});

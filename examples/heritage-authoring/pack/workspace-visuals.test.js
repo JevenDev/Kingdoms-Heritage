@@ -2,17 +2,17 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const Pack=require('./engine.js'),Flow=require('./flow.js'),Preview=require('../editor/engine.js'),bundled=require('./assets/defaults.json');
 function workspace(){
-  const nodes=new Map(),listeners=new Map(),frames=new Map(),draws=[];let frameId=0;
-  const node=id=>{if(!nodes.has(id))nodes.set(id,{value:String(id).includes('resolution')?'1920x1080':id==='flow-scale'?'0':'',checked:false,hidden:false,dataset:{},parentElement:{style:{setProperty(){}}},classList:{toggle(){}},addEventListener(){},setAttribute(){},replaceChildren(){},append(){}});return nodes.get(id);};
+  const nodes=new Map(),listeners=new Map(),frames=new Map(),draws=[],monitorOptions=[];let frameId=0;
+  const node=id=>{if(!nodes.has(id))nodes.set(id,{value:String(id).includes('resolution')?'1920x1080':id==='flow-scale'?'0':'',checked:false,hidden:false,dataset:{},style:{setProperty(){}},parentElement:{style:{setProperty(){}},after(){}},classList:{toggle(){}},events:{},children:[],addEventListener(type,listener){this.events[type]=listener;},setAttribute(){},replaceChildren(...children){this.children=children;},append(...children){this.children.push(...children);}});return nodes.get(id);};
   const document={hidden:false,getElementById:node,querySelectorAll:()=>[],createElement:()=>node(Symbol()),addEventListener(type,listener){listeners.set(type,listener);}};
   const monitor={defaults:bundled,textFit:()=>({}),pictures:async()=>{},needsResourcePack:()=>false,draw(value){draws.push(value);return Preview.guiViewport(value.width,value.height,value.guiScale);}};
   const tools={connect(){},update(){},preview:spawns=>spawns,page:()=>null};
-  const context=vm.createContext({document,performance:{now:()=>1000},Option:class {},HeritagePreview:Preview,HeritageFlow:Flow,HeritagePack:Pack,
-    HeritageDialogueAudio:{create:()=>({stop(){},syncMute(){}})},HeritageCardTools:{create:()=>tools},HeritageFlowPreview:{monitorPreview:async()=>monitor},HeritageInventory:{setupTooltips(){}},HeritageIcons:{action(){}},
+  const context=vm.createContext({document,structuredClone,performance:{now:()=>1000},Option:class {constructor(text,value){this.text=text;this.value=value;}},HeritagePreview:Preview,HeritageFlow:Flow,HeritagePack:Pack,
+    HeritageDialogueAudio:{create:()=>({stop(){},syncMute(){}})},HeritageCardTools:{create:()=>tools},HeritageFlowPreview:{monitorPreview:async(node,options)=>{monitorOptions.push(options);return monitor;}},HeritageItemText:{name:item=>Flow.place(item.id),tooltip:item=>[item.id],parse:text=>text,colors:{gray:'gray'}},HeritageInventory:{setupTooltips(){},bindTooltip(node,content){node.tooltip=content;},icon:()=>node(Symbol())},HeritageIcons:{action(){}},
     requestAnimationFrame(callback){frames.set(++frameId,callback);return frameId;},cancelAnimationFrame(id){frames.delete(id);}});
   vm.runInContext(fs.readFileSync(require.resolve('./workspace-visuals.js'),'utf8'),context);
   const view=context.HeritageWorkspaceVisuals.create({textFits(){}});
-  return {node,async render(state,catalog,part='kits',invalid=false){
+  return {node,monitorOptions,find:className=>[...nodes.values()].filter(node=>node.className===className),controls:()=>[...nodes.values()].filter(node=>node.className==='kit-preview-controls'),async render(state,catalog,part='kits',invalid=false){
     const output=Pack.build(state,catalog);if(!invalid)assert.deepEqual(output.errors,[]);else assert.ok(output.errors.length);
     await view.update({state,catalog,output,step:'locations',part,pictureData:{}});
     const [id,callback]=frames.entries().next().value??[];assert.ok(callback,node('card-preview-status').textContent);frames.delete(id);callback(1000);
@@ -46,4 +46,53 @@ test('an invalid kit draft keeps the location preview available and full flow va
   const view=workspace(),{state,catalog}=fixture();catalog.kits[0].source='{';catalog.kits[0].error='Invalid JSON';
   const draw=await view.render(state,catalog,'details',true);assert.equal(draw.spawns.length,1);assert.equal(draw.kit.id,'preview:two');
   assert.match(view.node('card-preview-status').textContent,/Resolve the highlighted issues/);
+});
+
+test('workspace kit browsing includes every allowed kit and changes only the preview',async()=>{
+  const view=workspace(),{state,catalog}=fixture();state.locations[0].kitMode='selected';state.locations[0].kits=['two','one'];
+  catalog.kits.push({id:'excluded',name:'Excluded',document:{title:'Excluded',items:[]},error:'',warnings:[]});state.kits.push({id:'excluded',path:'excluded',included:true});
+  const original=JSON.stringify(state);let draw=await view.render(state,catalog);
+  assert.deepEqual(Array.from(draw.kits,kit=>kit.id),['preview:one','preview:two']);
+  const controls=view.controls()[1],[previous,label,next]=controls.children,select=label.children[0];
+  assert.equal(controls.hidden,false);assert.equal(previous.disabled,true);assert.equal(next.disabled,false);assert.deepEqual(select.children.map(option=>option.value),['one','two']);
+  view.monitorOptions[1].selectKit('preview:two');draw=await view.render(state,catalog);assert.equal(draw.kit.id,'preview:two');assert.equal(select.value,'two');assert.equal(next.disabled,true);
+  view.monitorOptions[1].selectKit('preview:excluded');draw=await view.render(state,catalog);assert.equal(draw.kit.id,'preview:two');
+  previous.events.click();draw=await view.render(state,catalog);assert.equal(draw.kit.id,'preview:one');
+  select.value='two';select.events.change();draw=await view.render(state,catalog);assert.equal(draw.kit.id,'preview:two');
+  view.node('location-card').events.keydown({key:'Home',preventDefault(){}});draw=await view.render(state,catalog);assert.equal(draw.kit.id,'preview:one');assert.equal(JSON.stringify(state),original);
+  state.locations[0].kits=['one'];await view.render(state,catalog);assert.equal(controls.hidden,false);
+  const mode=controls.children[4].children[0];mode.value='accessories';mode.events.change();draw=await view.render(state,catalog);assert.equal(draw.inventoryMode,'accessories');assert.equal(state.locations[0].kits.length,1);
+  await view.render(state,catalog,'intro');assert.equal(controls.hidden,false);
+});
+
+test('arrival context changes kit and party substitutions without changing the pack',async()=>{
+  const view=workspace(),{state,catalog}=fixture(),original=JSON.stringify({state,catalog});
+  await view.render(state,catalog,'intro');const context=view.find('preview-context')[1],player=context.children[0].children[0],party=context.children[1].children[0];
+  assert.equal(context.hidden,false);player.value='Robin';player.events.change();party.value='Alex, Steve';party.events.change();view.monitorOptions[1].selectKit('preview:two');
+  const draw=await view.render(state,catalog,'intro');assert.equal(draw.names.player,'Robin');assert.equal(draw.names.party_leader,'Robin');assert.equal(draw.names.party_size,'3');assert.equal(draw.names.companions,'Alex and Steve');assert.equal(draw.names.facts.kit,'preview:two');assert.equal(JSON.stringify({state,catalog}),original);
+});
+
+test('inline shop purchases, limits, refunds and resets use a temporary loadout',async()=>{
+  const view=workspace(),{state,catalog}=fixture();catalog.kits[0].document.shop={budget:3,sections:[{id:'food',name:'Food'}],offers:[{item:{id:'minecraft:bread',count:2},cost:2,limit:1,section:'food'},{item:{id:'minecraft:apple'},cost:2,limit:1}]};
+  const original=JSON.stringify({state,catalog});await view.render(state,catalog);view.controls()[1].children[3].events.click();await view.render(state,catalog);
+  const shop=view.find('preview-shop')[1];assert.equal(shop.hidden,false);let offers=shop.children[1];assert.deepEqual(Array.from(offers.children[0].tooltip()),['minecraft:bread','Price: 2 points · 0/1 bought']);offers.children[0].events.click();let draw=await view.render(state,catalog);
+  assert.equal(draw.kit.items[0].item.id,'minecraft:bread');assert.equal(draw.kit.items[0].item.count,2);offers=shop.children[1];assert.equal(offers.children[0].disabled,true);assert.equal(offers.children[1].disabled,true);assert.match(offers.children[0].tooltip()[1],/1\/1 bought.*Limit reached/);
+  draw=await view.render(state,catalog,'intro');assert.equal(draw.names.facts.receives_kit,'true');await view.render(state,catalog);
+  shop.children[2].children[0].events.click();draw=await view.render(state,catalog);assert.equal(draw.kit.items.length,0);
+  const sections=shop.children[0].children[2];sections.value='food';sections.events.change();await view.render(state,catalog);assert.equal(shop.children[1].children.filter(node=>node.type==='button').length,1);
+  shop.children[1].children[0].events.click();await view.render(state,catalog);shop.children[0].children[1].events.click();draw=await view.render(state,catalog);assert.equal(draw.kit.items.length,0);
+  shop.children[1].children[0].events.click();await view.render(state,catalog);view.monitorOptions[1].selectKit('preview:two');await view.render(state,catalog);view.monitorOptions[1].selectKit('preview:one');draw=await view.render(state,catalog);assert.equal(draw.kit.items.length,0);assert.equal(shop.hidden,true);assert.equal(JSON.stringify({state,catalog}),original);
+});
+
+test('inline shop pages retain explicit offer positions',async()=>{
+  const view=workspace(),{state,catalog}=fixture();catalog.kits[0].document.shop={budget:3,columns:4,offers:[{item:{id:'minecraft:bread'},cost:1,position:{row:3,column:5}}]};
+  await view.render(state,catalog);view.controls()[1].children[3].events.click();await view.render(state,catalog);const shop=view.find('preview-shop')[1];
+  assert.equal(shop.children[1].children.filter(node=>node.type==='button').length,0);shop.children[2].children[2].events.click();await view.render(state,catalog);
+  assert.equal(shop.children[1].children[8].type,'button');assert.equal(shop.children[2].children[2].disabled,true);shop.children[1].children[8].events.click();const draw=await view.render(state,catalog);assert.equal(draw.kit.items[0].item.id,'minecraft:bread');
+});
+
+test('an intro with no valid kits keeps context available and kit navigation hidden',async()=>{
+  const view=workspace(),{state,catalog}=fixture();for(const kit of catalog.kits){kit.source='{';kit.error='Invalid JSON';}
+  const draw=await view.render(state,catalog,'intro',true);assert.equal(draw.kitCount,0);assert.equal(view.controls()[1].hidden,true);assert.equal(view.find('preview-context')[1].hidden,false);
+  view.node('location-card').events.keydown({key:'Home',preventDefault(){}});
 });

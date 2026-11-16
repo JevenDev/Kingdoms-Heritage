@@ -24,14 +24,14 @@ const view=new V.Inventory($('inventory'),{
   onMovePreview:(from,gesture)=>previewMove(from,gesture),
   onMovePreviewEnd:()=>feedback(),
   onDrop:(id,slot)=>place(id,slot),
-  onControl:control=>{
-    if(control?.kind!=='purse'){preview.control(control);return;}
-    if(!canEdit())return;
-    if(carried){notice('Place or return the held item before editing the purse.');return;}
-    V.hideTooltip();
-    tab('details');
-    $('kit-stat-gold').focus();
-  }
+  onControl:control=>preview.control(control),
+  onAdjustPurse:(coin,change)=>editPurse(kit=>{
+    const current=BigInt(HeritageKitStats.purseCounts(kit)[coin]),amount=current+change;
+    const next=K.copy(kit);
+    HeritageKitStats.setCoin(next,coin,String(amount<0n?0n:amount));
+    return next;
+  }),
+  onWithdrawPurse:value=>editPurse(kit=>M.withdrawPurse(kit,value,slot=>!drafts.has(slot)))
 });
 const preview=new HeritageEquipmentEditor({getDocument:()=>documentState,getSelection:()=>selected,onSelect:selectSlot,onUpdate:(saveHistory=false)=>{display();if(saveHistory)record();else scheduleSave();},notice,canSwitch:()=>{if(errorState?.target==='count'){notice('Fix the count before changing inventory views.');return false;}return true;}});
 const statPaths=['starting_health','starting_hunger','attributes','starting_resources'];
@@ -119,6 +119,7 @@ function draftOptions() {
 }
 function activateKit(id) {
   if(id===workspace.active)return;
+  view.pursePopup?.close();
   attempt(()=>{
     const entry=workspace.get(id);M.cursor(entry.state.cursor);
     workspace.capture(snapshot(),history,historyIndex);workspace.select(id);
@@ -146,6 +147,11 @@ function canEdit(target='') {
   if(documentState.enabled===false){notice('This kit is disabled. Set enabled to true in JSON to edit it.');return false;}
   if(errorState&&!errorState.validation&&errorState.target!==target){notice('Fix the highlighted field or restore the last valid JSON.');return false;}
   return true;
+}
+function editPurse(edit) {
+  if(!canEdit())return false;
+  if(carried){notice('Place or return the held item before editing the purse.');return false;}
+  return attempt(()=>commit(edit(documentState)));
 }
 function heldLabel(stack) {return stack?'Holding '+(stack.count??1)+' × '+T.name(stack):'';}
 function feedback() {
@@ -280,10 +286,9 @@ function editLore(update,key=null) {
 }
 function renderInventory() {
   preview.reveal(selected);const options=preview.sync();
-  const layouts=['player','curios','accessories'].map(mode=>E.layout(documentState,{...options,mode,cosmetics:true,offset:0}));
-  view.scaleWidth=Math.max(...layouts.map(layout=>layout.width));view.scaleHeight=Math.max(...layouts.map(layout=>layout.height));
+  view.scaleWidth=0;view.scaleHeight=0;
   const purse=rawInvalid||invalidStats()||documentState.enabled===false?[]:HeritageKitStats.pursePreview(documentState);
-  view.selected=selected;view.set(documentState,{...options,hideCrafting:true,purse});
+  view.selected=selected;view.set(documentState,{...options,hideCrafting:true,purse,showStats:!rawInvalid&&!invalidStats()});
 }
 function display() {
   renderInventory();
@@ -832,7 +837,12 @@ author=HeritageAuthoring.create({kind:'kit',active:()=>workspace.active,
   select:activateKit,newEntry:()=>openKit(),issue:authorIssue,persist:()=>{saveDraft();return !saveBlocked&&!saveUnavailable;},
   prepare:()=>{if(rawInvalid||errorState||drafts.size||carried||saveBlocked)return false;saveDraft();return !saveBlocked&&!saveUnavailable;},
   summary:()=>({title:typeof documentState.title==='string'?documentState.title:documentState.title_key||'Untitled kit',description:typeof documentState.description==='string'?documentState.description:'',lines:[...(Array.isArray(documentState.shop?.offers)?['Shop: '+documentState.shop.budget+' points, '+documentState.shop.offers.length+' offer'+(documentState.shop.offers.length===1?'':'s')]:[]),(documentState.items?.length??0)+' item stacks',...(documentState.items??[]).map(entry=>(entry.item.count??1)+' × '+T.name(entry.item)), 'Starting slot: Hotbar '+((documentState.selected_slot??0)+1)]}),
-  stageChanged:stage=>{if(stage==='shop')shopEditor.render();code.syncScroll();browser();requestAnimationFrame(fitBrowser);}
+  stageChanged:stage=>{
+    view.slotControls.inert=stage!=='inventory';
+    view.pursePopup?.close();
+    if(stage==='shop')shopEditor.render();
+    code.syncScroll();browser();requestAnimationFrame(fitBrowser);
+  }
 });
 V.assets().then(()=>{
   display();

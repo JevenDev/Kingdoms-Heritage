@@ -48,6 +48,7 @@ final class KitSelectionView {
     private Button back;
     private Button disconnect;
     private Rect2i bounds;
+    private Rect2i purseBounds;
     private int descriptionY;
     private KitStats.Preview stats;
     private int statsX;
@@ -273,6 +274,10 @@ final class KitSelectionView {
             if (net.neoforged.fml.ModList.get().isLoaded("accessories")) {
                 AccessoriesControls.renderLayers(screen, graphics, tooltips ? mouseX : -10000, tooltips ? mouseY : -10000, partialTick);
             }
+            if (purseBounds != null) {
+                NumismaticKitPreview.render(graphics, Minecraft.getInstance().font, purseBounds, model.player(),
+                        model.purseGrant(), tooltips ? mouseX : -10000, tooltips ? mouseY : -10000);
+            }
         } finally {
             for (int i = 0; i < buttons.size(); i++) buttons.get(i).visible = visible.get(i);
         }
@@ -327,6 +332,14 @@ final class KitSelectionView {
                 }
             }
             bounds = new Rect2i(left, container.getGuiTop(), right - left, container.getYSize());
+        }
+        purseBounds = model.modelPreview() ? null : NumismaticKitPreview.bounds(screen);
+        if (purseBounds != null) {
+            int left = Math.min(bounds.getX(), Math.max(0, purseBounds.getX()));
+            int top = Math.min(bounds.getY(), Math.max(0, purseBounds.getY()));
+            int right = Math.max(bounds.getX() + bounds.getWidth(), Math.min(screen.width, purseBounds.getX() + purseBounds.getWidth()));
+            int bottom = Math.max(bounds.getY() + bounds.getHeight(), Math.min(screen.height, purseBounds.getY() + purseBounds.getHeight()));
+            bounds = new Rect2i(left, top, right - left, bottom - top);
         }
         int middle = bounds.getY() + (bounds.getHeight() - previous.getHeight()) / 2;
         int previousX = bounds.getX() - previous.getWidth() - 10;

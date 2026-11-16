@@ -16,7 +16,8 @@
 .flow-stage .flow-hit:focus-visible { outline: 1px solid #f2cd83; outline-offset: -1px; }
 .flow-stage .shop-tab-hit[aria-pressed=true]:focus-visible { outline: none; }
 .flow-stage .flow-hit:disabled { cursor: default; }
-#flow-inventory { position: absolute; }
+#flow-inventory,.monitor-inventory { position: absolute; }
+.monitor-inventory .mc-inventory canvas { opacity:0; }
 #flow-inventory .mc-inventory { margin: 0; }
 .flow-help { max-width: none; }
 #flow-dialog[data-shop-test] [data-flow-only] { display: none; }

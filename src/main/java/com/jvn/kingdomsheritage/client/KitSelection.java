@@ -246,6 +246,7 @@ public final class KitSelection {
     }
 
     KitStats.Preview previewStats() { return inventoryPreview.stats(); }
+    long purseGrant() { return inventoryPreview.purseGrant(); }
     KitSelectionView view() { return view; }
     List<JsonObject> choices() { return choices; }
     int index() { return index; }

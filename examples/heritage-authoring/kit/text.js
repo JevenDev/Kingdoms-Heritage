@@ -134,7 +134,7 @@ function title(stack,tooltip=false){
   const components=stack.components??{},custom=components['minecraft:custom_name'],itemName=components['minecraft:item_name'];
   let rarity=components['minecraft:rarity']??rarities[HeritageKit.normalize(stack.id)]??'common';
   const enchantments=components['minecraft:enchantments'];
-  if(enchantments&&Object.values(enchantments.levels??{}).some(level=>level>0))rarity={common:'rare',uncommon:'rare',rare:'epic'}[rarity]??rarity;
+  if(enchantments&&Object.values(enchantments.levels??enchantments).some(level=>level>0))rarity={common:'rare',uncommon:'rare',rare:'epic'}[rarity]??rarity;
   const inherited={color:colors[rarityColors[rarity]]??colors.white,italic:tooltip&&custom!==undefined};
   if(custom!==undefined||itemName!==undefined)return decode(custom??itemName,inherited);
   return parse(HeritageKit.items.get(HeritageKit.normalize(stack.id))?.name??stack.id,inherited);
@@ -143,7 +143,36 @@ function tooltip(stack,context){
   const components=stack.components??{};
   if(components['minecraft:hide_tooltip']!==undefined)return [];
   const lines=[title(stack,true)];
+  for(const key of ['minecraft:stored_enchantments','minecraft:enchantments']){
+    const value=components[key];if(!value||value.show_in_tooltip===false)continue;
+    for(const [id,level] of Object.entries(value.levels??value)){
+      if(!Number.isInteger(level)||level<=0)continue;
+      const name='enchantment.'+HeritageKit.normalize(id).replace(':','.'),single=['binding_curse','vanishing_curse','mending','silk_touch','infinity','flame','channeling','multishot','aqua_affinity'].some(suffix=>id==='minecraft:'+suffix||id===suffix);
+      lines.push(parse((translations[name]??id)+(single&&level===1?'':' '+(translations['enchantment.level.'+level]??level)),{color:id.endsWith('_curse')?colors.red:colors.gray}));
+    }
+  }
   if(Array.isArray(components['minecraft:lore']))for(const line of components['minecraft:lore'])lines.push(decode(line,{color:colors.dark_purple,italic:true}));
+  const stats=globalThis.HeritageKitStats;
+  if(stats&&components['minecraft:attribute_modifiers']?.show_in_tooltip!==false){
+    const groups=new Map();
+    for(const modifier of stats.equipmentModifiers(stack)){
+      if(!modifier.amount&&!['minecraft:base_attack_damage','minecraft:base_attack_speed'].includes(modifier.id))continue;
+      const group=modifier.slot??'any';if(!groups.has(group))groups.set(group,[]);groups.get(group).push(modifier);
+    }
+    for(const [group,modifiers] of groups){
+      lines.push([],parse({translate:'item.modifiers.'+group,fallback:'When equipped ('+group+'):'},{color:colors.gray}));
+      for(const modifier of modifiers){
+        const operation={add_value:0,add_multiplied_base:1,add_multiplied_total:2}[modifier.operation??'add_value'];
+        let amount=modifier.amount;const base=modifier.id==='minecraft:base_attack_damage'?1:modifier.id==='minecraft:base_attack_speed'?4:null;
+        if(base!==null)amount+=base;
+        const value=stats.number(Math.abs(amount)*(operation?100:modifier.type==='minecraft:generic.knockback_resistance'?10:1));
+        lines.push(parse({translate:'attribute.modifier.'+(base!==null?'equals':amount>0?'plus':'take')+'.'+operation,with:[value,{translate:'attribute.name.'+modifier.type.replace('minecraft:',''),fallback:modifier.type}]},{color:base!==null?colors.dark_green:amount>0?colors.blue:colors.red}));
+      }
+    }
+  }
+  if(components['minecraft:unbreakable']&&components['minecraft:unbreakable'].show_in_tooltip!==false)lines.push(parse({translate:'item.unbreakable',fallback:'Unbreakable'},{color:colors.blue}));
+  const durability=stats?.durability(stack);
+  if(durability)lines.push(parse({translate:'item.durability',with:[durability.remaining,durability.maximum]}));
   lines.push(parse(HeritageKit.normalize(stack.id),{color:colors.dark_gray}));
   if(context)lines.push(parse(context,{color:colors.gray}));
   return lines;

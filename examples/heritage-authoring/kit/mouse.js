@@ -1,6 +1,7 @@
 (() => {
 'use strict';
 const K=HeritageKit,E=HeritageEquipment,count=entry=>entry.item.count??1;
+const stats=typeof module!=='undefined'?require('./stats.js'):HeritageKitStats;
 function canonical(value) {
   if(Array.isArray(value))return value.map(canonical);
   if(value&&typeof value==='object')return Object.fromEntries(Object.keys(value).sort().map(key=>[key,canonical(value[key])]));
@@ -79,6 +80,20 @@ function insert(document,entry,slots) {
   }
   return {document:next,remaining};
 }
+function withdrawPurse(document,value,available=()=>true) {
+  const balance=stats.purseBalance(document);
+  if(value<=0n||value>balance)throw new Error('Choose coins within the purse balance.');
+  const slots=Array.from({length:36},(_,index)=>index).filter(available);
+  let next=K.copy(document);
+  for(const [coin,count] of Object.entries(stats.splitPurse(value))){
+    if(!count)continue;
+    const placement=insert(next,{item:{id:stats.coinId(coin),count}},slots);
+    if(placement.remaining)throw new Error('Make room in the kit inventory before withdrawing coins.');
+    next=placement.document;
+  }
+  stats.setPurseBalance(next,balance-value);
+  return next;
+}
 function quickMove(document,slot) {
   const entry=E.entryAt(document,slot);if(!entry)return result(document,null);
   const address=E.address(slot),data=K.items.get(K.normalize(entry.item.id)),armor={head:39,chest:38,legs:37,feet:36}[data?.armor];
@@ -122,7 +137,7 @@ function confirmDelete(entry,draft=null) {
   if(draft.id?.trim()&&K.items.get(K.normalize(draft.id.trim()))?.max===undefined)return true;
   try{return JSON.stringify(canonical(JSON.parse(draft.components)))!==JSON.stringify(canonical(entry?.item.components??{}));}catch(failure){return true;}
 }
-const api={click,distribute,collect,quickMove,returnCursor,drag,confirmDelete,cursor,compatible,fromLibrary};
+const api={click,distribute,collect,quickMove,returnCursor,drag,confirmDelete,cursor,compatible,fromLibrary,withdrawPurse};
 globalThis.HeritageKitMouse=api;
 if(typeof module!=='undefined')module.exports=api;
 })();
