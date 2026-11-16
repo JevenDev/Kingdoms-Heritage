@@ -54,11 +54,15 @@ final class AccessoriesControls {
         var layers = Layers.getInstances(screen);
         if (layers.isEmpty()) return;
         graphics.flush();
-        for (var layer : layers) layer.adapter.render(graphics, mouseX, mouseY, partialTick);
+        for (var layer : layers) {
+            if (layer.aggressivePositioning) layer.dispatchLayoutUpdates();
+            layer.adapter.render(graphics, mouseX, mouseY, partialTick);
+        }
     }
 
-    static boolean isLayer(Screen screen, Object adapter) {
-        return Layers.getInstances(screen).stream().anyMatch(layer -> layer.adapter == adapter);
+    static boolean isScreenAdapter(Screen screen, Object adapter) {
+        return screen instanceof io.wispforest.accessories.client.gui.AccessoriesExperimentalScreen experimental
+                && adapter instanceof OwoUIAdapter<?> && adapter == experimental.getFocused();
     }
 
     static boolean isControl(Screen screen, double x, double y) {

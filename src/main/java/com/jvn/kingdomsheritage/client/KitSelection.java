@@ -12,11 +12,13 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Player;
+import net.neoforged.neoforge.client.event.ContainerScreenEvent;
 
 public final class KitSelection {
     private final JsonObject catalog;
@@ -178,15 +180,29 @@ public final class KitSelection {
         }
     }
 
-    public static void renderPreview(Screen screen, Runnable draw) {
+    public static boolean renderPreview(Screen screen, GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        if (!isPreviewInventory(screen)) return false;
         var selection = ClientSelection.kits();
-        if (selection == null || !isInventory(screen) || Minecraft.getInstance().player != selection.player) {
-            draw.run();
-            return;
-        }
         selection.preview();
         selection.prepareNeighbors();
-        selection.inventoryPreview.render(draw);
+        selection.inventoryPreview.render(() -> selection.view.render(screen, graphics, mouseX, mouseY, partialTick));
+        return true;
+    }
+
+    public static boolean isPreviewInventory(Screen screen) {
+        var selection = ClientSelection.kits();
+        var minecraft = Minecraft.getInstance();
+        return selection != null && screen == minecraft.screen && minecraft.player == selection.player && isInventory(screen);
+    }
+
+    public static boolean showsEquipmentControls() {
+        var selection = ClientSelection.kits();
+        return selection != null && !selection.modelPreview;
+    }
+
+    public static boolean isEquipmentClass(Class<?> type) {
+        String name = type.getNestHost().getPackageName();
+        return name.startsWith("top.theillusivec4.curios.") || name.startsWith("io.wispforest.accessories.");
     }
 
     private void prepareNeighbors() {
@@ -257,10 +273,12 @@ public final class KitSelection {
     static boolean isLayoutPicker(Screen screen) { return KitSelectionView.isLayoutPicker(screen); }
     static boolean capturingPreview() { return KitSelectionView.capturingPreview(); }
 
-    public static boolean suppressExternalInventoryLayer(Object adapter) {
-        var screen = Minecraft.getInstance().screen;
-        return ClientSelection.kits() != null && isInventory(screen) && !capturingPreview()
-                && net.neoforged.fml.ModList.get().isLoaded("accessories") && AccessoriesControls.isLayer(screen, adapter);
+    public static boolean renderPreviewContainerLayer(ContainerScreenEvent.Render event) {
+        if (!capturingPreview() || !isPreviewInventory(event.getContainerScreen())) return false;
+        if (event instanceof ContainerScreenEvent.Render.Foreground) {
+            KitSelectionView.hideCrafting(event.getContainerScreen(), event.getGuiGraphics());
+        }
+        return true;
     }
 
     public static float previewAngle(net.minecraft.world.entity.LivingEntity entity, float angle, float center, boolean horizontal) {

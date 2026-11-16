@@ -13,12 +13,12 @@ public abstract class KitPreviewInventory {
     @WrapMethod(method = "drawScreenInternal")
     private static void previewInventory(Screen screen, GuiGraphics graphics, int mouseX, int mouseY,
                                          float partialTick, Operation<Void> original) {
-        KitSelection.renderPreview(screen, () -> {
-            try {
+        try {
+            if (!KitSelection.renderPreview(screen, graphics, mouseX, mouseY, partialTick)) {
                 original.call(screen, graphics, mouseX, mouseY, partialTick);
-            } finally {
-                graphics.flush();
             }
-        });
+        } finally {
+            graphics.flush();
+        }
     }
 }

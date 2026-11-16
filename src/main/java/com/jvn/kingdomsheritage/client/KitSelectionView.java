@@ -2,6 +2,7 @@ package com.jvn.kingdomsheritage.client;
 
 import com.google.gson.JsonObject;
 import com.jvn.kingdomsheritage.data.DefinitionJson;
+import com.jvn.kingdomsheritage.mixin.InventoryButtonAction;
 import java.util.List;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -14,6 +15,7 @@ import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.Mth;
 import net.neoforged.bus.api.EventPriority;
+import net.neoforged.fml.ModList;
 import net.neoforged.neoforge.client.event.ScreenEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import org.lwjgl.glfw.GLFW;
@@ -67,9 +69,6 @@ final class KitSelectionView {
 
     static void register() {
         NeoForge.EVENT_BUS.addListener(EventPriority.LOWEST, KitSelectionView::init);
-        NeoForge.EVENT_BUS.addListener(KitSelectionView::render);
-        NeoForge.EVENT_BUS.addListener(KitSelectionView::layout);
-        NeoForge.EVENT_BUS.addListener(KitSelectionView::hideCrafting);
         NeoForge.EVENT_BUS.addListener(EventPriority.HIGHEST, KitSelectionView::mouse);
         NeoForge.EVENT_BUS.addListener(EventPriority.HIGHEST, KitSelectionView::key);
         NeoForge.EVENT_BUS.addListener(EventPriority.HIGHEST, KitSelectionView::scroll);
@@ -78,8 +77,7 @@ final class KitSelectionView {
     static boolean isInventory(Screen screen) {
         if (screen instanceof InventoryScreen) return true;
         if (!(screen instanceof AbstractContainerScreen<?>)) return false;
-        String name = screen.getClass().getName();
-        return name.startsWith("top.theillusivec4.curios.") || name.startsWith("io.wispforest.accessories.");
+        return KitSelection.isEquipmentClass(screen.getClass());
     }
 
     static boolean isLayoutPicker(Screen screen) {
@@ -155,20 +153,20 @@ final class KitSelectionView {
     }
 
     private static void init(ScreenEvent.Init.Post event) {
-        KitSelectionView view = current();
-        if (view == null || !isInventory(event.getScreen())) return;
         Screen screen = event.getScreen();
+        if (!KitSelection.isPreviewInventory(screen)) return;
+        KitSelectionView view = current();
         view.carousel.close();
-        if (view.model.modelPreview()) {
-            for (var child : List.copyOf(screen.children())) event.removeListener(child);
-        } else {
-            if (net.neoforged.fml.ModList.get().isLoaded("accessories")) AccessoriesControls.hideCrafting(screen);
-            var container = (AbstractContainerScreen<?>) screen;
-            for (var child : List.copyOf(screen.children())) {
-                if (child instanceof net.minecraft.client.gui.components.ImageButton button
-                        && button.getX() == container.getGuiLeft() + 104) event.removeListener(child);
+        boolean equipment = !view.model.modelPreview();
+        boolean accessories = equipment && ModList.get().isLoaded("accessories");
+        for (var child : List.copyOf(screen.children())) {
+            if (!equipment || !isEquipmentControl(screen, child, accessories)) {
+                if (screen.getFocused() == child) screen.setFocused(null);
+                event.removeListener(child);
             }
         }
+        screen.renderables.removeIf(renderable -> !equipment || !isEquipmentControl(screen, renderable, accessories));
+        if (accessories) AccessoriesControls.hideCrafting(screen);
         view.previous = SelectionControls.arrow(8, 8, false, Component.translatable("screen.kingdomsheritage.previous_kit"),
                 button -> view.model.select(view.model.index() - 1));
         view.next = SelectionControls.arrow(screen.width - 28, 8, true, Component.translatable("screen.kingdomsheritage.next_kit"),
@@ -187,28 +185,39 @@ final class KitSelectionView {
         view.positionControls(screen, view.confirmationProgress());
     }
 
-    private static void layout(ScreenEvent.Render.Pre event) {
-        KitSelectionView view = current();
-        if (view == null || !isInventory(event.getScreen())) return;
-        long now = net.minecraft.Util.getMillis();
-        float delta = Mth.clamp((now - view.previewRenderedAt) / 1000F, 0, 0.05F);
-        view.previewRenderedAt = now;
-        view.previewYawFrom = view.previewYaw;
-        view.previewPitchFrom = view.previewPitch;
-        view.previewResponse = 1 - (float) Math.exp(-delta * 12);
-        view.previewMouseX = event.getMouseX();
-        view.previewMouseY = event.getMouseY();
-        view.frameConfirmation = view.confirmationProgress();
-        view.updateButtons(view.frameConfirmation);
-        view.positionControls(event.getScreen(), view.frameConfirmation);
-        var rendering = ClientParty.blocksHover(event.getMouseX(), event.getMouseY()) ? new ScreenEvent.Render.Pre(event.getScreen(), event.getGuiGraphics(),
-                -10000, -10000, event.getPartialTick()) : event;
-        if (view.confirming || view.frameConfirmation > 0) {
-            view.renderConfirmation(rendering, view.frameConfirmation);
-        } else {
-            view.renderCarousel(rendering);
+    private static boolean isEquipmentControl(Screen screen, Object control, boolean accessories) {
+        if (KitSelection.isEquipmentClass(control.getClass())) return true;
+        // the original Accessories screen builds vanilla buttons with mod-owned actions
+        if (control instanceof Button button) {
+            var action = ((InventoryButtonAction) button).heritage$getOnPress();
+            if (action != null && KitSelection.isEquipmentClass(action.getClass())) return true;
         }
-        event.setCanceled(true);
+        return accessories && AccessoriesControls.isScreenAdapter(screen, control);
+    }
+
+    void render(Screen screen, GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        long now = net.minecraft.Util.getMillis();
+        float delta = Mth.clamp((now - previewRenderedAt) / 1000F, 0, 0.05F);
+        previewRenderedAt = now;
+        previewYawFrom = previewYaw;
+        previewPitchFrom = previewPitch;
+        previewResponse = 1 - (float) Math.exp(-delta * 12);
+        previewMouseX = mouseX;
+        previewMouseY = mouseY;
+        frameConfirmation = confirmationProgress();
+        updateButtons(frameConfirmation);
+        positionControls(screen, frameConfirmation);
+        boolean blocksHover = ClientParty.blocksHover(mouseX, mouseY);
+        int hoverX = blocksHover ? -10000 : mouseX;
+        int hoverY = blocksHover ? -10000 : mouseY;
+        if (confirming || frameConfirmation > 0) {
+            renderConfirmation(screen, graphics, hoverX, hoverY, partialTick, frameConfirmation);
+        } else {
+            renderCarousel(screen, graphics, hoverX, hoverY, partialTick);
+            renderDetails(screen, graphics, mouseX, mouseY);
+        }
+        SelectionTransition.render(graphics);
+        ClientParty.renderScreen(screen, graphics, mouseX, mouseY);
     }
 
     int firstPreview() {
@@ -269,18 +278,16 @@ final class KitSelectionView {
         }
     }
 
-    private void renderCarousel(ScreenEvent.Render.Pre event) {
-        var graphics = event.getGuiGraphics();
-        Screen screen = event.getScreen();
+    private void renderCarousel(Screen screen, GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         SelectionBackground.render(graphics, screen.width, screen.height);
         long now = net.minecraft.Util.getMillis();
         boolean moving = carousel.moving(now);
-        carousel.render(graphics, bounds, screen.width, model, event.getMouseX(), event.getMouseY(), now, 1, true,
+        carousel.render(graphics, bounds, screen.width, model, mouseX, mouseY, now, 1, true,
                 (index, look) -> renderPreview(screen, graphics, index, look,
-                        index == model.index() && !moving ? event.getMouseX() : -10000,
-                        index == model.index() && !moving ? event.getMouseY() : -10000, event.getPartialTick(), true));
+                        index == model.index() && !moving ? mouseX : -10000,
+                        index == model.index() && !moving ? mouseY : -10000, partialTick, true));
         for (Button button : List.of(previous, next, back, confirm, disconnect)) {
-            if (button.visible) renderControlWithoutTooltip(button, graphics, event.getMouseX(), event.getMouseY(), event.getPartialTick());
+            if (button.visible) renderControlWithoutTooltip(button, graphics, mouseX, mouseY, partialTick);
         }
         boolean keyboard = Minecraft.getInstance().getLastInputType().isKeyboard();
         for (Button button : List.of(previous, next, back, confirm, disconnect)) {
@@ -288,8 +295,8 @@ final class KitSelectionView {
                 Component message = button == confirm ? model.policyHint() : button.getMessage();
                 graphics.renderTooltip(Minecraft.getInstance().font,
                         Minecraft.getInstance().font.split(message, Math.min(300, screen.width - 20)),
-                        button.isHovered() ? event.getMouseX() : button.getX() + button.getWidth() / 2,
-                        button.isHovered() ? event.getMouseY() : button.getY() + button.getHeight());
+                        button.isHovered() ? mouseX : button.getX() + button.getWidth() / 2,
+                        button.isHovered() ? mouseY : button.getY() + button.getHeight());
                 break;
             }
         }
@@ -373,14 +380,12 @@ final class KitSelectionView {
                 + Math.min(2, font.split(DefinitionJson.component(model.choices().get(model.index()), "title"), width).size())) * font.lineHeight;
     }
 
-    private void renderConfirmation(ScreenEvent.Render.Pre event, float progress) {
-        var graphics = event.getGuiGraphics();
-        Screen screen = event.getScreen();
+    private void renderConfirmation(Screen screen, GuiGraphics graphics, int mouseX, int mouseY, float partialTick, float progress) {
         var font = Minecraft.getInstance().font;
         long now = net.minecraft.Util.getMillis();
         SelectionBackground.render(graphics, screen.width, screen.height);
         carousel.render(graphics, bounds, screen.width, model, -10000, -10000, now, 1 - progress, false,
-                (index, look) -> renderPreview(screen, graphics, index, look, -10000, -10000, event.getPartialTick(), true));
+                (index, look) -> renderPreview(screen, graphics, index, look, -10000, -10000, partialTick, true));
         float targetScale = confirmationScale(screen);
         float scale = Mth.lerp(progress, 1, targetScale);
         float phase = (now % 20000L) / 20000F * Mth.TWO_PI;
@@ -390,7 +395,7 @@ final class KitSelectionView {
                 - Mth.sin(phase * 5) * 2.5F * progress * scale;
         float tilt = Mth.sin(phase * 4) * 0.35F * progress;
         confirmationPreview.render(graphics, bounds, x, y, scale, tilt,
-                () -> renderPreview(screen, graphics, model.index(), 1, bounds.getX() + 50, bounds.getY() + 43, event.getPartialTick(), false));
+                () -> renderPreview(screen, graphics, model.index(), 1, bounds.getX() + 50, bounds.getY() + 43, partialTick, false));
         graphics.pose().pushPose();
         graphics.pose().translate(0, 0, 500);
         if (progress < 1) {
@@ -419,9 +424,9 @@ final class KitSelectionView {
                 textY += font.lineHeight;
             }
         }
-        renderControlWithoutTooltip(confirm, graphics, event.getMouseX(), event.getMouseY(), event.getPartialTick());
-        renderControlWithoutTooltip(back, graphics, event.getMouseX(), event.getMouseY(), event.getPartialTick());
-        renderControlWithoutTooltip(disconnect, graphics, event.getMouseX(), event.getMouseY(), event.getPartialTick());
+        renderControlWithoutTooltip(confirm, graphics, mouseX, mouseY, partialTick);
+        renderControlWithoutTooltip(back, graphics, mouseX, mouseY, partialTick);
+        renderControlWithoutTooltip(disconnect, graphics, mouseX, mouseY, partialTick);
         if (!model.error().getString().isEmpty()) {
             var lines = font.split(model.error(), screen.width - 20);
             for (int i = 0; i < Math.min(2, lines.size()); i++) {
@@ -430,38 +435,34 @@ final class KitSelectionView {
         }
         boolean keyboard = Minecraft.getInstance().getLastInputType().isKeyboard();
         if (!ClientParty.blocksInput() && (disconnect.isHovered() || keyboard && disconnect.isFocused())) {
-            graphics.renderTooltip(font, disconnect.getMessage(), disconnect.isHovered() ? event.getMouseX() : disconnect.getX() + disconnect.getWidth() / 2,
-                    disconnect.isHovered() ? event.getMouseY() : disconnect.getY() + disconnect.getHeight());
+            graphics.renderTooltip(font, disconnect.getMessage(), disconnect.isHovered() ? mouseX : disconnect.getX() + disconnect.getWidth() / 2,
+                    disconnect.isHovered() ? mouseY : disconnect.getY() + disconnect.getHeight());
         }
         if (!ClientParty.blocksInput() && (confirm.isHovered() || keyboard && confirm.isFocused())) {
             var message = model.policyHint();
             graphics.renderTooltip(font, font.split(message, Math.min(300, screen.width - 20)),
-                    confirm.isHovered() ? event.getMouseX() : confirm.getX() + confirm.getWidth() / 2,
-                    confirm.isHovered() ? event.getMouseY() : confirm.getY() + confirm.getHeight());
+                    confirm.isHovered() ? mouseX : confirm.getX() + confirm.getWidth() / 2,
+                    confirm.isHovered() ? mouseY : confirm.getY() + confirm.getHeight());
         }
         graphics.flush();
         graphics.pose().popPose();
     }
 
-    private static void render(ScreenEvent.Render.Post event) {
-        KitSelectionView view = current();
-        if (view == null || !isInventory(event.getScreen()) || view.confirming || view.frameConfirmation > 0) return;
-        var graphics = event.getGuiGraphics();
-        Screen screen = event.getScreen();
+    private void renderDetails(Screen screen, GuiGraphics graphics, int mouseX, int mouseY) {
         var font = Minecraft.getInstance().font;
-        int center = view.bounds.getX() + view.bounds.getWidth() / 2;
-        var budget = view.model.shopBudgetLabel(view.model.index());
-        int titleY = Math.max(2, view.bounds.getY() - (budget == null ? 13 : 23));
+        int center = bounds.getX() + bounds.getWidth() / 2;
+        var budget = model.shopBudgetLabel(model.index());
+        int titleY = Math.max(2, bounds.getY() - (budget == null ? 13 : 23));
         graphics.pose().pushPose();
         graphics.pose().translate(0, 0, 500);
         if (titleY >= 14) SelectionText.centered(graphics, font, Component.translatable("screen.kingdomsheritage.kit"), center, titleY - 12, 0xffffff);
-        JsonObject choice = view.model.choices().get(view.model.index());
+        JsonObject choice = model.choices().get(model.index());
         var title = DefinitionJson.component(choice, "title").copy();
-        title.append(" (" + (view.model.index() + 1) + "/" + view.model.choices().size() + ")");
-        SelectionText.centered(graphics, font, font.plainSubstrByWidth(title.getString(), Math.min(screen.width - 24, view.bounds.getWidth() + 60)), center, titleY, 0xffffff);
+        title.append(" (" + (model.index() + 1) + "/" + model.choices().size() + ")");
+        SelectionText.centered(graphics, font, font.plainSubstrByWidth(title.getString(), Math.min(screen.width - 24, bounds.getWidth() + 60)), center, titleY, 0xffffff);
         if (budget != null) {
             var summary = budget.copy().withStyle(style -> style.withColor(0xf2cd83));
-            if (view.model.hasIncludedGear()) {
+            if (model.hasIncludedGear()) {
                 summary.append(Component.literal("  ·  ").withStyle(style -> style.withColor(0xcccccc)));
                 summary.append(Component.translatable("screen.kingdomsheritage.shop.included_gear")
                         .withStyle(style -> style.withColor(0xcccccc)));
@@ -471,33 +472,31 @@ final class KitSelectionView {
                 SelectionText.centered(graphics, font, summaryLines.getFirst(), center, titleY + 11, 0xffffff);
             }
         }
-        boolean hasError = !view.model.problem().getString().isEmpty() || !view.model.error().getString().isEmpty();
-        Component detail = !view.model.problem().getString().isEmpty() ? view.model.problem()
-                : !view.model.error().getString().isEmpty()
-                ? view.model.error()
+        boolean hasError = !model.problem().getString().isEmpty() || !model.error().getString().isEmpty();
+        Component detail = !model.problem().getString().isEmpty() ? model.problem()
+                : !model.error().getString().isEmpty()
+                ? model.error()
                 : DefinitionJson.component(choice, "description");
         String description = detail.getString();
         var lines = font.split(Component.literal(description), screen.width - 16);
-        boolean showDescription = view.descriptionY + font.lineHeight < screen.height;
+        boolean showDescription = descriptionY + font.lineHeight < screen.height;
         if (showDescription && !lines.isEmpty()) SelectionText.centered(graphics, font, lines.getFirst(), center,
-                view.descriptionY, hasError ? 0xffffaaaa : 0xffcccccc);
-        boolean overTitle = event.getMouseY() >= titleY && event.getMouseY() < titleY + font.lineHeight;
-        boolean overDescription = showDescription && event.getMouseY() >= view.descriptionY
-                && event.getMouseY() < view.descriptionY + font.lineHeight;
+                descriptionY, hasError ? 0xffffaaaa : 0xffcccccc);
+        boolean overTitle = mouseY >= titleY && mouseY < titleY + font.lineHeight;
+        boolean overDescription = showDescription && mouseY >= descriptionY && mouseY < descriptionY + font.lineHeight;
         if (!ClientParty.blocksInput() && (overTitle || overDescription) && !description.isEmpty()) {
             graphics.renderTooltip(font, font.split(Component.literal(description), Math.min(300, screen.width - 20)),
-                    event.getMouseX(), event.getMouseY());
+                    mouseX, mouseY);
         }
         graphics.pose().popPose();
     }
 
-    private static void hideCrafting(net.neoforged.neoforge.client.event.ContainerScreenEvent.Render.Foreground event) {
-        if (current() == null || !isInventory(event.getContainerScreen())
-                || event.getContainerScreen().getClass().getName().startsWith("io.wispforest.accessories.")) return;
-        boolean crafting = event.getContainerScreen().getMenu().slots.stream().anyMatch(slot ->
+    static void hideCrafting(AbstractContainerScreen<?> screen, GuiGraphics graphics) {
+        if (screen.getClass().getName().startsWith("io.wispforest.accessories.")) return;
+        boolean crafting = screen.getMenu().slots.stream().anyMatch(slot ->
                 slot.container instanceof net.minecraft.world.inventory.CraftingContainer
                         || slot.container instanceof net.minecraft.world.inventory.ResultContainer);
-        if (crafting) event.getGuiGraphics().fill(95, 4, 173, 78, 0xffc6c6c6);
+        if (crafting) graphics.fill(95, 4, 173, 78, 0xffc6c6c6);
     }
 
     private static void mouse(ScreenEvent.MouseButtonPressed.Pre event) {

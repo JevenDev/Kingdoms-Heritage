@@ -77,7 +77,8 @@ final class ClientParty {
 
     static void register() {
         HeritageNetwork.cursorReceiver = ClientParty::cursor;
-        NeoForge.EVENT_BUS.addListener(EventPriority.LOWEST, ClientParty::renderScreen);
+        NeoForge.EVENT_BUS.<ScreenEvent.Render.Post>addListener(EventPriority.LOWEST, event ->
+                renderScreen(event.getScreen(), event.getGuiGraphics(), event.getMouseX(), event.getMouseY()));
         NeoForge.EVENT_BUS.addListener(EventPriority.HIGHEST, true, ClientParty::mouse);
         NeoForge.EVENT_BUS.addListener(EventPriority.HIGHEST, true, ClientParty::key);
         NeoForge.EVENT_BUS.addListener(EventPriority.HIGHEST, true, ClientParty::scroll);
@@ -542,9 +543,9 @@ final class ClientParty {
 
     static Component playerCount(int count) { return text(count == 1 ? "player_count_single" : "player_count", count); }
 
-    private static void renderScreen(ScreenEvent.Render.Post event) {
-        if (!overlay(event.getScreen()) || KitSelection.capturingPreview()) return;
-        render(event.getGuiGraphics(), event.getScreen().width, event.getScreen().height, event.getMouseX(), event.getMouseY());
+    static void renderScreen(Screen screen, GuiGraphics graphics, int mouseX, int mouseY) {
+        if (!overlay(screen) || KitSelection.capturingPreview()) return;
+        render(graphics, screen.width, screen.height, mouseX, mouseY);
     }
 
     static void render(GuiGraphics graphics, int width, int height, int mouseX, int mouseY) {
