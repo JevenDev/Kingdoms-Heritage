@@ -5,11 +5,15 @@ import com.jvn.kingdomsheritage.data.KitDefinition;
 import com.jvn.kingdomsheritage.data.KitLoadout;
 import com.jvn.kingdomsheritage.data.KitStats;
 import java.util.List;
+import net.minecraft.client.player.AbstractClientPlayer;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 
 final class KitPreview {
+    private static KitPreview rendering;
     private final Player player;
+    private KitPreviewPlayer renderPlayer;
     private KitLoadout.Snapshot original;
     private KitLoadout.Snapshot expected;
     private KitDefinition kit;
@@ -26,6 +30,7 @@ final class KitPreview {
             if (failure != null) throw failure;
             return false;
         }
+        renderPlayer = null;
         original = KitLoadout.capture(player, true);
         expected = null;
         failure = null;
@@ -59,18 +64,27 @@ final class KitPreview {
         return expected == null ? -1 : expected.purchaseIndex(slot);
     }
 
-    void render(Runnable draw) {
-        if (expected == null) {
-            draw.run();
-            return;
+    static Entity renderEntity(Entity entity) {
+        if (rendering == null || entity != rendering.player) return entity;
+        if (rendering.renderPlayer == null) {
+            rendering.renderPlayer = new KitPreviewPlayer((AbstractClientPlayer) entity,
+                    rendering.expected == null ? rendering.original : rendering.expected);
         }
-        // modded equipment renderers read the live entity
-        var actual = KitLoadout.capture(player, false);
+        rendering.renderPlayer.prepare();
+        return rendering.renderPlayer;
+    }
+
+    void render(Runnable draw) {
+        var previous = rendering;
+        var actual = expected == null ? null : KitLoadout.capture(player, false);
         try {
-            expected.write(player, true);
+            rendering = this;
+            // inventory screens still read the live player's slots
+            if (expected != null) expected.write(player, true);
             draw.run();
         } finally {
-            actual.write(player, false);
+            rendering = previous;
+            if (actual != null) actual.write(player, false);
         }
     }
 }

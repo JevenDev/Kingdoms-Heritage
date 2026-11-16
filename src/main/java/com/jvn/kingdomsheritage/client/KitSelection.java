@@ -284,6 +284,10 @@ public final class KitSelection {
         return true;
     }
 
+    public static net.minecraft.world.entity.Entity previewEntity(net.minecraft.world.entity.Entity entity) {
+        return KitPreview.renderEntity(entity);
+    }
+
     public static float previewAngle(net.minecraft.world.entity.LivingEntity entity, float angle, float center, boolean horizontal) {
         return KitSelectionView.previewAngle(entity, angle, center, horizontal);
     }

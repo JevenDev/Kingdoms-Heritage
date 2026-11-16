@@ -12,6 +12,7 @@
     "SelectionScreenBackground",
     "SelectionGuiScaleOverride",
     "KitPreviewRotation",
+    "KitPreviewEntity",
     "KitPreviewInventory",
     "KitPreviewContainerLayers",
     "KitPreviewOwoLayers",
