@@ -501,9 +501,15 @@ class Inventory {
     this.visibility=new IntersectionObserver(entries=>{this.visible=entries[0].isIntersecting;if(this.visible){this.refit();this.draw();}});this.visibility.observe(this.frame);
     assets().then(()=>{if(!this.frame.isConnected)return;this.ready=true;this.frame.setAttribute('aria-busy','false');this.labels();this.draw();}).catch(error=>{host.textContent='Inventory assets could not load: '+error.message;});
   }
+  setRenderScale(scale) {
+    const next=Math.max(1,Math.ceil(scale));
+    if(this.renderScale===next)return;
+    this.renderScale=next;this.fit();
+  }
   fit() {
     let scale=1;
     if(this.fillHost){
+      scale=this.renderScale??1;
       this.frame.style.width=this.frame.style.height='100%';
     }else{
       let ratio=devicePixelRatio||1;

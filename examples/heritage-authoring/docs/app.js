@@ -87,7 +87,7 @@ function loadKitRenderer() {
     await Promise.all(['catalog.js','equipment-data.js','player-data.js','examples.js','stats.js?v=8','../editor/json-editor.js?v=3'].map(loadKitScript));
     await loadKitScript('engine.js?v=9');
     await Promise.all(['equipment.js?v=4','player.js','text.js'].map(loadKitScript));
-    await loadKitScript('view.js?v=28');
+    await loadKitScript('view.js?v=29');
   })().catch(error=>{kitRenderer=null;throw error;});
 }
 async function kitPreviews(anchor) {

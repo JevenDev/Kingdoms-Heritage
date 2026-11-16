@@ -1,18 +1,32 @@
 @import url('editor/site.css?v=9');
-.home { min-height: 100dvh; display: flex; flex-direction: column; }
-.home header { flex-shrink: 0; }
-.home-main { width: 100%; max-width: 1000px; margin: 0 auto; padding: 48px 32px 56px; flex: 1; }
-.home-main h1 { font-size: 32px; line-height: 1.25; letter-spacing: -.6px; font-weight: 600; margin: 0 0 12px; }
-.home-description { color: var(--muted); margin: 0 0 32px; }
-.home-tools { border-top: 1px solid var(--line-soft); }
-.home-tools a { display: flex; align-items: flex-start; gap: 20px; padding: 24px 12px; border-bottom: 1px solid var(--line-soft); color: var(--text); text-decoration: none; }
-.home-tools a:hover { background: var(--panel); }
-.home-tools a:active { background: var(--panel-2); }
+.home { min-height: 100dvh; display: flex; flex-direction: column; isolation: isolate; }
+.home-backdrop { position: fixed; inset: 0; z-index: -1; pointer-events: none; background: var(--site-background); }
+.home-backdrop canvas { width: 100%; height: 100%; display: block; image-rendering: pixelated; }
+.home-backdrop::after { content: ''; position: absolute; inset: 0; background: rgb(8 9 12 / 55%); }
+.home header { flex-shrink: 0; background: rgb(0 0 0 / 50%); border-bottom: 0; }
+.home-main { width: 100%; max-width: 1160px; margin: auto; padding: 72px 40px; flex: 1; display: grid; grid-template-columns: minmax(0,.9fr) minmax(0,1.1fr); gap: 36px 80px; align-content: center; align-items: center; }
+.home-main h1 { max-width: 400px; font-size: 40px; line-height: 1.15; letter-spacing: -1px; font-weight: 600; margin: 0 0 20px; }
+.home-description { max-width: 400px; color: #b8b8bd; line-height: 1.7; margin: 0 0 28px; }
+.home-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 16px 20px; }
+.home-actions a, .home-links a { color: var(--link); text-decoration: underline; text-underline-offset: 4px; }
+.home-actions a:hover, .home-links a:hover { color: var(--link-hover); }
+.home-actions .home-primary { display: inline-flex; align-items: center; min-height: 38px; padding: 8px 14px; border-radius: 6px; background: var(--text); color: #101010; font-weight: 600; text-decoration: none; }
+.home-actions .home-primary:hover { background: #fff; color: #101010; }
+.home-actions .home-primary:active { background: #ccc; }
+.home-tools { border-top: 1px solid rgb(255 255 255 / 14%); }
+.home-tools a { display: flex; align-items: flex-start; gap: 16px; padding: 24px 12px; border-bottom: 1px solid rgb(255 255 255 / 14%); color: var(--text); text-decoration: none; transition: background-color .12s; }
+.home-tools a:hover, .home-tools a:focus-visible { background: rgb(255 255 255 / 5%); }
+.home-tools a:active { background: rgb(255 255 255 / 8%); }
 .home-tools [data-icon] { color: var(--muted); padding-top: 4px; }
 .home-tools .lucide { width: 20px; height: 20px; }
+.home-tools div { flex: 1; }
+.home-tools .home-tool-arrow { align-self: center; padding: 0; }
 .home-tools h2 { font-size: 20px; line-height: 1.4; font-weight: 500; margin: 0 0 6px; }
-.home-tools p { color: var(--muted); margin: 0; }
-.home-links { display: flex; flex-wrap: wrap; gap: 12px 24px; margin-top: 24px; }
-.home-links a { color: var(--link); text-decoration: underline; text-underline-offset: 4px; }
-.home-links a:hover { color: var(--link-hover); }
-@media(max-width:620px) { .home-main { padding: 28px 20px 36px; } .home-main h1 { font-size: 28px; } .home-tools a { padding: 20px 0; gap: 14px; } }
+.home-tools p { color: #b8b8bd; margin: 0; }
+.home-links { grid-column: 2; display: flex; flex-wrap: wrap; gap: 12px 24px; padding: 0 12px; font-size: 14px; }
+.home .site-footer { display: flex; justify-content: space-between; align-items: center; gap: 20px; }
+#background-motion { font-size: 12px; min-height: 28px; padding: 3px 8px; }
+#background-motion[hidden] { display: none; }
+@media(max-width:900px) { .home-main { gap: 32px 40px; padding: 48px 28px; } .home-main h1 { font-size: 34px; } }
+@media(max-width:700px) { .home-main { grid-template-columns: minmax(0,1fr); } .home-links { grid-column: 1; } .home-tools a { padding: 20px 0; } }
+@media(prefers-reduced-motion:reduce) { .home-tools a { transition: none; } }

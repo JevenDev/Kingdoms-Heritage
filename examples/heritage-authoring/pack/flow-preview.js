@@ -294,7 +294,7 @@ async function monitorPreview(target,{selectKit}={}){
           const modelOnly=kitPreview==='model';
           const mode=modelOnly?'player':inventoryMode,key=JSON.stringify([kit,mode,modelOnly,equipmentState]);
           if(key!==kitSignature){kitSignature=key;inventory.set(kit,{...equipmentState,mode,modelOnly,hideCrafting:true,controlledAim:true});}
-          inventory.visible=true;inventory.draw();const bw=inventory.layout.width,bh=inventory.layout.height,x=Math.trunc((w-bw)/2),y=Math.trunc((h-bh)/2);
+          inventory.setRenderScale(Math.max(pixelWidth/w,pixelHeight/h));inventory.visible=true;inventory.draw();const bw=inventory.layout.width,bh=inventory.layout.height,x=Math.trunc((w-bw)/2),y=Math.trunc((h-bh)/2);
           const choices=kits.length?kits:[kit],selected=Math.max(0,choices.findIndex(entry=>entry.id===kit.id)),listKey=JSON.stringify([choices,mode,modelOnly]);
           if(listKey!==kitListSignature||reduceMotion.matches){kitListSignature=listKey;kitCarousel=new HeritagePresentation.KitCarousel(selected,clock());}else kitCarousel.select(selected,clock());
           for(const card of kitCarousel.poses({x,y,width:bw,height:bh},w,choices.length,clock())){
@@ -723,15 +723,15 @@ function selectKit(index){
 }
 function kitFrame(index,kits,look){
   const yaw=kitYaw*look,pitch=kitPitch*look,frame=kitFrames.get(index);
-  const {width,height}=inventory.layout;
+  const {width,height}=inventory.canvas;
   if(frame?.yaw===yaw&&frame.pitch===pitch&&frame.image.width===width&&frame.image.height===height)return frame.image;
   const image=frame?.image??document.createElement('canvas'),context=image.getContext('2d');
   if(image.width!==width||image.height!==height){image.width=width;image.height=height;}
   const aim=inventory.aim,hover=inventory.hover;
   inventory.aim={x:-Math.tan(yaw)*40,y:-Math.tan(pitch)*40};inventory.hover=null;
   inventory.preview(kits[index],false);
-  context.clearRect(0,0,width,height);
-  context.drawImage(inventory.canvas,0,0,width,height);
+  context.clearRect(0,0,width,height);context.imageSmoothingEnabled=false;
+  context.drawImage(inventory.canvas,0,0);
   inventory.aim=aim;inventory.hover=hover;inventory.preview(null,false);
   kitFrames.set(index,{image,yaw,pitch});return image;
 }
@@ -1116,6 +1116,7 @@ function render(now){
   const transitionWasActive=transition.phase!=='idle';transition.tick(now);if(transitionWasActive&&transition.phase==='idle'&&session.phase==='complete')resize();
   if(session.phase==='review'&&started<0&&transition.phase==='idle')started=now;
   if(!waitingForParty)startSpeech();const w=viewport.guiWidth,h=viewport.guiHeight,elapsed=started<0?0:now-started;
+  inventory?.setRenderScale(Math.max(canvas.width/w,canvas.height/h));
   ctx.setTransform(canvas.width/w,0,0,canvas.height/h,0,0);ctx.imageSmoothingEnabled=false;ctx.globalAlpha=1;
   rect(0,0,w,h,'#101319');if(shader)shader(w,h,now-backgroundStarted);
   activeButtons=new Set();

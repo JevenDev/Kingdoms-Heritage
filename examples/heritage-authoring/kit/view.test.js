@@ -21,3 +21,17 @@ test('damaged equipment can be carried and released without affecting its compon
   view.setCursor(sword);const ghost=body.children[0];assert.equal(ghost.children.length,1);
   view.setCursor(null);assert.equal(ghost.removed,true);assert.equal(JSON.stringify(sword),before);
 });
+
+test('embedded inventories render at preview resolution without changing their layout',()=>{
+  const {view}=surface(),inventory=Object.create(view.Inventory.prototype);let draws=0;
+  Object.assign(inventory,{fillHost:true,frame:{style:{}},layout:{width:176,height:166},canvas:{},background:{},draw(){draws++;}});
+  inventory.setRenderScale(4);
+  assert.equal(inventory.canvas.width,704);assert.equal(inventory.canvas.height,664);
+  assert.equal(inventory.background.width,704);assert.equal(inventory.background.height,664);
+  assert.equal(inventory.scale,4);assert.equal(inventory.frame.style.width,'100%');assert.equal(inventory.frame.style.height,'100%');
+  assert.deepEqual(inventory.layout,{width:176,height:166});
+  inventory.setRenderScale(4);inventory.fit();assert.equal(draws,1);
+  inventory.layout={width:220,height:166};inventory.fit();assert.equal(inventory.canvas.width,880);assert.equal(inventory.scale,4);
+  inventory.setRenderScale(2);assert.equal(inventory.canvas.width,440);assert.equal(inventory.canvas.height,332);assert.equal(inventory.scale,2);
+  inventory.setRenderScale(2.5);assert.equal(inventory.scale,3);assert.equal(inventory.canvas.width,660);
+});
