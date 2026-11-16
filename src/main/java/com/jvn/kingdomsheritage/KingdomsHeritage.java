@@ -27,5 +27,6 @@ public final class KingdomsHeritage {
         net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(com.jvn.kingdomsheritage.server.KitService::commands);
         net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(com.jvn.kingdomsheritage.server.HeritageCommands::register);
         net.neoforged.neoforge.common.NeoForge.EVENT_BUS.register(com.jvn.kingdomsheritage.server.SelectionManager.class);
+        com.jvn.kingdomsheritage.compat.IronsSpellsCompat.register();
     }
 }
