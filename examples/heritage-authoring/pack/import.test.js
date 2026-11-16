@@ -85,11 +85,11 @@ test('starter stats and exact purse grants survive ZIP import and export',async(
       {path:'pack.mcmeta',content:'{"pack":{"pack_format":48,"description":"Starter stats"}}'},
       {path:'data/story/heritage/spawns/home.json',content:'{"title":"Home","type":"default","kits":["story:starter"]}'},
       {path,content:'{"title":"Starter","items":[],"starting_health":1,"starting_hunger":8,"attributes":'+JSON.stringify(attributes)+
-        ',"starting_resources":{"numismaticoverhaul:purse":'+value+'}}'}
+        ',"starting_resources":{"irons_spellbooks:mana":{"amount":120,"capacity":225},"numismaticoverhaul:purse":'+value+'}}'}
     ];
     const project=await Import.read(Zip.zip(files),'starter-stats.zip',ids());
     assert.deepEqual(JSON.parse(rebuilt(project).files.find(file=>file.path===path).content),{
-      title:'Starter',items:[],starting_health:1,starting_hunger:8,attributes,starting_resources:{'numismaticoverhaul:purse':expected}
+      title:'Starter',items:[],starting_health:1,starting_hunger:8,attributes,starting_resources:{'irons_spellbooks:mana':{amount:120,capacity:225},'numismaticoverhaul:purse':expected}
     });
   }
 });

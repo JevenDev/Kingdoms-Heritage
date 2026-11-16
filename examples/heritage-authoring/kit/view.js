@@ -10,7 +10,7 @@ function image(name) {return images.get(name);}
 async function assets() {
   if(assetPromise)return assetPromise;
   assetPromise=(async()=>{
-    const files=[...HeritagePlayerData.textures.map(texture=>texture.file),...Object.keys(HeritageEquipmentData.assets),...['armor','health','hunger','info',...['armor','health','hunger'].flatMap(kind=>['empty','half','full'].map(state=>kind+'_'+state))].map(name=>'stats/'+name+'.png'),'inventory.png','steve.png','items-0.png','items-1.png','numismatic/purse_widget.png',...['gold','silver','bronze'].map(coinImage),...['helmet','chestplate','leggings','boots','shield'].map(slot=>'empty_armor_slot_'+slot+'.png'),'armor/leather_layer_1_overlay.png','armor/leather_layer_2_overlay.png',...['leather','chainmail','iron','gold','diamond','netherite','turtle'].flatMap(material=>[1,2].map(layer=>'armor/'+material+'_layer_'+layer+'.png')).filter(file=>!file.includes('turtle_layer_2'))];
+    const files=[...HeritagePlayerData.textures.map(texture=>texture.file),...Object.keys(HeritageEquipmentData.assets),...['armor','health','hunger','info','mana',...['armor','health','hunger'].flatMap(kind=>['empty','half','full'].map(state=>kind+'_'+state))].map(name=>'stats/'+name+'.png'),'inventory.png','steve.png','items-0.png','items-1.png','numismatic/purse_widget.png',...['gold','silver','bronze'].map(coinImage),...['helmet','chestplate','leggings','boots','shield'].map(slot=>'empty_armor_slot_'+slot+'.png'),'armor/leather_layer_1_overlay.png','armor/leather_layer_2_overlay.png',...['leather','chainmail','iron','gold','diamond','netherite','turtle'].flatMap(material=>[1,2].map(layer=>'armor/'+material+'_layer_'+layer+'.png')).filter(file=>!file.includes('turtle_layer_2'))];
     const base=assetBase;
     await Promise.all([fetch(new URL('player/models.bin',base)).then(response=>{if(!response.ok)throw new Error('Player models could not load.');return response.arrayBuffer();}).then(buffer=>{playerGeometry=buffer;}),...files.map(async file=>{const img=new Image();img.src=new URL(file,base);await img.decode();images.set(file,img);})]);
     for(const provider of HeritageAssets.providers) {
@@ -441,6 +441,10 @@ class StatPanel {
       {kind:'armor',value:String(stats.armor),lines:[stats.armor+' armor points'],hud:{kind:'armor',filled:stats.armor,slots:10}},
       {kind:'health',value:n(stats.health),lines:[n(stats.health)+' / '+n(stats.maxHealth)+' health points'],hud:{kind:'health',filled:Math.ceil(stats.health),slots:Math.ceil(stats.maxHealth/2)}},
       {kind:'hunger',value:String(stats.hunger),lines:[stats.hunger+' / 20 hunger points'],hud:{kind:'hunger',filled:stats.hunger,slots:10}}];
+    if(stats.mana){
+      const {amount,capacity}=stats.mana,value=(amount===null?'?':n(amount))+' / '+n(capacity);
+      rows.push({kind:'mana',value,lines:[value+' mana',...(amount===null?['Current mana is unchanged on arrival.']:[])]});
+    }
     let x=0;
     for(const row of rows){row.x=x;row.width=9+(row.value?3+textWidth(row.value):0);x+=row.width+6;}
     this.width=x-6;this.canvas.width=this.width*2;this.canvas.height=18;const ctx=this.canvas.getContext('2d');ctx.scale(2,2);ctx.imageSmoothingEnabled=false;

@@ -93,6 +93,25 @@
       "starting_resources": {
         "type": "object",
         "properties": {
+          "irons_spellbooks:mana": {
+            "type": "object",
+            "description": "Optional native Iron's Spells 'n Spellbooks mana settings on arrival. Requires the mod. Use capacity or a kit irons_spellbooks:max_mana attribute bonus, not both.",
+            "properties": {
+              "amount": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1000000,
+                "description": "Current mana on arrival, capped at the final maximum. Zero starts empty. Omit to keep current mana."
+              },
+              "capacity": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1000000,
+                "description": "Base mana cap. Equipment and other modifiers still apply. Omit to keep the existing base capacity."
+              }
+            },
+            "additionalProperties": false
+          },
           "numismaticoverhaul:purse": {
             "description": "Currency to deposit in the player's Numismatic Overhaul Reforged Again purse.",
             "oneOf": [

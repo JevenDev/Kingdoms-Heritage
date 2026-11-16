@@ -33,7 +33,8 @@ final class KitStatPanel {
 
     private static boolean showInInfo(KitStats.Bonus bonus) {
         return !bonus.attribute().equals(Attributes.ARMOR.unwrapKey().orElseThrow().location())
-                && !bonus.attribute().equals(Attributes.MAX_HEALTH.unwrapKey().orElseThrow().location());
+                && !bonus.attribute().equals(Attributes.MAX_HEALTH.unwrapKey().orElseThrow().location())
+                && !bonus.attribute().equals(KitStats.MAX_MANA);
     }
 
     private static boolean hasInfo(KitStats.Preview stats) {
@@ -43,7 +44,8 @@ final class KitStatPanel {
     static int width(Font font, KitStats.Preview stats) {
         return statWidth(font, Integer.toString(stats.armor())) + statWidth(font, number(stats.health()))
                 + statWidth(font, Integer.toString(stats.hunger())) + GROUP_GAP * 2
-                + (hasInfo(stats) ? STAT_SIZE + GROUP_GAP : 0);
+                + (hasInfo(stats) ? STAT_SIZE + GROUP_GAP : 0)
+                + (stats.mana() == null ? 0 : statWidth(font, manaText(stats.mana())) + GROUP_GAP);
     }
 
     private static int statWidth(Font font, String value) {
@@ -83,10 +85,23 @@ final class KitStatPanel {
         x += drawStat(graphics, font, "health", number(stats.health()), x, statY, mouseX, mouseY, tooltipX, tooltipY,
                 new HudIcons(Stat.HEALTH, (int) Math.ceil(stats.health()), (int) Math.ceil(stats.maxHealth() / 2)),
                 Component.translatable(TEXT + "health", number(stats.health()), number(stats.maxHealth()))) + GROUP_GAP;
-        drawStat(graphics, font, "hunger", Integer.toString(stats.hunger()), x, statY, mouseX, mouseY, tooltipX, tooltipY,
+        x += drawStat(graphics, font, "hunger", Integer.toString(stats.hunger()), x, statY, mouseX, mouseY, tooltipX, tooltipY,
                 new HudIcons(Stat.HUNGER, stats.hunger(), 10),
-                Component.translatable(TEXT + "hunger", stats.hunger()));
+                Component.translatable(TEXT + "hunger", stats.hunger())) + GROUP_GAP;
+        if (stats.mana() != null) {
+            String value = manaText(stats.mana());
+            graphics.blitSprite(icon("mana"), x, statY, STAT_SIZE, STAT_SIZE);
+            SelectionText.draw(graphics, font, value, x + STAT_SIZE + GAP, statY, 0xffffff);
+            if (inside(mouseX, mouseY, x, statY, statWidth(font, value), STAT_SIZE)) {
+                graphics.renderComponentTooltip(font, List.of(Component.translatable(TEXT + "mana",
+                        number(stats.mana().amount()), number(stats.mana().capacity()))), tooltipX, tooltipY);
+            }
+        }
         graphics.pose().popPose();
+    }
+
+    private static String manaText(KitStats.ManaPreview mana) {
+        return number(mana.amount()) + " / " + number(mana.capacity());
     }
 
     private static int drawStat(GuiGraphics graphics, Font font, String name, String value, int x, int y,

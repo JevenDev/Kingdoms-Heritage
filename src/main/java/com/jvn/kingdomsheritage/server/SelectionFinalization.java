@@ -3,6 +3,7 @@ package com.jvn.kingdomsheritage.server;
 import com.google.gson.JsonObject;
 import com.jvn.kingdomsheritage.HeritageConfig;
 import com.jvn.kingdomsheritage.KingdomsHeritage;
+import com.jvn.kingdomsheritage.compat.IronsSpellsCompat;
 import com.jvn.kingdomsheritage.data.HeritageException;
 import com.jvn.kingdomsheritage.data.KitDefinition;
 import com.jvn.kingdomsheritage.data.KitLoadout;
@@ -58,16 +59,21 @@ final class SelectionFinalization {
                 var original = backup;
                 var stats = member.kit().stats();
                 boolean updateHealth = stats.changesHealth();
+                boolean updateMana = stats.changesMana();
+                if (updateMana) {
+                    float mana = IronsSpellsCompat.mana(player);
+                    rollback.accept(() -> IronsSpellsCompat.setMana(player, mana));
+                }
                 if (updateHealth) {
                     float health = player.getHealth();
                     rollback.accept(() -> player.setHealth(health));
                 }
                 rollback.accept(() -> {
                     write(player, original);
-                    if (updateHealth) ((KitEquipmentUpdates) player).heritage$refreshEquipment();
+                    if (updateHealth || updateMana) ((KitEquipmentUpdates) player).heritage$refreshEquipment();
                 });
                 write(player, planned);
-                if (updateHealth) ((KitEquipmentUpdates) player).heritage$refreshEquipment();
+                if (updateHealth || updateMana) ((KitEquipmentUpdates) player).heritage$refreshEquipment();
                 KitStatGrants.apply(player, stats, rollback);
             }
             for (var member : members) {

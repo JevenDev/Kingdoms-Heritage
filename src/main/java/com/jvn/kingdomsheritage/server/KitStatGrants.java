@@ -1,5 +1,6 @@
 package com.jvn.kingdomsheritage.server;
 
+import com.jvn.kingdomsheritage.compat.IronsSpellsCompat;
 import com.jvn.kingdomsheritage.compat.NumismaticCompat;
 import com.jvn.kingdomsheritage.data.HeritageException;
 import com.jvn.kingdomsheritage.data.KitStats;
@@ -13,6 +14,12 @@ final class KitStatGrants {
     private KitStatGrants() {}
 
     static void validate(ServerPlayer player, KitStats stats) {
+        if (stats.changesMana()) {
+            IronsSpellsCompat.requireMana();
+            if (player != null && KitStats.attribute(player, KitStats.MAX_MANA) == null) {
+                throw new HeritageException("kit_player_attribute", "The player does not have the kit attribute: %s", KitStats.MAX_MANA);
+            }
+        }
         for (var bonus : stats.attributes()) {
             var type = BuiltInRegistries.ATTRIBUTE.getHolder(bonus.attribute()).orElse(null);
             if (type == null) throw new HeritageException("kit_attribute", "Unknown kit attribute: %s", bonus.attribute());
@@ -49,6 +56,20 @@ final class KitStatGrants {
                 if (previous != null) attribute.addPermanentModifier(previous);
             });
             attribute.addOrReplacePermanentModifier(bonus.modifier());
+        }
+        if (stats.changesMana()) {
+            var attribute = KitStats.attribute(player, KitStats.MAX_MANA);
+            var previous = attribute.getModifier(KitStats.MODIFIER_ID);
+            float amount = IronsSpellsCompat.mana(player);
+            if (stats.mana() != null && stats.mana().capacity() != null) {
+                rollback.accept(() -> {
+                    attribute.removeModifier(KitStats.MODIFIER_ID);
+                    if (previous != null) attribute.addPermanentModifier(previous);
+                });
+                attribute.addOrReplacePermanentModifier(stats.mana().modifier(attribute.getBaseValue()));
+            }
+            float starting = stats.mana() != null && stats.mana().amount() != null ? stats.mana().amount() : amount;
+            IronsSpellsCompat.setMana(player, Math.max(0, Math.min(starting, (float) attribute.getValue())));
         }
         if (stats.changesHealth()) {
             float health = stats.startingHealth() == null ? player.getHealth() : stats.startingHealth();

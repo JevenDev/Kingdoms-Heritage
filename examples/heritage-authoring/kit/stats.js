@@ -1,7 +1,7 @@
 (() => {
 'use strict';
 
-const purseId='numismaticoverhaul:purse';
+const purseId='numismaticoverhaul:purse',manaId='irons_spellbooks:mana',maxMana='irons_spellbooks:max_mana';
 const pursePath=['starting_resources',purseId];
 const maxBalance=9_223_372_036_854_775_807n;
 const denominations={gold:10_000n,silver:100n,bronze:1n};
@@ -56,7 +56,34 @@ function preview(kit){
   const bonuses=Array.isArray(kit.attributes)?kit.attributes.filter(bonus=>typeof bonus?.attribute==='string'&&Number.isFinite(bonus.amount)):[];
   for(const bonus of bonuses)add(bonus.attribute,{...bonus,id:'kingdomsheritage:starting_kit'});
   const values=id=>[...(modifiers.get(id)?.values()??[])],maximum=Math.fround(project(20,values(maxHealth),1,1024));
-  return {armor:Math.floor(project(0,values(armor),0,30)),health:Math.min(maximum,Number.isFinite(kit.starting_health)?Math.fround(kit.starting_health):20),maxHealth:maximum,hunger:kit.starting_hunger??20,bonuses:bonuses.filter(bonus=>![armor,maxHealth].includes(normalize(bonus.attribute))),unknown};
+  const mana=manaPreview(kit,values(maxMana));
+  return {...(mana?{mana}:{}),armor:Math.floor(project(0,values(armor),0,30)),health:Math.min(maximum,Number.isFinite(kit.starting_health)?Math.fround(kit.starting_health):20),maxHealth:maximum,hunger:kit.starting_hunger??20,bonuses:bonuses.filter(bonus=>![armor,maxHealth,maxMana].includes(normalize(bonus.attribute))),unknown};
+}
+function manaPreview(kit,modifiers) {
+  const resource=kit.starting_resources?.[manaId];
+  if(!Object.keys(resource??{}).length&&!modifiers.length)return null;
+  const capacity=project(resource?.capacity??100,modifiers,0,1_000_000);
+  return {amount:resource?.amount===undefined?null:Math.min(Math.fround(resource.amount),capacity),capacity};
+}
+
+function setMana(kit,key,value) {
+  const resources=kit.starting_resources??{},mana={...resources[manaId]};
+  if(value==='')delete mana[key];
+  else mana[key]=Number(value);
+  if(Object.keys(mana).length)resources[manaId]=mana;
+  else delete resources[manaId];
+  if(Object.keys(resources).length)kit.starting_resources=resources;
+  else delete kit.starting_resources;
+}
+
+function validateMana(kit,value) {
+  const path=['starting_resources',manaId];
+  if(!object(value))throw issue('Mana settings must be an object.',path);
+  for(const [key,amount] of Object.entries(value)){
+    if(!['amount','capacity'].includes(key))throw issue('Unknown mana setting '+key+'.',[...path,key]);
+    if(!Number.isFinite(amount)||amount<0||amount>1_000_000)throw issue('Mana '+key+' must be from 0 to 1,000,000.',[...path,key]);
+  }
+  if(value.capacity!==undefined&&Array.isArray(kit.attributes)&&kit.attributes.some(bonus=>bonus?.attribute===maxMana))throw issue('Use either a mana capacity or a max_mana attribute bonus, not both.',[...path,'capacity']);
 }
 const number=value=>Math.abs(value)>=1_000_000?value.toExponential(1):String(Number(value.toFixed(2)));
 
@@ -118,6 +145,7 @@ function validatePurse(kit,literal) {
   if(resources===undefined)return;
   if(!object(resources))throw issue('Starting resources must be an object.',['starting_resources']);
   for(const [id,value] of Object.entries(resources)){
+    if(id===manaId){validateMana(kit,value);continue;}
     if(id!==purseId)throw issue('Unknown starting resource '+id+'.',['starting_resources',id]);
     const readAmount=(number,path)=>{
       if(typeof number!=='number')throw issue('Enter a non-negative whole number of coins.',path);
@@ -188,7 +216,7 @@ function setModifier(kit,id,amount,operation) {
   else delete kit.attributes;
 }
 
-const api={configure,durability,equipmentModifiers,matchesSlot,project,preview,number,purseId,maxHealth,armor,operations,attributeId,normalize,validate,validatePurse,purseCounts,pursePreview,purseBalance,denominations,coinId,coinTotal,splitPurse,setPurseBalance,setCoin,modifier,setModifier};
+const api={manaId,maxMana,setMana,configure,durability,equipmentModifiers,matchesSlot,project,preview,number,purseId,maxHealth,armor,operations,attributeId,normalize,validate,validatePurse,purseCounts,pursePreview,purseBalance,denominations,coinId,coinTotal,splitPurse,setPurseBalance,setCoin,modifier,setModifier};
 if(typeof module!=='undefined')module.exports=api;
 else globalThis.HeritageKitStats=api;
 })();

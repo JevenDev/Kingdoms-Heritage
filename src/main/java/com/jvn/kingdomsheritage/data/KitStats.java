@@ -3,6 +3,7 @@ package com.jvn.kingdomsheritage.data;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.jvn.kingdomsheritage.compat.IronsSpellsCompat;
 import com.mojang.serialization.JsonOps;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -18,12 +19,18 @@ import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.player.Player;
 
-public record KitStats(List<Bonus> attributes, Float startingHealth, Integer startingHunger, long purse) {
-    public static final KitStats EMPTY = new KitStats(List.of(), null, null, 0);
+public record KitStats(List<Bonus> attributes, Float startingHealth, Integer startingHunger, long purse, Mana mana) {
+    public static final KitStats EMPTY = new KitStats(List.of(), null, null, 0, null);
     public static final ResourceLocation MODIFIER_ID = ResourceLocation.fromNamespaceAndPath("kingdomsheritage", "starting_kit");
+    public static final ResourceLocation MAX_MANA = ResourceLocation.fromNamespaceAndPath("irons_spellbooks", "max_mana");
+    private static final String MANA = "irons_spellbooks:mana";
     private static final String PURSE = "numismaticoverhaul:purse";
     private static final List<EquipmentSlot> PLAYER_SLOTS = List.of(EquipmentSlot.MAINHAND, EquipmentSlot.OFFHAND,
             EquipmentSlot.FEET, EquipmentSlot.LEGS, EquipmentSlot.CHEST, EquipmentSlot.HEAD);
+
+    public KitStats(List<Bonus> attributes, Float startingHealth, Integer startingHunger, long purse) {
+        this(attributes, startingHealth, startingHunger, purse, null);
+    }
 
     public record Bonus(ResourceLocation attribute, double amount, AttributeModifier.Operation operation) {
         public AttributeModifier modifier() {
@@ -31,7 +38,19 @@ public record KitStats(List<Bonus> attributes, Float startingHealth, Integer sta
         }
     }
 
-    public record Preview(int armor, float health, float maxHealth, int hunger, KitStats bonuses) {}
+    public record Mana(Float amount, Double capacity) {
+        public AttributeModifier modifier(double base) {
+            return new AttributeModifier(MODIFIER_ID, capacity - base, AttributeModifier.Operation.ADD_VALUE);
+        }
+    }
+
+    public record ManaPreview(float amount, double capacity) {}
+
+    public record Preview(int armor, float health, float maxHealth, int hunger, KitStats bonuses, ManaPreview mana) {
+        public Preview(int armor, float health, float maxHealth, int hunger, KitStats bonuses) {
+            this(armor, health, maxHealth, hunger, bonuses, null);
+        }
+    }
 
     static KitStats parse(JsonObject json) {
         var attributes = new ArrayList<Bonus>();
@@ -61,13 +80,37 @@ public record KitStats(List<Bonus> attributes, Float startingHealth, Integer sta
             if (hunger < 0 || hunger > 20) throw new IllegalArgumentException("starting_hunger must be 0 to 20");
         }
         long purse = 0;
+        Mana mana = null;
         if (json.has("starting_resources")) {
             for (var entry : GsonHelper.getAsJsonObject(json, "starting_resources").entrySet()) {
-                if (!entry.getKey().equals(PURSE)) throw new IllegalArgumentException("Unknown starting resource: " + entry.getKey());
-                purse = parsePurse(entry.getValue());
+                switch (entry.getKey()) {
+                    case PURSE -> purse = parsePurse(entry.getValue());
+                    case MANA -> mana = parseMana(entry.getValue());
+                    default -> throw new IllegalArgumentException("Unknown starting resource: " + entry.getKey());
+                }
             }
         }
-        return new KitStats(List.copyOf(attributes), health, hunger, purse);
+        if (mana != null && mana.capacity() != null && seen.contains(MAX_MANA)) {
+            throw new IllegalArgumentException("Use either a mana capacity or a max_mana attribute bonus, not both");
+        }
+        return new KitStats(List.copyOf(attributes), health, hunger, purse, mana);
+    }
+
+    private static Mana parseMana(JsonElement value) {
+        if (!value.isJsonObject()) throw new IllegalArgumentException("Mana settings must be an object");
+        var json = value.getAsJsonObject();
+        for (var key : json.keySet()) {
+            if (!key.equals("amount") && !key.equals("capacity")) throw new IllegalArgumentException("Unknown mana setting: " + key);
+        }
+        Float amount = json.has("amount") ? (float) manaNumber(json, "amount") : null;
+        Double capacity = json.has("capacity") ? manaNumber(json, "capacity") : null;
+        return amount == null && capacity == null ? null : new Mana(amount, capacity);
+    }
+
+    private static double manaNumber(JsonObject json, String key) {
+        double value = number(json, key);
+        if (value < 0 || value > 1_000_000) throw new IllegalArgumentException("Mana " + key + " must be from 0 to 1000000");
+        return value;
     }
 
     private static long parsePurse(JsonElement value) {
@@ -126,15 +169,25 @@ public record KitStats(List<Bonus> attributes, Float startingHealth, Integer sta
         }
         if (startingHealth != null) json.addProperty("starting_health", startingHealth);
         if (startingHunger != null) json.addProperty("starting_hunger", startingHunger);
-        if (purse != 0) {
+        if (purse != 0 || mana != null) {
             var resources = new JsonObject();
-            resources.addProperty(PURSE, purse);
+            if (purse != 0) resources.addProperty(PURSE, purse);
+            if (mana != null) {
+                var values = new JsonObject();
+                if (mana.amount() != null) values.addProperty("amount", mana.amount());
+                if (mana.capacity() != null) values.addProperty("capacity", mana.capacity());
+                resources.add(MANA, values);
+            }
             json.add("starting_resources", resources);
         }
     }
 
     public static AttributeInstance attribute(Player player, ResourceLocation id) {
         return BuiltInRegistries.ATTRIBUTE.getHolder(id).map(player::getAttribute).orElse(null);
+    }
+
+    public boolean changesMana() {
+        return mana != null || attributes.stream().anyMatch(bonus -> bonus.attribute().equals(MAX_MANA));
     }
 
     public boolean changesHealth() {
@@ -146,7 +199,16 @@ public record KitStats(List<Bonus> attributes, Float startingHealth, Integer sta
         float maxHealth = (float) project(player, Attributes.MAX_HEALTH, original, loadout);
         float health = Math.min(maxHealth, startingHealth == null ? player.getHealth() : startingHealth);
         int hunger = startingHunger == null ? player.getFoodData().getFoodLevel() : startingHunger;
-        return new Preview((int) Math.floor(project(player, Attributes.ARMOR, original, loadout)), health, maxHealth, hunger, this);
+        ManaPreview manaPreview = null;
+        if (IronsSpellsCompat.available()) {
+            var type = BuiltInRegistries.ATTRIBUTE.getHolder(MAX_MANA).orElse(null);
+            if (type != null && player.getAttribute(type) != null) {
+                double capacity = project(player, type, original, loadout);
+                float amount = mana != null && mana.amount() != null ? mana.amount() : IronsSpellsCompat.mana(player);
+                manaPreview = new ManaPreview(Math.max(0, Math.min(amount, (float) capacity)), capacity);
+            }
+        }
+        return new Preview((int) Math.floor(project(player, Attributes.ARMOR, original, loadout)), health, maxHealth, hunger, this, manaPreview);
     }
 
     private double project(Player player, Holder<Attribute> type, KitLoadout.Snapshot original, KitLoadout.Snapshot loadout) {
@@ -172,6 +234,9 @@ public record KitStats(List<Bonus> attributes, Float startingHealth, Integer sta
         var id = type.unwrapKey().orElseThrow().location();
         for (var bonus : attributes) {
             if (id.equals(bonus.attribute())) projected.addOrReplacePermanentModifier(bonus.modifier());
+        }
+        if (id.equals(MAX_MANA) && mana != null && mana.capacity() != null) {
+            projected.addOrReplacePermanentModifier(mana.modifier(projected.getBaseValue()));
         }
         return projected.getValue();
     }

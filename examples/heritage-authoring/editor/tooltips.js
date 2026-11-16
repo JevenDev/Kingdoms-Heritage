@@ -17,6 +17,8 @@ globalThis.HeritageTooltips={setup({font,sprite,screen='intro'}) {
   const descriptions={...shared,...(screen==='kit'?{
     'kit-stat-health':['Starting health','Current health on arrival, capped at maximum health. One point is half a heart. Blank keeps current health.'],
     'kit-stat-hunger':['Starting hunger','Food level on arrival, from 0 to 20. Two points fill one drumstick. Blank keeps current hunger.'],
+    'kit-stat-mana':['Starting mana','Current mana on arrival, capped at the final maximum. Blank keeps current mana. Requires Iron’s Spells ’n Spellbooks.'],
+    'kit-stat-mana-capacity':['Base mana cap','Sets the base mana capacity when the kit is granted. Equipment and other modifiers still apply. Blank keeps the existing cap.'],
     'kit-stat-armor-amount':['Armor bonus','Modifies the player’s armor attribute alongside equipped armor.'],
     'kit-stat-max-health-amount':['Max health bonus','Modifies the health cap. With Add value, one point is half a heart.'],
     'kit-stat-armor-operation':statOperation,

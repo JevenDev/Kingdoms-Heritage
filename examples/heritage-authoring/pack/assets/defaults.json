@@ -1744,6 +1744,7 @@
     "screen.kingdomsheritage.kit_stats.armor": "%s armor points",
     "screen.kingdomsheritage.kit_stats.health": "%s / %s health points",
     "screen.kingdomsheritage.kit_stats.hunger": "%s / 20 hunger points",
+    "screen.kingdomsheritage.kit_stats.mana": "%s / %s mana on arrival",
     "screen.kingdomsheritage.kit_stats.add_value": "%s %s",
     "screen.kingdomsheritage.kit_stats.add_multiplied_base": "%s %s of base",
     "screen.kingdomsheritage.kit_stats.add_multiplied_total": "%s %s of total",

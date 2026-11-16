@@ -148,7 +148,7 @@ test('unknown mod equipment is identified without inventing its native attribute
 
 test('stat icons stay synchronized with the game sprites',()=>{
   const fs=require('node:fs'),path=require('node:path');
-  for(const name of ['armor','health','hunger','info'])assert.deepEqual(fs.readFileSync(path.join(__dirname,'assets/stats',name+'.png')),fs.readFileSync(path.join(__dirname,'../../../src/main/resources/assets/kingdomsheritage/textures/gui/sprites/kit/stat_icon_'+name+'.png')));
+  for(const name of ['armor','health','hunger','info','mana'])assert.deepEqual(fs.readFileSync(path.join(__dirname,'assets/stats',name+'.png')),fs.readFileSync(path.join(__dirname,'../../../src/main/resources/assets/kingdomsheritage/textures/gui/sprites/kit/stat_icon_'+name+'.png')));
 });
 
 test('damaged item previews use native durability defaults, overrides and unbreakable rules',()=>{
@@ -157,4 +157,46 @@ test('damaged item previews use native durability defaults, overrides and unbrea
   sword.components['minecraft:max_damage']=1000;assert.equal(Stats.durability(sword).remaining,220);
   sword.components['minecraft:unbreakable']={};assert.equal(Stats.durability(sword),null);
   assert.equal(Stats.durability({id:'minecraft:stick',components:{'minecraft:damage':1}}),null);
+});
+
+
+test('mana edits preserve other resources and round trip zero and partial grants',()=>{
+  const kit={title:'Mage',items:[],starting_resources:{[Stats.purseId]:42}};
+  Stats.setMana(kit,'amount','0');Stats.setMana(kit,'capacity','225');
+  const saved=Kit.read(JSON.stringify(kit)).document;
+  assert.deepEqual(saved.starting_resources,{[Stats.purseId]:42,[Stats.manaId]:{amount:0,capacity:225}});
+  assert.deepEqual(Stats.preview(saved).mana,{amount:0,capacity:225});
+  Stats.setMana(saved,'amount','');
+  assert.deepEqual(Stats.preview(saved).mana,{amount:null,capacity:225});
+  Stats.setCoin(saved,'gold','1');
+  assert.deepEqual(saved.starting_resources[Stats.manaId],{capacity:225});
+  Stats.setMana(saved,'capacity','');
+  assert.equal(saved.starting_resources[Stats.manaId],undefined);
+  assert.equal(Stats.purseBalance(saved),10042n);
+  assert.equal(Stats.preview(saved).mana,undefined);
+});
+
+test('mana previews include equipped modifiers and clamp starting mana to the final cap',()=>{
+  const kit={title:'Mage',items:[worn(38,'custom:robe',{'minecraft:attribute_modifiers':{modifiers:[custom(Stats.maxMana,25,'add_value','chest'),custom(Stats.maxMana,.5,'add_multiplied_total','chest','test:multiplier')]}})],starting_resources:{[Stats.manaId]:{amount:400,capacity:200}}};
+  assert.deepEqual(Stats.preview(kit).mana,{amount:337.5,capacity:337.5});
+  assert.deepEqual(Stats.preview({...kit,enabled:false}),Stats.preview({}));
+  kit.items=[];kit.starting_resources[Stats.manaId]={amount:120};
+  assert.deepEqual(Stats.preview(kit).mana,{amount:100,capacity:100});
+  kit.attributes=[bonus(Stats.maxMana,125)];
+  assert.deepEqual(Stats.preview(kit).mana,{amount:120,capacity:225});
+  assert.deepEqual(Stats.preview(kit).bonuses,[]);
+  kit.attributes=[];kit.starting_resources[Stats.manaId]={amount:120,capacity:0};
+  assert.deepEqual(Stats.preview(kit).mana,{amount:0,capacity:0});
+});
+
+test('mana validation rejects invalid amounts, shapes and conflicting cap definitions',()=>{
+  for(const [value,key] of [[null,null],[12,null],[[],null],[{amount:-1},'amount'],[{amount:'12'},'amount'],[{amount:null},'amount'],[{capacity:1000001},'capacity'],[{unknown:1},'unknown']]){
+    const kit={title:'Mage',items:[],starting_resources:{[Stats.manaId]:value}};
+    assert.throws(()=>Kit.read(JSON.stringify(kit)),error=>{
+      assert.deepEqual(error.path,['starting_resources',Stats.manaId,...(key?[key]:[])]);return true;
+    });
+  }
+  assert.throws(()=>Kit.read(JSON.stringify({title:'Mage',items:[],attributes:[bonus(Stats.maxMana,10)],starting_resources:{[Stats.manaId]:{capacity:200}}})),/either a mana capacity/);
+  assert.doesNotThrow(()=>Kit.read(JSON.stringify({title:'Mage',items:[],starting_resources:{[Stats.manaId]:{amount:1000000,capacity:0}}})));
+  assert.equal(Stats.preview({starting_resources:{[Stats.manaId]:{}}}).mana,undefined);
 });

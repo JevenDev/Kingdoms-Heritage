@@ -26,6 +26,8 @@ function operations(select) {
 function create(host,{getKit,update}) {
   const $=name=>host.querySelector('#kit-stat-'+name);
   const starting=[[$('health'),'starting_health'],[$('hunger'),'starting_hunger']];
+  const manaFields=[[$('mana'),'amount'],[$('mana-capacity'),'capacity']];
+  for(const [field,key] of manaFields)field.addEventListener('change',()=>update(kit=>stats.setMana(kit,key,field.value),field));
   const attributes=$('attributes'),builtins=$('builtins'),coins=$('coins'),add=$('add'),form=$('add-form');
   const name=$('id'),newAmount=$('new-amount'),newOperation=operations($('new-operation'));
   let customRows=new Map();
@@ -117,6 +119,7 @@ function create(host,{getKit,update}) {
   function render(kit,invalid) {
     if(invalid||kit.enabled===false)kit={};
     for(const [field,key] of starting)field.value=kit[key]??'';
+    for(const [field,key] of manaFields)field.value=kit.starting_resources?.[stats.manaId]?.[key]??'';
     const counts=stats.purseCounts(kit);
     for(const [coin,{field}] of coinFields)field.value=counts[coin];
 
