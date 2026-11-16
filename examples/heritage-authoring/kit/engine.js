@@ -4,6 +4,8 @@ const object=value=>value!==null&&typeof value==='object'&&!Array.isArray(value)
 const idPattern=/^(?:[a-z0-9_.-]+:)?[a-z0-9/._-]+$/;
 const normalize=id=>id.includes(':')?id:'minecraft:'+id;
 const MAX_COUNT=2147483647;
+const stats=typeof module!=='undefined'?require('./stats.js'):HeritageKitStats;
+const JsonEditor=typeof module!=='undefined'?require('../editor/json-editor.js'):HeritageJsonEditor;
 const items=new Map(HeritageItems.items.map(item=>[item.id,item]));
 const issue=(message,path=[])=>Object.assign(new Error(message),{path});
 const integer=(value,min,max,name,path=[])=>{if(!Number.isInteger(value)||value<min||value>max)throw issue(name+' must be a whole number from '+min+' to '+max+'.',path);};
@@ -13,9 +15,20 @@ function itemWarnings(entry) {
   if(entry.ignore_stack_limit===true)warnings.push('Check this stack size in Minecraft.');
   return warnings;
 }
-function read(source) {
+function parse(source) {
   let document;
   try {document=JSON.parse(source);}catch(error){throw new Error('Invalid JSON: '+error.message);}
+  if(object(document)&&document.enabled!==false){
+    let ranges;
+    stats.validatePurse(document,path=>{
+      const range=(ranges??=JsonEditor.valueRanges(source)).get(JSON.stringify(path));
+      return source.slice(...range);
+    });
+  }
+  return document;
+}
+function read(source) {
+  const document=parse(source);
   if(!object(document))throw issue('A kit must be a JSON object.');
   if(document.enabled!==undefined&&typeof document.enabled!=='boolean')throw issue('enabled must be true or false.',['enabled']);
   if(document.enabled===false)return {document,warnings:[]};
@@ -26,6 +39,7 @@ function read(source) {
   integer(document.order??0,-2147483648,2147483647,'order',['order']);
   integer(document.selected_slot??0,0,8,'selected_slot',['selected_slot']);
   if(document.tags!==undefined&&(!Array.isArray(document.tags)||document.tags.length>128||document.tags.some(tag=>typeof tag!=='string'||!idPattern.test(tag))))throw issue('tags must contain up to 128 resource IDs, without #.',['tags']);
+  stats.validate(document);
   if(document.shop!==undefined&&document.items===undefined)document.items=[];
   if(!Array.isArray(document.items)||document.items.length>256)throw issue('items must be an array of up to 256 entries.',['items']);
   const occupied=new Set(),warnings=[];
@@ -165,6 +179,6 @@ function neighbor(index,key) {
 }
 const slotName=index=>index<9?'Hotbar '+(index+1):index<36?'Inventory '+(index-8):({36:'Boots',37:'Leggings',38:'Chestplate',39:'Helmet',40:'Offhand'})[index];
 const positions=Array.from({length:41},(_,index)=>({index,x:index<9?8+index*18:index<36?8+(index-9)%9*18:index===40?77:8,y:index<9?142:index<36?84+Math.floor((index-9)/9)*18:index===40?62:8+(39-index)*18}));
-globalThis.HeritageKit={read,inspect,canPreview,itemWarnings,copy,setSlot,removeSlot,moveSlot,slotName,positions,items,normalize,itemAt,maxCount,firstEmpty,placeItem,neighbor};
+globalThis.HeritageKit={parse,read,inspect,canPreview,itemWarnings,copy,setSlot,removeSlot,moveSlot,slotName,positions,items,normalize,itemAt,maxCount,firstEmpty,placeItem,neighbor};
 if(typeof module!=='undefined')module.exports=globalThis.HeritageKit;
 })();

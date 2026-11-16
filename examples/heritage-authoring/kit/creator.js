@@ -24,9 +24,30 @@ const view=new V.Inventory($('inventory'),{
   onMovePreview:(from,gesture)=>previewMove(from,gesture),
   onMovePreviewEnd:()=>feedback(),
   onDrop:(id,slot)=>place(id,slot),
-  onControl:control=>preview.control(control)
+  onControl:control=>{
+    if(control?.kind!=='purse'){preview.control(control);return;}
+    if(!canEdit())return;
+    if(carried){notice('Place or return the held item before editing the purse.');return;}
+    V.hideTooltip();
+    tab('details');
+    $('kit-stat-gold').focus();
+  }
 });
 const preview=new HeritageEquipmentEditor({getDocument:()=>documentState,getSelection:()=>selected,onSelect:selectSlot,onUpdate:(saveHistory=false)=>{display();if(saveHistory)record();else scheduleSave();},notice,canSwitch:()=>{if(errorState?.target==='count'){notice('Fix the count before changing inventory views.');return false;}return true;}});
+const statPaths=['starting_health','starting_hunger','attributes','starting_resources'];
+const invalidStats=()=>!!errorState?.validation&&statPaths.includes(errorState.path?.[0]);
+const statsEditor=HeritageKitStatsEditor.create($('kit-stats'),{
+  getKit:()=>documentState,
+  update:(edit,field)=>{
+    if(carried||!canEdit(field.id))return false;
+    return attempt(()=>{
+      if(field.validity&&!field.validity.valid)throw new Error(field.validationMessage);
+      const next=K.copy(documentState);
+      edit(next);
+      return commit(next,field.id);
+    },field.id);
+  }
+});
 const shopStage=()=>document.body.dataset.authorStage==='shop';
 const shopEditor=HeritageShopEditor.create({
   getKit:()=>documentState,
@@ -77,6 +98,7 @@ function restore(direction) {
   $('kit-json').value=state.source;
   const parsed=K.inspect(state.source);rawInvalid=!!parsed.error&&!parsed.previewable;
   if(parsed.error)errorState=sourceError(parsed.error,state.source);
+  else documentState=parsed.document,validDocument=K.copy(parsed.document);
   historyGroup=null;display();if(errorState?.target&&$(errorState.target))$(errorState.target).value=errorState.value;
   scheduleSave();feedback();V.hideTooltip();
 }
@@ -101,7 +123,7 @@ function activateKit(id) {
     const entry=workspace.get(id);M.cursor(entry.state.cursor);
     workspace.capture(snapshot(),history,historyIndex);workspace.select(id);
     history=entry.history;historyIndex=entry.historyIndex;history[historyIndex]=entry.state;
-    restore(0);shopEditor.reset();notice('');saveDraft();draftOptions();
+    statsEditor.reset();restore(0);shopEditor.reset();notice('');saveDraft();draftOptions();
   });
 }
 function openKit(raw=JSON.stringify({title:'My kit',items:[]},null,2)) {
@@ -179,6 +201,7 @@ function feedback() {
   $('deselect-slots').disabled=!selectedSlots.size&&!selectionMode;
   $('delete-selected').hidden=$('deselect-slots').hidden=!selectedSlots.size&&!selectionMode;
   $('clear-inventory').disabled=locked||!(documentState.items?.length||drafts.size||carried);
+  statsEditor.lock(locked||!!carried||invalidStats(),invalidStats(),errorState?.target);
   propertiesEditor?.setLocked(locked||!view.entry(selected)||!!carried);if(shopStage())shopEditor.render();draftOptions();
 }
 function slotFields() {
@@ -259,13 +282,15 @@ function renderInventory() {
   preview.reveal(selected);const options=preview.sync();
   const layouts=['player','curios','accessories'].map(mode=>E.layout(documentState,{...options,mode,cosmetics:true,offset:0}));
   view.scaleWidth=Math.max(...layouts.map(layout=>layout.width));view.scaleHeight=Math.max(...layouts.map(layout=>layout.height));
-  view.selected=selected;view.set(documentState,options);
+  const purse=rawInvalid||invalidStats()||documentState.enabled===false?[]:HeritageKitStats.pursePreview(documentState);
+  view.selected=selected;view.set(documentState,{...options,hideCrafting:true,purse});
 }
 function display() {
   renderInventory();
   $('title').value=documentState.title??'';$('description').value=documentState.description??'';
   $('order').value=documentState.order??0;$('selected-slot').value=documentState.selected_slot??0;
   $('tags').value=Array.isArray(documentState.tags)?documentState.tags.join(', '):'';
+  statsEditor.render(documentState,invalidStats());
   const stacks=documentState.enabled===false?0:documentState.items?.length??0;
   $('stack-count').textContent=stacks+' stack'+(stacks===1?'':'s');
   $('warnings').textContent=documentState.enabled===false?'Kit disabled. Set enabled to true in JSON to enable it.':'';
@@ -629,9 +654,9 @@ document.addEventListener('keydown',event=>{
   if(event.key==='Escape'&&(selectedSlots.size||selectionMode)){event.preventDefault();deselectSlots();return;}
   if(event.key==='Escape'){V.hideTooltip();$('search-items').value='';page=0;browser();$('component-details').open=false;document.querySelector('.kit-help').open=false;}
 });
-$('format').addEventListener('click',()=>{
-  const field=$('kit-json'),scroll=field.scrollTop;field.value=JSON.stringify(JSON.parse(source()),null,2);field.scrollTop=scroll;parse(false,false);record();notice('JSON formatted.');
-});
+$('format').addEventListener('click',()=>attempt(()=>{
+  const field=$('kit-json'),scroll=field.scrollTop;field.value=JSON.stringify(K.parse(source()),null,2);field.scrollTop=scroll;parse(false,false);record();notice('JSON formatted.');
+}));
 $('restore').addEventListener('click',()=>commit(validDocument,null,{replace:true}));
 for(const id of ['title','description','order','selected-slot','tags'])$(id).addEventListener('input',()=>{
   if(!canEdit(id))return;
@@ -792,7 +817,8 @@ if(linked!==null){
   window.history.replaceState(null,'',location.pathname+location.hash);
 }
 function authorIssue(){
-  if(rawInvalid||errorState?.validation&&errorState.path?.[0]==='shop')return {stage:'json',field:'kit-json',message:errorState?.message||'Fix the kit JSON before continuing.'};
+  if(rawInvalid||invalidStats()||errorState?.validation&&errorState.path?.[0]==='shop')return {stage:'json',field:'kit-json',message:errorState?.message||'Fix the kit JSON before continuing.'};
+  if(errorState?.target?.startsWith('kit-stat-'))return {stage:'details',field:errorState.target,message:errorState.message};
   if(errorState){const property=errorState.path?.[0],details=['title','description','order','tags','selected_slot'];return {stage:details.includes(errorState.target)||details.includes(property)?'details':'inventory',field:errorState.target==='kit-json'?(details.includes(property)?property==='selected_slot'?'selected-slot':property:'item-id'):errorState.target,message:errorState.message};}
   if(carried)return {stage:'inventory',field:'return-carried',message:'Place or return the held item before using this kit.'};
   if(drafts.size)return {stage:'inventory',field:'go-to-draft',message:'Apply or revert the pending item edits before using this kit.'};

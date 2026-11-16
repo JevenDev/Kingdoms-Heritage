@@ -3,6 +3,7 @@ package com.jvn.kingdomsheritage.client;
 import com.jvn.kingdomsheritage.HeritageConfig.InventoryPolicy;
 import com.jvn.kingdomsheritage.data.KitDefinition;
 import com.jvn.kingdomsheritage.data.KitLoadout;
+import com.jvn.kingdomsheritage.data.KitStats;
 import java.util.List;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
@@ -44,6 +45,10 @@ final class KitPreview {
 
     ItemStack item(int slot) {
         return expected == null ? player.getInventory().getItem(slot).copy() : expected.item(slot);
+    }
+
+    KitStats.Preview stats() {
+        return (kit == null || policy == InventoryPolicy.PRESERVE ? KitStats.EMPTY : kit.stats()).preview(player, original, expected);
     }
 
     int purchaseIndex(int slot) {

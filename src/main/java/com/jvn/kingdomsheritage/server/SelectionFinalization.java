@@ -7,6 +7,7 @@ import com.jvn.kingdomsheritage.data.HeritageException;
 import com.jvn.kingdomsheritage.data.KitDefinition;
 import com.jvn.kingdomsheritage.data.KitLoadout;
 import com.jvn.kingdomsheritage.data.SpawnDefinition;
+import com.jvn.kingdomsheritage.mixin.KitEquipmentUpdates;
 import java.util.ArrayDeque;
 import java.util.List;
 import java.util.Map;
@@ -29,6 +30,7 @@ final class SelectionFinalization {
                        SpawnDefinition arrivalDefinition, SpawnResolver.Destination arrival) {
         var inventory = policy == HeritageConfig.InventoryPolicy.PRESERVE ? null : KitLoadout.capture(player, true);
         var planned = inventory == null ? null : KitLoadout.plan(inventory, player.getInventory().items.size(), kit, entries, policy);
+        if (planned != null) KitStatGrants.validate(player, kit.stats());
         var intro = SpawnIntro.prepare(arrivalDefinition, arrival);
         intro.add("dialogue_context", DialogueContexts.create(player, spawn, kit, policy, !entries.isEmpty()).json());
         intro.addProperty("outcome", "completed");
@@ -54,8 +56,19 @@ final class SelectionFinalization {
                     planned = KitLoadout.plan(backup, player.getInventory().items.size(), member.kit(), member.entries(), member.policy());
                 }
                 var original = backup;
-                rollback.accept(() -> write(player, original));
+                var stats = member.kit().stats();
+                boolean updateHealth = stats.changesHealth();
+                if (updateHealth) {
+                    float health = player.getHealth();
+                    rollback.accept(() -> player.setHealth(health));
+                }
+                rollback.accept(() -> {
+                    write(player, original);
+                    if (updateHealth) ((KitEquipmentUpdates) player).heritage$refreshEquipment();
+                });
                 write(player, planned);
+                if (updateHealth) ((KitEquipmentUpdates) player).heritage$refreshEquipment();
+                KitStatGrants.apply(player, stats, rollback);
             }
             for (var member : members) {
                 var player = member.player();

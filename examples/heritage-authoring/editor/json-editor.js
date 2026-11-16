@@ -121,5 +121,7 @@ class JsonEditor {
     this.container.classList.add('ready');this.resize();this.markError();
   }
 }
+JsonEditor.valueRanges=valueRanges;
 globalThis.HeritageJsonEditor=JsonEditor;
+if(typeof module!=='undefined')module.exports=JsonEditor;
 })();

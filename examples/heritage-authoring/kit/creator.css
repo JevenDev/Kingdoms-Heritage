@@ -106,6 +106,34 @@
 .kit-setting-row { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); align-items: end; gap: 12px; }
 .kit-setting-row .stack { min-width: 0; }
 #details-panel #order { width: 100%; }
+.kit-stat-section { padding: 16px 0; border-top: 1px solid var(--line-soft); }
+.kit-stat-section h3 { margin: 0 0 12px; font-size: 15px; }
+.kit-stat-section .hint { margin: 8px 0 0; }
+.kit-stat-fields { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 8px 16px; }
+.kit-stat-fields > .stack { flex: 1 1 150px; min-width: 0; margin: 0; }
+#kit-stat-coins { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,128px),1fr)); }
+.kit-stat-label { display: flex; align-items: center; gap: 8px; }
+.kit-stat-label img { width: 18px; height: 18px; image-rendering: pixelated; }
+.kit-stat-label img[src*="/numismatic/"] { width: 16px; height: 16px; }
+.kit-stat-modifier { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 8px; }
+.kit-stat-modifier > .stack { flex: 1 1 120px; min-width: 0; margin: 0; }
+#kit-stat-builtins { margin-top: 12px; }
+#kit-stat-builtins > .kit-stat-modifier { flex: 1 1 240px; }
+#kit-stat-builtins .stack { flex-basis: 88px; }
+.kit-stat-modifier .kit-stat-id { flex-basis: 100%; overflow-wrap: anywhere; }
+#kit-stat-attributes .kit-stat-modifier { padding-bottom: 12px; }
+#kit-stat-add-form { margin-top: 8px; }
+.kit-stat-modifier button, .kit-coin-stepper button { min-height: 34px; }
+.kit-purse-icon {
+  width: 22px;
+  height: 26px;
+  background: url("assets/numismatic/purse_widget.png") -124px 0 / 256px 128px no-repeat;
+  image-rendering: pixelated;
+}
+.kit-coin-stepper { display: grid; grid-template-columns: 32px minmax(0,1fr) 32px; gap: 4px; margin-top: 6px; }
+.kit-coin-stepper button { padding: 0; }
+.kit-coin-stepper input { width: 100%; appearance: textfield; text-align: right; }
+.kit-coin-stepper input::-webkit-inner-spin-button { appearance: none; }
 #equipment { margin: 14px 0; }
 .equipment-entry { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr) 55px; gap: 6px; border-top: 1px solid var(--line-soft); padding: 12px 0; }
 .equipment-entry label { font-size: calc(11px + var(--reading-increase)); color: var(--muted); min-width: 0; }

@@ -84,10 +84,10 @@ function loadKitScript(file) {
 }
 function loadKitRenderer() {
   return kitRenderer??=(async()=>{
-    await Promise.all(['catalog.js','equipment-data.js','player-data.js','examples.js'].map(loadKitScript));
-    await loadKitScript('engine.js');
-    await Promise.all(['equipment.js','player.js','text.js'].map(loadKitScript));
-    await loadKitScript('view.js');
+    await Promise.all(['catalog.js','equipment-data.js','player-data.js','examples.js','stats.js?v=2','../editor/json-editor.js?v=3'].map(loadKitScript));
+    await loadKitScript('engine.js?v=8');
+    await Promise.all(['equipment.js?v=3','player.js','text.js'].map(loadKitScript));
+    await loadKitScript('view.js?v=18');
   })().catch(error=>{kitRenderer=null;throw error;});
 }
 async function kitPreviews(anchor) {

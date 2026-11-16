@@ -130,6 +130,7 @@ public final class HeritageCommands {
             try {
                 var entries = kit.decode(source.registryAccess());
                 kit.decodeOffers(source.registryAccess());
+                KitStatGrants.validate(player, kit.stats());
                 if (player != null) EquipmentCompat.validate(player, entries);
             } catch (IllegalArgumentException error) {
                 source.sendFailure(Component.translatable("commands.kingdomsheritage.invalid", kit.id().toString(), HeritageException.component(error)));

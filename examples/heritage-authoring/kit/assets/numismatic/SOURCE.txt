@@ -1,0 +1,19 @@
+Numismatic Overhaul Reforged Again 2.0.1 for Minecraft 1.21.1
+Copyright (c) 2021 glisco, Pois1x, Noaaan
+Original texture artwork by Pois1x
+Reforged Again by TallestRed, based on Nyfaria's Forge port
+License: MIT, see LICENSE.txt
+Source: https://github.com/seymourimadeit/numismatic-overhaul-reforged-again/tree/c7dc7f939c4843e8c0cf0b7af523e3fa6e73175b
+Original project: https://github.com/wisp-forest/numismatic-overhaul
+Release: https://modrinth.com/mod/numismatic-overhaul-reforged-again/version/WRQUVw6x
+Artifact: numismaticoverhaul-1.21.1-2.0.1.jar
+
+Unmodified files copied from the artifact (source path and SHA-256):
+assets/numismaticoverhaul/textures/gui/purse_widget.png
+fdf2b3cd6d0bc8f871ebeefeaf2958ab49e2ec0e0b1c65c555ed3c2bea8dc87c
+assets/numismaticoverhaul/textures/item/gold_coin.png
+539738455c7f6c2e674a8be85eade13d8c76f43510fa10cb4a5cfdda6c2ec2c9
+assets/numismaticoverhaul/textures/item/silver_coin.png
+cfeaaf75e40c25d3b18976c6d3e582b8313eda18ba30a59efffc47d3238c860f
+assets/numismaticoverhaul/textures/item/bronze_coin.png
+71cd51b03ab04a1e46c11bd700cb0e669de6fe33455df1f6378415be47f7e52e

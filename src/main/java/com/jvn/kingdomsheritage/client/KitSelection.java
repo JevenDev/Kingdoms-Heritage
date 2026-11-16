@@ -7,6 +7,7 @@ import com.jvn.kingdomsheritage.data.DefinitionJson;
 import com.jvn.kingdomsheritage.data.HeritageException;
 import com.jvn.kingdomsheritage.data.KitDefinition;
 import com.jvn.kingdomsheritage.data.KitShop;
+import com.jvn.kingdomsheritage.data.KitStats;
 import com.jvn.kingdomsheritage.data.SelectionSettings;
 import java.util.HashMap;
 import java.util.List;
@@ -244,6 +245,7 @@ public final class KitSelection {
         if (Minecraft.getInstance().player == player) Minecraft.getInstance().player.getRecipeBook().setOpen(net.minecraft.world.inventory.RecipeBookType.CRAFTING, recipeBookOpen);
     }
 
+    KitStats.Preview previewStats() { return inventoryPreview.stats(); }
     KitSelectionView view() { return view; }
     List<JsonObject> choices() { return choices; }
     int index() { return index; }

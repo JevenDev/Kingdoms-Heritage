@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.IntConsumer;
 import java.util.function.IntFunction;
+import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 
@@ -39,6 +40,15 @@ public final class KitLoadout {
         }
 
         public ItemStack item(int index) { return items.get(index).copy(); }
+
+        ItemStack equipped(net.minecraft.world.entity.EquipmentSlot slot) {
+            return switch (slot) {
+                case MAINHAND -> items.get(selected);
+                case OFFHAND -> items.get(Inventory.SLOT_OFFHAND);
+                case FEET, LEGS, CHEST, HEAD -> items.get(slot.getIndex(Inventory.INVENTORY_SIZE));
+                case BODY -> ItemStack.EMPTY;
+            };
+        }
 
         public int purchaseIndex(int slot) {
             return purchaseIndices == null || slot < 0 || slot >= purchaseIndices.length ? -1 : purchaseIndices[slot];

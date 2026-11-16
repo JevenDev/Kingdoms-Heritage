@@ -22,6 +22,7 @@ import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.MovementInputUpdateEvent;
+import net.neoforged.neoforge.client.event.RegisterClientTooltipComponentFactoriesEvent;
 import net.neoforged.neoforge.client.gui.ConfigurationScreen;
 import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
 import net.neoforged.neoforge.common.NeoForge;
@@ -59,6 +60,11 @@ public final class ClientSelection {
         NeoForge.EVENT_BUS.addListener(ClientSelection::hideHud);
         NeoForge.EVENT_BUS.addListener(ClientSelection::renderIntroAfterHud);
         NeoForge.EVENT_BUS.addListener(ClientSelection::hideHand);
+    }
+
+    @SubscribeEvent
+    public static void registerTooltips(RegisterClientTooltipComponentFactoriesEvent event) {
+        KitStatPanel.registerTooltips(event);
     }
 
     private static void receive(String json) {

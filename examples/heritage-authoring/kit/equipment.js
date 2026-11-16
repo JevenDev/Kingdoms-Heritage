@@ -104,7 +104,7 @@ function nativeIcon(inventory,slot,cosmetic) {
   if(inventory==='curios')return 'curios/slot/empty_'+(cosmetic?'cosmetic':slot)+'_slot.png';
   return 'accessories/gui/slot/'+slot+'.png';
 }
-function layout(document,{mode='player',profiles,cosmetics=false,offset=0}={}) {
+function layout(document,{mode='player',profiles,cosmetics=false,offset=0,purse}={}) {
   if(!inventoryNames.includes(mode))throw new Error('Unknown inventory preview.');
   const result={mode,width:176,height:166,inventoryX:0,inventoryY:0,playerX:51,slots:[],blits:[],controls:[],offset:0,maxOffset:0,total:0,first:0,shown:0};
   const blit=(file,x,y,sx=0,sy=0,sw=D.assets[file]?.width??176,sh=D.assets[file]?.height??166,width=sw,height=sh,nine=false)=>result.blits.push({file,x,y,sx,sy,sw,sh,width,height,nine});
@@ -175,6 +175,9 @@ function layout(document,{mode='player',profiles,cosmetics=false,offset=0}={}) {
   }
   const inventoryFile=mode==='accessories'?'accessories/gui/container/accessories_inventory.png':'inventory.png';
   blit(inventoryFile,result.inventoryX,result.inventoryY,0,0,176,166);
+  if(mode==='player'&&document.enabled!==false&&purse?.length){
+    result.controls.push({key:'purse',kind:'purse',label:'Edit Numismatic purse',x:160,y:5,width:11,height:13});
+  }
   for(const position of K.positions)result.slots.push({...position,id:position.index,inventory:'player',x:position.index===40&&mode==='accessories'?result.inventoryX+152:position.x+result.inventoryX,y:position.y+result.inventoryY});
   return result;
 }

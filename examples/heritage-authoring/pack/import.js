@@ -9,9 +9,9 @@ const Project=typeof module!=='undefined'?require('./project.js'):HeritageProjec
 const object=value=>value!==null&&typeof value==='object'&&!Array.isArray(value);
 const decoder=new TextDecoder('utf-8',{fatal:true});
 function base64(bytes){let result='';for(let at=0;at<bytes.length;at+=32768)result+=String.fromCharCode(...bytes.subarray(at,at+32768));return btoa(result);}
-function json(files,path){
+function json(files,path,parse=JSON.parse){
   if(!files.has(path))throw new Error('Missing '+path+'. Open a ZIP with pack.mcmeta at its root.');
-  try{return JSON.parse(decoder.decode(files.get(path)));}
+  try{return parse(decoder.decode(files.get(path)));}
   catch(error){throw new Error(path+': '+error.message);}
 }
 async function read(bytes,name='Imported pack.zip',createId=()=>crypto.randomUUID()) {
@@ -35,7 +35,7 @@ async function read(bytes,name='Imported pack.zip',createId=()=>crypto.randomUUI
   for(const [path] of data){
     const match=/^data\/([^/]+)\/heritage\/(spawns|kits)\/(.+)\.json$/.exec(path);
     if(!match)continue;
-    const [,namespace,kind,id]=match,document=json(data,path);
+    const [,namespace,kind,id]=match,document=json(data,path,kind==='kits'?Kit.parse:JSON.parse);
     if(!object(document))throw new Error(path+' must contain a JSON object.');
     if(!/^[a-z0-9_.-]+$/.test(namespace))throw new Error('Invalid namespace in '+path);
     Pack.fileId(id,'Definition path');definitions.push({path,namespace,kind,id,document});

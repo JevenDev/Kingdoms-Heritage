@@ -73,6 +73,27 @@ test('paired downloads restore pictures, pool intros, null overrides and unrelat
   const reopened=await Import.read(bundled(result),'story-packs.zip',ids());compare(result.files,rebuilt(reopened).files);compare(result.resourceFiles,rebuilt(reopened).resourceFiles);
 });
 
+test('starter stats and exact purse grants survive ZIP import and export',async()=>{
+  const path='data/story/heritage/kits/starter.json';
+  const attributes=[{attribute:'neoforge:swim_speed',operation:'add_multiplied_total',amount:0.2}];
+  for(const [value,expected] of [
+    ['125',125],
+    ['{"gold":2,"silver":3,"bronze":25}',{gold:2,silver:3,bronze:25}],
+    ['9007199254740993',{gold:900719925474,silver:9,bronze:93}]
+  ]){
+    const files=[
+      {path:'pack.mcmeta',content:'{"pack":{"pack_format":48,"description":"Starter stats"}}'},
+      {path:'data/story/heritage/spawns/home.json',content:'{"title":"Home","type":"default","kits":["story:starter"]}'},
+      {path,content:'{"title":"Starter","items":[],"starting_health":1,"starting_hunger":8,"attributes":'+JSON.stringify(attributes)+
+        ',"starting_resources":{"numismaticoverhaul:purse":'+value+'}}'}
+    ];
+    const project=await Import.read(Zip.zip(files),'starter-stats.zip',ids());
+    assert.deepEqual(JSON.parse(rebuilt(project).files.find(file=>file.path===path).content),{
+      title:'Starter',items:[],starting_health:1,starting_hunger:8,attributes,starting_resources:{'numismaticoverhaul:purse':expected}
+    });
+  }
+});
+
 test('standard compressed example packs retain kit tags and can be edited',async()=>{
   const bytes=fs.readFileSync(path.join(__dirname,'../downloads/heritage-example-data.zip'));
   const files=await Zip.unzip(bytes),project=await Import.read(bytes,'examples.zip',ids()),result=rebuilt(project);

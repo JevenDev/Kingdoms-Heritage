@@ -62,6 +62,61 @@
         },
         "default": []
       },
+      "attributes": {
+        "type": "array",
+        "maxItems": 32,
+        "items": {
+          "type": "object",
+          "required": ["attribute", "amount"],
+          "properties": {
+            "attribute": { "type": "string", "pattern": "^(?:[a-z0-9_.-]+:)?[a-z0-9/._-]+$" },
+            "amount": { "type": "number" },
+            "operation": {
+              "enum": ["add_value", "add_multiplied_base", "add_multiplied_total"],
+              "default": "add_value"
+            }
+          }
+        }
+      },
+      "starting_health": {
+        "type": "number",
+        "minimum": 1,
+        "maximum": 3.4028234663852886e38,
+        "description": "Starting health points. One point is half a heart."
+      },
+      "starting_hunger": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 20,
+        "description": "Starting food points. Two points fill one drumstick."
+      },
+      "starting_resources": {
+        "type": "object",
+        "properties": {
+          "numismaticoverhaul:purse": {
+            "description": "Currency to deposit in the player's Numismatic Overhaul Reforged Again purse.",
+            "oneOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9223372036854775807,
+                "description": "Total currency in bronze units."
+              },
+              {
+                "type": "object",
+                "description": "Coin counts. Omitted counts default to zero. The combined value must fit in a non-negative 64-bit integer.",
+                "properties": {
+                  "gold": { "type": "integer", "minimum": 0, "maximum": 922337203685477 },
+                  "silver": { "type": "integer", "minimum": 0, "maximum": 92233720368547758 },
+                  "bronze": { "type": "integer", "minimum": 0, "maximum": 9223372036854775807 }
+                },
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
       "shop": {
         "type": "object",
         "required": ["budget", "offers"],

@@ -27,10 +27,11 @@ function render(intro, overrides = {}) {
 }
 const example = (name, overrides) => render(read(spawnPath(name)).intro, overrides);
 
-test('every documentation JSON block parses and every copyable intro validates', () => {
+test('documentation JSON blocks parse and copyable intros and kits validate', () => {
   for (const page of pages.values()) {
     for (const document of blocks(page.markdown)) {
       if (document.intro || Object.hasOwn(document, 'text')) P.readJson(JSON.stringify(document));
+      if (page.id === 'kits' && (document.items || document.shop)) Kit.read(JSON.stringify(document));
     }
   }
   const reference = pages.get('dialogue').markdown;

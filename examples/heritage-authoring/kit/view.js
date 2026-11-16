@@ -8,7 +8,7 @@ function image(name) {return images.get(name);}
 async function assets() {
   if(assetPromise)return assetPromise;
   assetPromise=(async()=>{
-    const files=[...HeritagePlayerData.textures.map(texture=>texture.file),...Object.keys(HeritageEquipmentData.assets),'inventory.png','steve.png','items-0.png','items-1.png',...['helmet','chestplate','leggings','boots','shield'].map(slot=>'empty_armor_slot_'+slot+'.png'),'armor/leather_layer_1_overlay.png','armor/leather_layer_2_overlay.png',...['leather','chainmail','iron','gold','diamond','netherite','turtle'].flatMap(material=>[1,2].map(layer=>'armor/'+material+'_layer_'+layer+'.png')).filter(file=>!file.includes('turtle_layer_2'))];
+    const files=[...HeritagePlayerData.textures.map(texture=>texture.file),...Object.keys(HeritageEquipmentData.assets),'inventory.png','steve.png','items-0.png','items-1.png','numismatic/purse_widget.png',...['helmet','chestplate','leggings','boots','shield'].map(slot=>'empty_armor_slot_'+slot+'.png'),'armor/leather_layer_1_overlay.png','armor/leather_layer_2_overlay.png',...['leather','chainmail','iron','gold','diamond','netherite','turtle'].flatMap(material=>[1,2].map(layer=>'armor/'+material+'_layer_'+layer+'.png')).filter(file=>!file.includes('turtle_layer_2'))];
     const base=assetBase;
     await Promise.all([fetch(new URL('player/models.bin',base)).then(response=>{if(!response.ok)throw new Error('Player models could not load.');return response.arrayBuffer();}).then(buffer=>{playerGeometry=buffer;}),...files.map(async file=>{const img=new Image();img.src=new URL(file,base);await img.decode();images.set(file,img);})]);
     for(const provider of HeritageAssets.providers) {
@@ -409,7 +409,10 @@ class Inventory {
           node.type='button';node.addEventListener('click',()=>this.callbacks.onControl?.(this.layout.controls.find(item=>item.key===control.key)));
           node.addEventListener('pointerenter',()=>{this.hoverControl=control.key;this.draw();});node.addEventListener('pointerleave',()=>{this.hoverControl=null;this.draw();});
         }
-        bindTooltip(node,()=>[this.layout.controls.find(item=>item.key===control.key)?.label||'Equipment control']);this.frame.append(node);this.controls.set(control.key,node);
+        bindTooltip(node,()=>control.kind==='purse'
+          ?[T.parse('Purse',{color:T.colors.gold}),...this.options.purse.map(([coin,count])=>count+' '+coin)]
+          :[this.layout.controls.find(item=>item.key===control.key)?.label||'Equipment control']);
+        this.frame.append(node);this.controls.set(control.key,node);
       }
       this.position(node,control);node.setAttribute('aria-label',control.label);node.disabled=control.disabled??false;
       if(control.kind==='scroll'){node.max=control.max;node.value=control.value;node.classList.add('mc-native-scroll');}
@@ -448,7 +451,7 @@ class Inventory {
     this.stacks=new Map((this.kit.items||[]).filter(entry=>(entry.inventory??'player')==='player').map(entry=>[entry.index,entry.item]));
     const layout=HeritageEquipment.layout(this.kit,options),layoutKey=JSON.stringify(layout);
     if(layoutKey!==this.layoutKey) {
-      this.layout=layout;this.layoutKey=layoutKey;this.dirty=true;this.bounds=null;this.hover=null;hideTooltip();
+      this.layout=layout;this.layoutKey=layoutKey;this.dirty=true;this.bounds=null;this.hover=this.hoverControl=null;hideTooltip();
       this.fit();this.buildSlots();
     }
     const key=JSON.stringify([this.kit.items,this.kit.selected_slot,this.options.hideCrafting===true]);if(key!==this.contentKey){this.dirty=true;this.contentKey=key;}
@@ -500,6 +503,11 @@ class Inventory {
     }
     if(this.dirty||this.renderedHiddenStackSlot!==hiddenStackSlot)this.renderBase(hiddenStackSlot);
     ctx.drawImage(this.background,0,0,width,height);
+    const purse=this.layout.controls.find(control=>control.kind==='purse');
+    if(purse){
+      const {x,y,width,height}=purse,hovered=this.hoverControl===purse.key;
+      ctx.drawImage(image('numismatic/purse_widget.png'),62,hovered?height:0,width,height,x,y,width,height);
+    }
     ctx.save();ctx.beginPath();ctx.rect(inventoryX+26,inventoryY+8,this.layout.mode==='accessories'?124:49,70);ctx.clip();ctx.translate(inventoryX+playerX-51,inventoryY);player(ctx,this.previewKit??this.kit,this.aim);ctx.restore();
     const hovered=this.layout.slots.find(slot=>slot.id===this.hover),selected=this.layout.slots.find(slot=>slot.id===this.selected);
     if(hovered){ctx.fillStyle='#ffffff80';ctx.fillRect(hovered.x,hovered.y,16,16);}

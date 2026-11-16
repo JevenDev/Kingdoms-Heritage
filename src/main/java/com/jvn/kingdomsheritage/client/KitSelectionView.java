@@ -2,6 +2,7 @@ package com.jvn.kingdomsheritage.client;
 
 import com.google.gson.JsonObject;
 import com.jvn.kingdomsheritage.data.DefinitionJson;
+import com.jvn.kingdomsheritage.data.KitStats;
 import com.jvn.kingdomsheritage.mixin.InventoryButtonAction;
 import java.util.List;
 import net.minecraft.client.Minecraft;
@@ -12,6 +13,7 @@ import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
+import net.minecraft.client.renderer.Rect2i;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.Mth;
 import net.neoforged.bus.api.EventPriority;
@@ -22,6 +24,7 @@ import org.lwjgl.glfw.GLFW;
 
 final class KitSelectionView {
     private static final int CONFIRMATION_DURATION = 550;
+    private static final int STAT_CLEARANCE = KitStatPanel.HEIGHT + 3;
     private final KitSelection model;
     private final KitConfirmationPreview confirmationPreview = new KitConfirmationPreview();
     private final KitCarousel carousel = new KitCarousel();
@@ -44,8 +47,11 @@ final class KitSelectionView {
     private Button confirm;
     private Button back;
     private Button disconnect;
-    private net.minecraft.client.renderer.Rect2i bounds;
+    private Rect2i bounds;
     private int descriptionY;
+    private KitStats.Preview stats;
+    private int statsX;
+    private int statsY;
 
     KitSelectionView(KitSelection model) {
         this.model = model;
@@ -182,6 +188,7 @@ final class KitSelectionView {
         event.addListener(view.back);
         event.addListener(view.confirm);
         view.updateButtons();
+        view.stats = view.model.previewStats();
         view.positionControls(screen, view.confirmationProgress());
     }
 
@@ -206,6 +213,7 @@ final class KitSelectionView {
         previewMouseY = mouseY;
         frameConfirmation = confirmationProgress();
         updateButtons(frameConfirmation);
+        stats = model.previewStats();
         positionControls(screen, frameConfirmation);
         boolean blocksHover = ClientParty.blocksHover(mouseX, mouseY);
         int hoverX = blocksHover ? -10000 : mouseX;
@@ -216,6 +224,9 @@ final class KitSelectionView {
             renderCarousel(screen, graphics, hoverX, hoverY, partialTick);
             renderDetails(screen, graphics, mouseX, mouseY);
         }
+        boolean moving = carousel.moving(now);
+        KitStatPanel.render(graphics, Minecraft.getInstance().font, stats, statsX, statsY,
+                moving ? -10000 : hoverX, moving ? -10000 : hoverY);
         SelectionTransition.render(graphics);
         ClientParty.renderScreen(screen, graphics, mouseX, mouseY);
     }
@@ -238,7 +249,7 @@ final class KitSelectionView {
                     if (model.modelPreview()) {
                         InventoryScreen.renderEntityInInventoryFollowsAngle(graphics, bounds.getX(), bounds.getY(),
                                 bounds.getX() + bounds.getWidth(), bounds.getY() + bounds.getHeight(),
-                                Math.max(1, bounds.getHeight() / 2), 0.0625F, 0, 0, model.player());
+                                modelSize(), 0.0625F, 0, 0, model.player());
                     } else {
                         renderInventory(screen, graphics, mouseX, mouseY, partialTick, tooltips);
                     }
@@ -315,7 +326,7 @@ final class KitSelectionView {
                     right = Math.max(right, container.getGuiLeft() + slot.x + 24);
                 }
             }
-            bounds = new net.minecraft.client.renderer.Rect2i(left, container.getGuiTop(), right - left, container.getYSize());
+            bounds = new Rect2i(left, container.getGuiTop(), right - left, container.getYSize());
         }
         int middle = bounds.getY() + (bounds.getHeight() - previous.getHeight()) / 2;
         int previousX = bounds.getX() - previous.getWidth() - 10;
@@ -326,6 +337,7 @@ final class KitSelectionView {
             else previousY = tabBottom + 4;
         }
         previous.setPosition(Math.max(4, previousX), previousY);
+        positionStats(container, progress);
         next.setPosition(Math.min(screen.width - next.getWidth() - 4, bounds.getX() + bounds.getWidth() + 10), middle);
         int center = bounds.getX() + bounds.getWidth() / 2;
         int bottom = Math.min(screen.height - 24, bounds.getY() + bounds.getHeight() + 6);
@@ -353,10 +365,23 @@ final class KitSelectionView {
         }
     }
 
+    private void positionStats(Screen screen, float progress) {
+        float scale = Mth.lerp(progress, 1, confirmationScale(screen));
+        float x = previewX(screen, progress);
+        float y = previewY(screen, progress, scale);
+        int width = KitStatPanel.width(Minecraft.getInstance().font, stats);
+        statsX = Math.round(x + (bounds.getWidth() * scale - width) / 2F);
+        statsY = Math.round(y) - STAT_CLEARANCE;
+    }
+
     private float confirmationProgress() {
         float elapsed = Mth.clamp((net.minecraft.Util.getMillis() - confirmationStarted) / (float) CONFIRMATION_DURATION, 0, 1);
         float eased = 1 - (1 - elapsed) * (1 - elapsed) * (1 - elapsed);
         return Mth.lerp(eased, confirmationFrom, confirming ? 1 : 0);
+    }
+
+    private int modelSize() {
+        return Math.max(1, bounds.getHeight() / 2);
     }
 
     private float confirmationScale(Screen screen) {
@@ -364,9 +389,23 @@ final class KitSelectionView {
                 (screen.height - 96F) / bounds.getHeight())));
     }
 
+    private float confirmationKitLeft(Screen screen, float scale) {
+        return (screen.width - (bounds.getWidth() + 216) * scale) / 2;
+    }
+
+    private float previewX(Screen screen, float progress) {
+        return Mth.lerp(progress, bounds.getX(), confirmationKitLeft(screen, confirmationScale(screen)));
+    }
+
+    private float previewY(Screen screen, float progress, float scale) {
+        float phase = (net.minecraft.Util.getMillis() % 20000L) / 20000F * Mth.TWO_PI;
+        return Mth.lerp(progress, bounds.getY(), (screen.height - bounds.getHeight() * confirmationScale(screen)) / 2)
+                - Mth.sin(phase * 5) * 2.5F * progress * scale;
+    }
+
     private int confirmationLeft(Screen screen) {
         float scale = confirmationScale(screen);
-        return Math.round((screen.width - (bounds.getWidth() + 216) * scale) / 2 + (bounds.getWidth() + 24) * scale);
+        return Math.round(confirmationKitLeft(screen, scale) + (bounds.getWidth() + 24) * scale);
     }
 
     private int confirmationTextWidth(Screen screen) {
@@ -389,10 +428,8 @@ final class KitSelectionView {
         float targetScale = confirmationScale(screen);
         float scale = Mth.lerp(progress, 1, targetScale);
         float phase = (now % 20000L) / 20000F * Mth.TWO_PI;
-        float left = (screen.width - (bounds.getWidth() + 216) * targetScale) / 2;
-        float x = Mth.lerp(progress, bounds.getX(), left);
-        float y = Mth.lerp(progress, bounds.getY(), (screen.height - bounds.getHeight() * targetScale) / 2)
-                - Mth.sin(phase * 5) * 2.5F * progress * scale;
+        float x = previewX(screen, progress);
+        float y = previewY(screen, progress, scale);
         float tilt = Mth.sin(phase * 4) * 0.35F * progress;
         confirmationPreview.render(graphics, bounds, x, y, scale, tilt,
                 () -> renderPreview(screen, graphics, model.index(), 1, bounds.getX() + 50, bounds.getY() + 43, partialTick, false));
@@ -401,7 +438,7 @@ final class KitSelectionView {
         if (progress < 1) {
             int opacity = Math.max(4, Math.round((1 - progress) * 255)) << 24;
             int center = bounds.getX() + bounds.getWidth() / 2;
-            int titleY = Math.max(2, bounds.getY() - 13);
+            int titleY = Math.max(2, bounds.getY() - STAT_CLEARANCE - font.lineHeight - 2);
             if (titleY >= 16) SelectionText.centered(graphics, font, Component.translatable("screen.kingdomsheritage.kit"), center, titleY - 12, opacity | 0xffffff);
             var title = DefinitionJson.component(model.choices().get(model.index()), "title").copy();
             title.append(" (" + (model.index() + 1) + "/" + model.choices().size() + ")");
@@ -452,15 +489,17 @@ final class KitSelectionView {
         var font = Minecraft.getInstance().font;
         int center = bounds.getX() + bounds.getWidth() / 2;
         var budget = model.shopBudgetLabel(model.index());
-        int titleY = Math.max(2, bounds.getY() - (budget == null ? 13 : 23));
+        int titleY = Math.max(2, bounds.getY() - STAT_CLEARANCE - font.lineHeight - 2);
+        int budgetY = titleY - 11;
+        int headingY = (budget == null ? titleY : budgetY) - 12;
         graphics.pose().pushPose();
         graphics.pose().translate(0, 0, 500);
-        if (titleY >= 14) SelectionText.centered(graphics, font, Component.translatable("screen.kingdomsheritage.kit"), center, titleY - 12, 0xffffff);
+        if (headingY >= 0) SelectionText.centered(graphics, font, Component.translatable("screen.kingdomsheritage.kit"), center, headingY, 0xffffff);
         JsonObject choice = model.choices().get(model.index());
         var title = DefinitionJson.component(choice, "title").copy();
         title.append(" (" + (model.index() + 1) + "/" + model.choices().size() + ")");
         SelectionText.centered(graphics, font, font.plainSubstrByWidth(title.getString(), Math.min(screen.width - 24, bounds.getWidth() + 60)), center, titleY, 0xffffff);
-        if (budget != null) {
+        if (budget != null && budgetY >= 0) {
             var summary = budget.copy().withStyle(style -> style.withColor(0xf2cd83));
             if (model.hasIncludedGear()) {
                 summary.append(Component.literal("  ·  ").withStyle(style -> style.withColor(0xcccccc)));
@@ -469,7 +508,7 @@ final class KitSelectionView {
             }
             var summaryLines = font.split(summary, Math.max(1, screen.width - 16));
             if (!summaryLines.isEmpty()) {
-                SelectionText.centered(graphics, font, summaryLines.getFirst(), center, titleY + 11, 0xffffff);
+                SelectionText.centered(graphics, font, summaryLines.getFirst(), center, budgetY, 0xffffff);
             }
         }
         boolean hasError = !model.problem().getString().isEmpty() || !model.error().getString().isEmpty();
@@ -506,6 +545,12 @@ final class KitSelectionView {
         KitSelectionView view = current();
         boolean overNavigation = List.of(view.previous, view.next, view.confirm, view.back, view.disconnect).stream()
                 .anyMatch(button -> button.active && button.visible && button.isMouseOver(event.getMouseX(), event.getMouseY()));
+        if (!overNavigation && view.stats != null && event.getMouseX() >= view.statsX && event.getMouseY() >= view.statsY
+                && event.getMouseX() < view.statsX + KitStatPanel.width(Minecraft.getInstance().font, view.stats)
+                && event.getMouseY() < view.statsY + KitStatPanel.HEIGHT) {
+            event.setCanceled(true);
+            return;
+        }
         if (!view.confirming && view.frameConfirmation == 0 && !view.model.submitted() && !overNavigation && event.getButton() == 0) {
             int index = view.carousel.hit(view.bounds, event.getScreen().width, view.model.choices().size(),
                     event.getMouseX(), event.getMouseY(), net.minecraft.Util.getMillis());

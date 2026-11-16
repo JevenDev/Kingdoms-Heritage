@@ -238,6 +238,7 @@ public final class SelectionManager {
             var policy = inventoryPolicy(player);
             var stacks = kit.loadout(player, policy, request.offers());
             if (policy != HeritageConfig.InventoryPolicy.PRESERVE) {
+                KitStatGrants.validate(player, kit.stats());
                 if (request.offers().isEmpty()) EquipmentCompat.validate(player, stacks);
                 else KitLoadout.plan(KitLoadout.capture(player, false), player.getInventory().items.size(), kit, stacks, policy);
             }
@@ -472,7 +473,10 @@ public final class SelectionManager {
             try {
                 var decoded = kit.decode(player.registryAccess());
                 kit.decodeOffers(player.registryAccess());
-                if (policy != HeritageConfig.InventoryPolicy.PRESERVE) EquipmentCompat.validate(player, decoded);
+                if (policy != HeritageConfig.InventoryPolicy.PRESERVE) {
+                    EquipmentCompat.validate(player, decoded);
+                    KitStatGrants.validate(player, kit.stats());
+                }
                 choice.addProperty("problem", "");
             } catch (IllegalArgumentException failure) {
                 choice.addProperty("problem", failure.getMessage());
@@ -549,6 +553,11 @@ public final class SelectionManager {
                 SelectionSession.remove(player.getUUID());
             }
         }
+    }
+
+    @SubscribeEvent(priority = net.neoforged.bus.api.EventPriority.LOWEST)
+    public static void clonePlayer(PlayerEvent.Clone event) {
+        KitStatGrants.clonePlayer(event);
     }
 
     @SubscribeEvent

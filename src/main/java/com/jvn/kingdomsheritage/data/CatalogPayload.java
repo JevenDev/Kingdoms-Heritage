@@ -57,6 +57,7 @@ public final class CatalogPayload {
             }
             choice.add("items", items);
             if (kit.shop() != null) choice.add("shop", kit.shop().json());
+            kit.stats().write(choice);
             kits.add(choice);
         }
         json.add("kits", kits);

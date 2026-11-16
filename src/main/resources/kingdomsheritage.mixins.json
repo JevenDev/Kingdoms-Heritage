@@ -3,7 +3,8 @@
   "package": "com.jvn.kingdomsheritage.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
-    "SelectionPacketGuard"
+    "SelectionPacketGuard",
+    "KitEquipmentUpdates"
   ],
   "client": [
     "AccessoriesCraftingPreview",

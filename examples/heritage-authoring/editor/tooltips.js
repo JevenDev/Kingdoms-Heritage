@@ -13,7 +13,15 @@ globalThis.HeritageTooltips={setup({font,sprite,screen='intro'}) {
     'delete-kit':['Delete saved kit','Delete the library draft. Existing packs will need a replacement.'],
     'delete-intro':['Delete saved intro','Delete the library draft. Existing packs will need a replacement.']
   };
+  const statOperation=['Operation','Add value adds a flat amount. Multiply base adds a fraction of the adjusted base. Multiply total scales the running value. Use 0.2 for +20%.'];
   const descriptions={...shared,...(screen==='kit'?{
+    'kit-stat-health':['Starting health','Current health on arrival, capped at maximum health. One point is half a heart. Blank keeps current health.'],
+    'kit-stat-hunger':['Starting hunger','Food level on arrival, from 0 to 20. Two points fill one drumstick. Blank keeps current hunger.'],
+    'kit-stat-armor-amount':['Armor bonus','Modifies the player’s armor attribute alongside equipped armor.'],
+    'kit-stat-max-health-amount':['Max health bonus','Modifies the health cap. With Add value, one point is half a heart.'],
+    'kit-stat-armor-operation':statOperation,
+    'kit-stat-max-health-operation':statOperation,
+    'kit-stat-new-operation':statOperation,
     copy:['Copy JSON','Copy the whole kit, including components and extra fields.'],
     'select-slots':['Select slots','Ctrl-click selects slots. Shift-click selects a range.'],
     'select-all-slots':['Select all items','Includes hidden, cosmetic and pending slot edits.'],
