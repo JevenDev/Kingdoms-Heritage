@@ -1,19 +1,16 @@
 (() => {
 'use strict';
+const Project=typeof module!=='undefined'?require('../pack/project.js'):HeritageProject;
 const copy=value=>JSON.parse(JSON.stringify(value));
 class Drafts {
   constructor(saved,initial,createId=()=>crypto.randomUUID(),collection='kits') {
     this.collection=collection;this.createId=createId;this.entries=new Map();
-    if(saved?.version===2&&Array.isArray(saved[collection])){
-      if(!saved[collection].length){this.active=this.add(initial);return;}
-      for(const entry of saved[collection]){
-        if(typeof entry.id!=='string'||this.entries.has(entry.id)||typeof entry.state?.source!=='string'||!entry.state.document)throw new Error('Saved drafts are invalid.');
-        this.entries.set(entry.id,{state:copy(entry.state),history:[copy(entry.state)],historyIndex:0});
-      }
-      if(!this.entries.has(saved.active))throw new Error('The active saved draft is missing.');
-      this.active=saved.active;
-    }else{
+    const library=Project.library(saved??null,collection);
+    if(!library[collection].length||typeof saved?.source==='string'){
       this.active=this.add(typeof saved?.source==='string'?saved:initial);
+    }else{
+      for(const entry of library[collection])this.entries.set(entry.id,{state:entry.state,history:[copy(entry.state)],historyIndex:0});
+      this.active=library.active;
     }
   }
   add(state) {

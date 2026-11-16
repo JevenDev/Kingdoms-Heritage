@@ -782,9 +782,8 @@ $('copy').addEventListener('click',async()=>{
 });
 $('download').addEventListener('click',()=>{
   if($('download').disabled)return;
-  const blob=new Blob([JSON.stringify(documentState,null,2)+'\n'],{type:'application/json'}),url=URL.createObjectURL(blob),link=document.createElement('a');
   const title=typeof documentState.title==='string'?documentState.title:'kit';
-  link.href=url;link.download=(title.toLowerCase().replace(/[^a-z0-9_-]+/g,'-').replace(/^-|-$/g,'')||'kit')+'.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);notice('Kit downloaded.');
+  HeritageSession.download(documentState,(title.toLowerCase().replace(/[^a-z0-9_-]+/g,'-').replace(/^-|-$/g,'')||'kit')+'.json');notice('Kit downloaded.');
 });
 propertiesEditor=HeritageItemProperties.create($('lore-details'),{components:()=>$('components').value,maximum:()=>K.items.get(K.normalize(view.entry(selected)?.item.id??'minecraft:air'))?.max??99,enchantments:()=>T.enchantmentChoices(),
   draft:(components,properties)=>{$('components').value=components;updateDraft(null,properties);},apply:()=>applySlotDraft(true),refresh:slotFields

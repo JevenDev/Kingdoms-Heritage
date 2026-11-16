@@ -77,7 +77,8 @@ async function acquire(key) {
 function download(value,name) {
   const blob=value instanceof Blob?value:new Blob([JSON.stringify(value,null,2)+'\n'],{type:'application/json'});
   const url=URL.createObjectURL(blob),link=document.createElement('a');
-  link.href=url;link.download=name;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+  link.href=url;link.download=name;document.body.append(link);
+  try{link.click();}finally{link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 }
 function library({workspace,snapshot,activate,blank,kind,status,persist}) {
   const duplicate=document.getElementById('duplicate-'+kind),remove=document.getElementById('delete-'+kind),dialog=document.getElementById('delete-draft-dialog');

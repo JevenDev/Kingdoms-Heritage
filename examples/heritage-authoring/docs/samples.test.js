@@ -4,22 +4,23 @@ const P=require('../editor/engine.js');
 require('./content.js');
 
 function samples() {
-  let observer,frame;
+  let observer,frame;const events=new Map();
   const observed=[],draws=[];
   const ctx={setTransform(){},save(){},restore(){},scale(){},transform(){},
     translate(...values){assert.ok(values.every(Number.isFinite));},
     fillRect(...values){assert.ok(values.every(Number.isFinite));},
     drawImage(...values){assert.ok(values.slice(1).every(Number.isFinite));draws.push(values);},
     getImageData(){return {data:new Uint8ClampedArray(8*8*4).fill(255)};}};
-  const canvas=()=>({isConnected:true,closest(){return null;},getContext(){return ctx;}});
+  const canvas=()=>({isConnected:true,closest(){return null;},getContext(){ctx.canvas=this;return ctx;}});
   const context=vm.createContext({HeritagePreview:P,
     HeritageAssets:{providers:[{image:'font',chars:['?'],height:8,ascent:7}]},
-    document:{hidden:false,createElement:canvas,addEventListener(){}},
+    document:{hidden:false,createElement:canvas,addEventListener(){},dispatchEvent(){}},Event:class {},
     Image:class {width=8;height=8;async decode(){}},
-    matchMedia:()=>({matches:false}),performance:{now:()=>0},
+    matchMedia:()=>({matches:false,addEventListener(type,listener){events.set(type,listener);}}),performance:{now:()=>0},
     requestAnimationFrame(callback){frame=callback;return 1;},cancelAnimationFrame(){frame=null;},
     IntersectionObserver:class {constructor(callback){observer=callback;}disconnect(){observed.length=0;}observe(target){observed.push(target);}}
   });
+  vm.runInContext(fs.readFileSync(require.resolve('../editor/renderer.js'),'utf8'),context);
   vm.runInContext(fs.readFileSync(require.resolve('./samples.js'),'utf8'),context);
   return {api:context.HeritageSamples,canvas,draws,
     reveal(){observer(observed.map(target=>({target,isIntersecting:true})));},

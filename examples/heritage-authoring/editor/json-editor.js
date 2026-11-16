@@ -48,6 +48,18 @@ function errorRange(source,error) {
     return [start,start+1];
   }
 }
+function highlight(source) {
+  const fragment=document.createDocumentFragment();
+  const tokens=/"(?:\\.|[^"\\])*"|\b(?:true|false|null)\b|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/g;
+  let end=0;
+  for(const match of source.matchAll(tokens)){
+    fragment.append(document.createTextNode(source.slice(end,match.index)));
+    const span=document.createElement('span'),token=match[0];
+    span.className=token.startsWith('"')?(/^\s*:/.test(source.slice(match.index+token.length))?'json-key':'json-string'):/^(true|false|null)$/.test(token)?'json-literal':'json-number';
+    span.textContent=token;fragment.append(span);end=match.index+token.length;
+  }
+  fragment.append(document.createTextNode(source.slice(end)));return fragment;
+}
 class JsonEditor {
   constructor(field,lineCount) {
     this.field=field;this.lineCount=lineCount;this.source=null;this.error=null;
@@ -101,17 +113,9 @@ class JsonEditor {
     const source=this.field.value;if(source===this.source)return;
     this.source=source;
     const fragment=document.createDocumentFragment(),lines=source.split('\n');
-    const tokens=/"(?:\\.|[^"\\])*"|\b(?:true|false|null)\b|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/g;
     for(const line of lines){
       const row=document.createElement('div');row.className='json-line';
-      let end=0;
-      for(const match of line.matchAll(tokens)){
-        row.append(document.createTextNode(line.slice(end,match.index)));
-        const span=document.createElement('span'),token=match[0];
-        span.className=token.startsWith('"')?(/^\s*:/.test(line.slice(match.index+token.length))?'json-key':'json-string'):/^(true|false|null)$/.test(token)?'json-literal':'json-number';
-        span.textContent=token;row.append(span);end=match.index+token.length;
-      }
-      row.append(document.createTextNode(line.slice(end)));fragment.append(row);
+      row.append(highlight(line));fragment.append(row);
     }
     this.highlight.replaceChildren(fragment);
     this.numbers.replaceChildren(...lines.map((_,index)=>{
@@ -122,6 +126,7 @@ class JsonEditor {
   }
 }
 JsonEditor.valueRanges=valueRanges;
+JsonEditor.highlight=highlight;
 globalThis.HeritageJsonEditor=JsonEditor;
 if(typeof module!=='undefined')module.exports=JsonEditor;
 })();

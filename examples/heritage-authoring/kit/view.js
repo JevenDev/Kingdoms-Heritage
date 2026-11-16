@@ -37,6 +37,7 @@ function text(ctx,value,x,y,color='#fff',shadow=false) {
   for(const ch of String(value)) {
     const g=glyphs.get(ch)||glyphs.get('?'),key=ch+color;
     if(!tints.has(key)) {
+      if(tints.size>=3072)tints.clear();
       const c=document.createElement('canvas');c.width=g.sw;c.height=g.sh;const cc=c.getContext('2d');cc.drawImage(g.img,g.x,g.y,g.sw,g.sh,0,0,g.sw,g.sh);cc.globalCompositeOperation='source-in';cc.fillStyle=color;cc.fillRect(0,0,c.width,c.height);tints.set(key,c);
     }
     ctx.drawImage(tints.get(key),x,y+7-g.ascent,g.sw*g.scale,g.sh*g.scale);x+=g.advance;
@@ -429,7 +430,7 @@ class StatPanel {
   constructor(host){
     this.element=document.createElement('div');this.element.className='mc-stats';this.element.hidden=true;this.element.setAttribute('role','group');this.element.setAttribute('aria-label','Starting stats');
     this.canvas=document.createElement('canvas');this.canvas.setAttribute('aria-hidden','true');this.element.append(this.canvas);host.append(this.element);this.buttons=new Map();this.scale=2;
-    assets().then(()=>{this.ready=true;if(this.kit)this.set(this.kit);},error=>{this.element.hidden=false;this.element.textContent=error.message;});
+    assets().then(()=>{if(this.destroyed)return;this.ready=true;if(this.kit)this.set(this.kit);},error=>{if(this.destroyed)return;this.element.hidden=false;this.element.textContent=error.message;});
   }
   set(kit){
     this.kit=kit;if(!this.ready)return;
@@ -459,7 +460,7 @@ class StatPanel {
   }
   resize(scale){this.scale=scale;if(!this.width)return;this.element.style.width=this.width*scale+'px';this.element.style.height=9*scale+'px';}
   place(x,y,scale){if(!this.width)return;this.resize(scale);Object.assign(this.element.style,{position:'absolute',left:x-this.width*scale/2+'px',top:y+'px',margin:'0'});}
-  destroy(){this.element.remove();}
+  destroy(){this.destroyed=true;this.element.remove();}
 }
 
 class Inventory {
@@ -470,14 +471,14 @@ class Inventory {
     this.slotControls=document.createElement('div');
     this.frame.append(this.canvas,this.slotControls);host.replaceChildren(this.frame);if(!fillHost){this.statPanel=new StatPanel(host);host.insertBefore(this.statPanel.element,this.frame);}this.buttons=new Map();this.controls=new Map();this.entries=new Map();this.stacks=new Map();
     const pendingIcons=new Set();
-    let iconFrame=0;
+    this.iconFrame=0;
     this.requestIcon=data=>{
       if(pendingIcons.has(data))return;
       pendingIcons.add(data);
       data.loadIcon().then(sprite=>{
         pendingIcons.delete(data);
-        if(!sprite||iconFrame||!this.frame.isConnected)return;
-        iconFrame=requestAnimationFrame(()=>{iconFrame=0;this.dirty=true;this.draw();});
+        if(!sprite||this.iconFrame||this.destroyed||!this.frame.isConnected)return;
+        this.iconFrame=requestAnimationFrame(()=>{this.iconFrame=0;if(this.destroyed)return;this.dirty=true;this.draw();});
       });
     };
     this.set(this.kit);
@@ -499,7 +500,7 @@ class Inventory {
     document.addEventListener('pointermove',this.pointer,{passive:true});document.addEventListener('scroll',this.invalidate,{passive:true,capture:true});window.addEventListener('resize',this.refit,{passive:true});
     this.resize=new ResizeObserver(()=>this.fit());this.resize.observe(this.host);
     this.visibility=new IntersectionObserver(entries=>{this.visible=entries[0].isIntersecting;if(this.visible){this.refit();this.draw();}});this.visibility.observe(this.frame);
-    assets().then(()=>{if(!this.frame.isConnected)return;this.ready=true;this.frame.setAttribute('aria-busy','false');this.labels();this.draw();}).catch(error=>{host.textContent='Inventory assets could not load: '+error.message;});
+    assets().then(()=>{if(this.destroyed||!this.frame.isConnected)return;this.ready=true;this.frame.setAttribute('aria-busy','false');this.labels();this.draw();}).catch(error=>{if(!this.destroyed)host.textContent='Inventory assets could not load: '+error.message;});
   }
   setRenderScale(scale) {
     const next=Math.max(1,Math.ceil(scale));
@@ -631,6 +632,7 @@ class Inventory {
     this.select(this.selected);
   }
   destroy() {
+    this.destroyed=true;if(this.iconFrame)cancelAnimationFrame(this.iconFrame);
     this.cancelDrag?.();this.statPanel?.destroy();
     document.removeEventListener('pointermove',this.pointer);document.removeEventListener('scroll',this.invalidate,true);window.removeEventListener('resize',this.refit);
     this.resize.disconnect();this.visibility.disconnect();if(this.frameRequest)cancelAnimationFrame(this.frameRequest);hideTooltip();
@@ -666,7 +668,7 @@ class Inventory {
     this.dirty=false;this.renderedHiddenStackSlot=hiddenStackSlot;
   }
   draw(hiddenStackSlot=null) {
-    if(!this.ready||!this.visible)return;
+    if(this.destroyed||!this.ready||!this.visible)return;
     if(this.statPanel){if(this.options.showStats===false)this.statPanel.element.hidden=true;else this.statPanel.set(this.previewKit??this.kit);}
     const {width,height,inventoryX,inventoryY,playerX}=this.layout,ctx=this.canvas.getContext('2d');ctx.setTransform(this.scale,0,0,this.scale,0,0);ctx.imageSmoothingEnabled=false;ctx.clearRect(0,0,width,height);
     if(this.options.modelOnly){

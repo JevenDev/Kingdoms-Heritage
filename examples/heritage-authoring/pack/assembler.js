@@ -818,8 +818,7 @@ $('export-pack').addEventListener('click',()=>{
     const name=P.slug(state.name),withPictures=output.resourceFiles.length>0;
     const files=withPictures?[{path:name+'-data.zip',content:HeritageZip.zip(output.files)},{path:name+'-resources.zip',content:HeritageZip.zip(output.resourceFiles)}]:output.files;
     const filename=name+(withPictures?'-packs':'')+'.zip';
-    const bytes=HeritageZip.zip(files),blob=new Blob([bytes],{type:'application/zip'}),url=URL.createObjectURL(blob),link=element('a',{href:url,download:filename});
-    document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+    HeritageSession.download(new Blob([HeritageZip.zip(files)],{type:'application/zip'}),filename);
     $('export-status').textContent='Downloaded '+filename+'.';
     save();
   }catch(error){$('export-status').textContent='Could not download your pack: '+error.message;}

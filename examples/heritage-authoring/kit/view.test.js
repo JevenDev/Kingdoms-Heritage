@@ -2,12 +2,12 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const Stats=require('./stats.js');Stats.configure(require('./assets/attributes.json'),require('./assets/durability.json'));
 function surface(){
-  const nodes=[];
+  const nodes=[],cancelled=[];
   function element(){return {style:{},children:[],classList:{add(){},toggle(){}},setAttribute(){},append(...children){this.children.push(...children);},remove(){this.removed=true;}};}
-  const body=element(),document={body,currentScript:{src:'https://example.test/kit/view.js'},addEventListener(){},createElement(){const node=element();nodes.push(node);return node;}};
-  const context=vm.createContext({document,window:{addEventListener(){}},URL,matchMedia:()=>({matches:false}),HeritageKit:{items:new Map([['minecraft:diamond_sword',{page:0,x:0,y:0}]]),normalize:id=>id},HeritageItemText:{},HeritageKitStats:Stats});
+  const body=element(),document={body,currentScript:{src:'https://example.test/kit/view.js'},addEventListener(){},removeEventListener(){},createElement(){const node=element();nodes.push(node);return node;}};
+  const context=vm.createContext({document,window:{addEventListener(){},removeEventListener(){}},URL,matchMedia:()=>({matches:false}),cancelAnimationFrame:id=>cancelled.push(id),HeritageKit:{items:new Map([['minecraft:diamond_sword',{page:0,x:0,y:0}]]),normalize:id=>id},HeritageItemText:{},HeritageKitStats:Stats});
   vm.runInContext(fs.readFileSync(require.resolve('./view.js'),'utf8'),context);
-  return {view:context.HeritageInventory,body};
+  return {view:context.HeritageInventory,body,cancelled};
 }
 const sword={id:'minecraft:diamond_sword',components:{'minecraft:damage':780}};
 test('inventory items draw native durability bars beneath damaged equipment',()=>{
@@ -34,4 +34,11 @@ test('embedded inventories render at preview resolution without changing their l
   inventory.layout={width:220,height:166};inventory.fit();assert.equal(inventory.canvas.width,880);assert.equal(inventory.scale,4);
   inventory.setRenderScale(2);assert.equal(inventory.canvas.width,440);assert.equal(inventory.canvas.height,332);assert.equal(inventory.scale,2);
   inventory.setRenderScale(2.5);assert.equal(inventory.scale,3);assert.equal(inventory.canvas.width,660);
+});
+
+test('destroyed inventory previews cancel queued icon and pointer rendering',()=>{
+  const {view,cancelled}=surface(),inventory=Object.create(view.Inventory.prototype);let disconnected=0;
+  Object.assign(inventory,{iconFrame:11,frameRequest:12,resize:{disconnect(){disconnected++;}},visibility:{disconnect(){disconnected++;}},ready:true,visible:true});
+  inventory.destroy();assert.equal(inventory.destroyed,true);assert.equal(disconnected,2);assert.deepEqual(cancelled,[11,12]);
+  inventory.draw();
 });

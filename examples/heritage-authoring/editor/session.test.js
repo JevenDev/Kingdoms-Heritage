@@ -28,3 +28,16 @@ test('each scrolling ancestor clips only its own overflow axes',()=>{
   const frame=embedded({width:1200,height:1000,rect:{left:100,top:100,width:1200,height:1000},ancestors:[{style:{overflowX:'hidden',overflowY:'visible'},rect:{left:200,top:0,right:900,bottom:500}},{style:{overflowX:'visible',overflowY:'auto'},rect:{left:0,top:300,right:1920,bottom:1000}}]});
   assert.deepEqual(visible({width:1200,height:1000,frame}),{left:100,top:200,right:800,bottom:900});
 });
+
+test('downloads share JSON formatting and release their temporary link and URL even on failure',()=>{
+  for(const fails of [false,true]){
+    const calls=[],link={click(){calls.push('click');if(fails)throw new Error('blocked');},remove(){calls.push('remove');}};
+    let blob,cleanup;
+    const module={exports:{}};
+    vm.runInNewContext(source,{module,Blob,document:{body:{append(node){assert.equal(node,link);calls.push('append');}},createElement:()=>link},URL:{createObjectURL(value){blob=value;return 'blob:download';},revokeObjectURL(url){calls.push(url);}},setTimeout(fn){cleanup=fn;}});
+    const run=()=>module.exports.download({title:'Example'},'kit.json');
+    if(fails)assert.throws(run,/blocked/);else run();
+    assert.deepEqual(calls,['append','click','remove']);assert.equal(link.download,'kit.json');assert.equal(blob.type,'application/json');
+    cleanup();assert.equal(calls.at(-1),'blob:download');
+  }
+});

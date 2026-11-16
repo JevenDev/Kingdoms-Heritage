@@ -1,69 +1,12 @@
 (() => {
 'use strict';
 const {pages,styles}=HeritageDocs,$=id=>document.getElementById(id);
-const escape=value=>String(value).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
-const slug=value=>value.toLowerCase().replaceAll("'",'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
+const {escape,render:markdown}=HeritageMarkdown;
 let current=null,kitViews=[];
 function clearKits(){for(const view of kitViews)view.destroy();kitViews=[];}
-const routes={'README.md':'getting-started','REFERENCE.md':'spawns'};
-const sectionRoutes={'replace-or-remove-bundled-options':'overrides','custom-names-and-languages':'resources','card-images':'resources','safe-templates':'examples','whats-included':'examples','useful-commands':'commands','troubleshooting':'troubleshooting'};
-function url(value) {
-  const [file,anchor]=value.split('#');
-  if(routes[file])return '#/'+(sectionRoutes[anchor]||routes[file])+(anchor?'/'+anchor:'');
-  return value;
-}
-function inline(source) {
-  const saved=[];
-  let text=source.replace(/\x60([^\x60]+)\x60/g,(_,value)=>{saved.push('<code>'+escape(value)+'</code>');return '\u0000'+(saved.length-1)+'\u0000';});
-  text=escape(text).replace(/!\[([^\]]*)\]\(([^)]+)\)/g,(_,alt,href)=>'<img loading="lazy" src="'+escape(href)+'" alt="'+alt+'">')
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g,(_,label,href)=>'<a href="'+escape(url(href))+'">'+label+'</a>')
-    .replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>');
-  return text.replace(/\u0000(\d+)\u0000/g,(_,index)=>saved[Number(index)]);
-}
-function markdown(source) {
-  const lines=source.split('\n'),html=[],headings=[],ids=new Map();
-  const boundary=line=>/^#{1,6} |^~~~|^\x60{3}|^\| |^[-*] |^\d+\. /.test(line);
-  for(let i=0;i<lines.length;) {
-    const line=lines[i];
-    if(!line.trim()){i++;continue;}
-    if(/^(~~~|\x60{3})/.test(line)) {
-      const fence=line.slice(0,3),language=line.slice(3).trim(),code=[];
-      while(++i<lines.length&&!lines[i].startsWith(fence))code.push(lines[i]);
-      i++;
-      html.push('<div class="code-block"><div class="code-toolbar"><span>'+escape(language||'text')+'</span><button type="button" class="copy-code">Copy</button></div><pre><code data-language="'+escape(language)+'">'+escape(code.join('\n'))+'</code></pre></div>');
-    } else if(/^#{1,6} /.test(line)) {
-      const level=line.indexOf(' '),title=line.slice(level+1),base=slug(title),count=ids.get(base)||0,id=base+(count?'-'+count:'');
-      ids.set(base,count+1);headings.push({title:title.replaceAll(String.fromCharCode(96),''),id,level});
-      html.push('<h'+level+' id="'+id+'">'+inline(title)+'</h'+level+'>');i++;
-    } else if(line.startsWith('|')) {
-      const rows=[];
-      while(i<lines.length&&lines[i].startsWith('|'))rows.push(lines[i++].replace(/^\||\|$/g,'').split('|').map(cell=>cell.trim()));
-      html.push('<div class="table-scroll"><table><thead><tr>'+rows[0].map(cell=>'<th scope="col">'+inline(cell)+'</th>').join('')+'</tr></thead><tbody>'+rows.slice(2).map(row=>'<tr>'+row.map(cell=>'<td>'+inline(cell)+'</td>').join('')+'</tr>').join('')+'</tbody></table></div>');
-    } else if(/^[-*] |^\d+\. /.test(line)) {
-      const ordered=/^\d/.test(line),items=[];
-      while(i<lines.length&&(ordered?/^\d+\. /:/^[-*] /).test(lines[i]))items.push(lines[i++].replace(/^([-*]|\d+\.) /,''));
-      html.push((ordered?'<ol>':'<ul>')+items.map(item=>'<li>'+inline(item)+'</li>').join('')+(ordered?'</ol>':'</ul>'));
-    } else {
-      const paragraph=[line];i++;
-      while(i<lines.length&&lines[i].trim()&&!boundary(lines[i]))paragraph.push(lines[i++]);
-      html.push('<p>'+inline(paragraph.join(' '))+'</p>');
-    }
-  }
-  return {html:html.join('\n'),headings};
-}
 function icons(root=document) {
   for(const node of root.querySelectorAll('[data-icon]'))if(!node.querySelector('.lucide'))node.prepend(HeritageIcons.create(node.dataset.icon));
   for(const button of root.querySelectorAll('.copy-code'))button.prepend(HeritageIcons.create('copy'));
-}
-function highlight(node) {
-  const text=node.textContent,tokens=/"(?:\\.|[^"\\])*"|\b(?:true|false|null)\b|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/g,fragment=document.createDocumentFragment();let end=0;
-  for(const match of text.matchAll(tokens)) {
-    fragment.append(document.createTextNode(text.slice(end,match.index)));
-    const span=document.createElement('span'),token=match[0];
-    span.className=token.startsWith('"')?(/^\s*:/.test(text.slice(match.index+token.length))?'json-key':'json-string'):/^(true|false|null)$/.test(token)?'json-literal':'json-number';
-    span.textContent=token;fragment.append(span);end=match.index+token.length;
-  }
-  fragment.append(document.createTextNode(text.slice(end)));node.replaceChildren(fragment);
 }
 function nav(page) {
   const groups=[...new Set(pages.map(item=>item.group))];
@@ -84,10 +27,10 @@ function loadKitScript(file) {
 }
 function loadKitRenderer() {
   return kitRenderer??=(async()=>{
-    await Promise.all(['catalog.js','equipment-data.js','player-data.js','examples.js','stats.js?v=8','../editor/json-editor.js?v=3'].map(loadKitScript));
+    await Promise.all(['catalog.js','equipment-data.js','player-data.js','examples.js','stats.js?v=8'].map(loadKitScript));
     await loadKitScript('engine.js?v=9');
-    await Promise.all(['equipment.js?v=4','player.js','text.js'].map(loadKitScript));
-    await loadKitScript('view.js?v=29');
+    await Promise.all(['equipment.js?v=4','player.js','text.js?v=4'].map(loadKitScript));
+    await loadKitScript('view.js?v=30');
   })().catch(error=>{kitRenderer=null;throw error;});
 }
 async function kitPreviews(anchor) {
@@ -166,9 +109,6 @@ function examples(page) {
       const query=event.target.value.trim().toLowerCase();
       for(const node of host.querySelectorAll('.sample'))node.hidden=!node.textContent.toLowerCase().includes(query);
     });
-    host.querySelector('#pause-samples').addEventListener('click',event=>{
-      const paused=HeritageSamples.toggle();event.currentTarget.textContent=paused?'Play animations':'Pause animations';event.currentTarget.setAttribute('aria-pressed',String(paused));
-    });
   }
   if(page==='intros') {
     const visual=[
@@ -176,22 +116,24 @@ function examples(page) {
       {id:'large',title:'Larger title',text:'A new journey begins.',description:'Main text at 1.5x size.',config:{title:true}},
       {id:'large-subtitle',title:'Larger subtitle',text:'A new journey begins.',description:'Subtitle at 1.5x size, independent of the title.',tall:true,config:{subtitle:'Find your own way.',large_subtitle:true}},
       {id:'custom-coordinates',title:'Custom coordinates',text:'A new beginning.',description:'Independent title and subtitle anchors with custom wrapping widths.',tall:true,config:{subtitle:'Find home.',large_subtitle:true,title_position:'left_center',subtitle_position:'right_center',title_coordinates:{width:35,x:7.1,y:63.1},subtitle_coordinates:{width:38.2,x:56.4,y:71.2}}},
-      {id:'no-outline',title:'No outline',text:'A new journey begins.',description:'Text without an outline or shadow.',config:{outline:false}},
+      {id:'no-outline',title:'No outline',text:'A new journey begins.',description:'Default text shadow instead of an outline.',config:{outline:false}},
       ...['fade_in','word_by_word','letter_by_letter','immediate'].map(animation=>({id:animation,title:({fade_in:'Fade in',word_by_word:'Word by word',letter_by_letter:'Letter by letter',immediate:'Immediate'})[animation],text:'You woke up in <gold>{biome}</gold>.',description:({fade_in:'Text fades into view.',word_by_word:'Reveal one word at a time.',letter_by_letter:'Reveal one letter at a time.',immediate:'Show all text at once.'})[animation],reveal:true,config:{animation,reveal_ticks:60}})),
       ...Object.keys(HeritagePreview.positions).map(position=>({id:position,title:position,text:'A new journey begins.',description:'Title and subtitle use '+position+'.',tall:true,config:{subtitle:'Find your own way.',title_position:position,subtitle_position:position}})),
       ...['straight','random'].map(style=>({id:'bars-'+style,title:style+' bars',text:'A new journey begins.',description:'Cinematic bars with '+(style==='straight'?'straight':'angled')+' edges.',tall:true,config:{cinematic_bars:true,bar_style:style}}))
     ];
     const host=document.createElement('div');host.innerHTML='<h2 id="visual-options">Visual options</h2><button type="button" id="pause-samples" aria-pressed="'+HeritageSamples.paused+'">'+(HeritageSamples.paused?'Play animations':'Pause animations')+'</button><div class="intro-samples">'+visual.map(sampleMarkup).join('')+'</div>';
     $('article').querySelector('#intro-definitions').before(host);list.push(...visual);
-    host.querySelector('#pause-samples').addEventListener('click',event=>{const paused=HeritageSamples.toggle();event.currentTarget.textContent=paused?'Play animations':'Pause animations';event.currentTarget.setAttribute('aria-pressed',String(paused));});
   }
+  $('pause-samples')?.addEventListener('click',()=>{HeritageSamples.toggle();syncSampleMotion();});
   for(const node of $('article').querySelectorAll('[data-sample-index]')) {
     const sample=list[Number(node.dataset.sampleIndex)];
     node.querySelector('.copy-text').addEventListener('click',()=>copy(sample.text,node.querySelector('.copy-text')));
     node.querySelector('.copy-intro').addEventListener('click',()=>copy(JSON.stringify({text:sample.text,...sample.config},null,2),node.querySelector('.copy-intro')));
   }
-  HeritageSamples.mount([...$('article').querySelectorAll('[data-sample-index]')].map(node=>({...list[Number(node.dataset.sampleIndex)],canvas:node.querySelector('canvas')}))).catch(error=>{$('status').textContent='Text previews could not load: '+error.message;});
+  HeritageSamples.mount([...$('article').querySelectorAll('[data-sample-index]')].map(node=>({...list[Number(node.dataset.sampleIndex)],canvas:node.querySelector('canvas')}))).catch(error=>{if(current===page)$('status').textContent='Text previews could not load: '+error.message;});
 }
+function syncSampleMotion(){const button=$('pause-samples');if(button){button.textContent=HeritageSamples.paused?'Play animations':'Pause animations';button.setAttribute('aria-pressed',String(HeritageSamples.paused));}}
+document.addEventListener('heritage:samples-motion',syncSampleMotion);
 async function copy(text,button) {
   try {
     await navigator.clipboard.writeText(text);
@@ -202,7 +144,7 @@ async function copy(text,button) {
   }
 }
 function renderSearch(query) {
-  clearKits();document.title='Search documentation · Kingdoms: Heritage';
+  clearKits();$('status').textContent='';document.title='Search documentation · Kingdoms: Heritage';
   const terms=query.toLowerCase().trim().split(/\s+/).filter(Boolean);
   const results=terms.length?pages.filter(page=>terms.every(term=>(page.title+' '+page.description+' '+page.markdown+(page.id==='text-styles'?JSON.stringify(styles):'')).toLowerCase().includes(term))):[];
   $('article').innerHTML='<h1>Search documentation</h1><p class="lead">'+(terms.length?results.length+' matching pages':'Type a field name, command, or style tag.')+'</p>'+results.map(page=>'<a class="search-result" href="#/'+page.id+'"><strong>'+escape(page.title)+'</strong><p>'+escape(page.description)+'</p></a>').join('')+(terms.length&&!results.length?'<p>No matches. Try a shorter field name or a term such as biome, outline, or kit.</p>':'');
@@ -219,10 +161,10 @@ function route() {
   const page=pages.find(item=>item.id===id)||pages[0];
   if(current!==page.id) {
     clearKits();current=page.id;$('search').value='';document.title=page.title+' · Kingdoms: Heritage';
-    const rendered=markdown(page.markdown);
-    $('article').innerHTML='<h1>'+escape(page.title)+'</h1><p class="lead">'+escape(page.description)+'</p>'+rendered.html;
+    $('status').textContent='';
+    $('article').innerHTML='<h1>'+escape(page.title)+'</h1><p class="lead">'+escape(page.description)+'</p>'+markdown(page.markdown);
     examples(page.id);
-    for(const node of $('article').querySelectorAll('code[data-language="json"]'))highlight(node);
+    for(const node of $('article').querySelectorAll('code[data-language="json"]'))node.replaceChildren(HeritageJsonEditor.highlight(node.textContent));
     for(const code of $('article').querySelectorAll('td code'))if(code.textContent.startsWith('/')) {
       const button=document.createElement('button');button.type='button';button.className='copy-command';button.setAttribute('aria-label','Copy '+code.textContent);button.append(HeritageIcons.create('copy'));button.addEventListener('click',()=>copy(code.textContent,button));code.after(button);
     }

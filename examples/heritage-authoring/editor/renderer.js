@@ -1,6 +1,5 @@
 (() => {
 'use strict';
-globalThis.HeritageCanvas=function(ctx) {
 const P=HeritagePreview,font=new Map(),tinted=new Map(),widthBuckets=new Map();
 const hex=n=>'#'+n.toString(16).padStart(6,'0');
 const glyph=ch=>font.get(ch)||font.get('?');
@@ -25,12 +24,13 @@ for(const provider of HeritageAssets.providers) {
 }
 font.set(' ',{...font.get(' '),advance:4});
 font.set('\u200c',{...font.get(' '),advance:0});
+widthBuckets.clear();
 for(const [ch,g] of font) if(ch!==' '&&ch!=='\u200c') {
   if(!widthBuckets.has(g.advance)) widthBuckets.set(g.advance,[]);
   widthBuckets.get(g.advance).push(g);
 }
 
-})();}
+})().catch(error=>{loading=null;throw error;});}
 function sprite(g,color) {
   const key=g.id+':'+color;
   if(tinted.has(key)) return tinted.get(key);
@@ -43,6 +43,7 @@ function sprite(g,color) {
   tinted.set(key,c);
   return c;
 }
+globalThis.HeritageCanvas=function(ctx) {
 function drawGlyph(draw,dx,dy,color,decoration) {
   const {g,entry,x,y,alpha}=draw, e=g.effect;
   ctx.globalAlpha=alpha/255;
@@ -71,7 +72,7 @@ function drawBlock(block,visible,alpha,tick,outline=true,shadow=false) {
       if(g.index<visible) {
         const frame=P.glyphFrame(g,tick,alpha);
         let entry=glyph(g.ch);
-        if(g.effect.obfuscated&&g.ch!==' ') {
+        if(g.effect.obfuscated&&g.ch!==' '&&g.ch!=='\u200c') {
           const choices=widthBuckets.get(entry.advance);
           entry=choices[Math.abs(Math.imul(tick+1,37)+g.index*71)%choices.length];
         }

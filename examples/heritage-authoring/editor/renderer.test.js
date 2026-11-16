@@ -31,3 +31,21 @@ test('arrival intros apply either style while retaining animated glyph positions
     for(const draw of draws.slice(0,-1)){assert.equal(draw.color,outline?'#000000':'#132737');assert.equal(Math.abs(draw.x-main.x)+Math.abs(draw.y-main.y),outline?1:2);}
   }
 });
+
+test('preview canvases share decoded font resources and retry a failed font load',async()=>{
+  let decodes=0;
+  const document={createElement(){return {getContext:()=>({drawImage(){},getImageData:()=>({data:new Uint8ClampedArray(256).fill(255)})})};}};
+  const context=vm.createContext({HeritagePreview:P,HeritageAssets:{providers:[{image:'font',chars:['A'],height:8,ascent:7}]},document,Image:class {width=8;height=8;async decode(){if(++decodes===1)throw new Error('temporary network failure');}}});
+  vm.runInContext(fs.readFileSync(require.resolve('./renderer.js'),'utf8'),context);
+  const first=new context.HeritageCanvas(null),second=new context.HeritageCanvas(null);
+  const failed=first.load();assert.equal(second.load(),failed);await assert.rejects(failed,/temporary network failure/);
+  const ready=second.load();assert.equal(first.load(),ready);await ready;
+  assert.equal(decodes,2);assert.equal(first.font,second.font);assert.ok(first.font.has('A'));
+  await new context.HeritageCanvas(null).load();assert.equal(decodes,2);
+});
+
+test('obfuscated zero-width characters preserve spacing without requesting a visible replacement glyph',async()=>{
+  const {canvas,draws}=await renderer(),glyphs=P.parse('<obfuscated>A\u200cA</obfuscated>');
+  canvas.block({x:0,y:0,scale:1,column:0,lines:[{width:18,glyphs}],lineHeight:9},Infinity,255,0,false);
+  assert.equal(draws.length,2);assert.equal(draws[1].x,9);
+});
