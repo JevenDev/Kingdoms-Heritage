@@ -158,8 +158,8 @@ globalThis.HeritageTooltips={setup({font,sprite,screen='intro'}) {
     ['select[id^="kit-stat-"][id$="-operation"]',statOperation],
     ['[data-location-field=search_radius],[data-destination-field=search_radius]',['Search distance','Maximum search distance in blocks. Blank uses the server setting.']],
     ['[data-location-field=random_radius],[data-destination-field=random_radius]',['Random spawn distance','Maximum random destination distance in blocks. Blank uses the server setting.']],
-    ['[data-location-field=piece],[data-destination-field=piece]',['Structure piece','Target a template inside a jigsaw structure, such as a village building. Leave blank for the structure’s normal arrival point.']],
-    ['[data-location-field=title_key],[data-location-field=description_key]',['Translation key','Resolve text from the player’s language files. Supply translations through a resource pack.']],
+    ['[data-location-field=piece],[data-destination-field=piece]',['Structure piece','Prefer a jigsaw template ID, such as a village building. If it is absent or has no safe position, other pieces are tried. Use the template ID, not a pool or connector name.']],
+    ['[data-location-field=title_key],[data-location-field=subtitle_key],[data-location-field=description_key],#title_key,#description_key',['Translation key','Resolve text from the player’s language files. Supply translations through a resource pack.']],
     ['[data-checkpoint-action=restore]',['Restore checkpoint','Restore this pack’s saved locations, kits and intros.']],
     ['[data-try-path]',['Try path','Test this location, kit and destination combination.']],
     ['[data-include-allowed-kit]',['Include kit','Enable this kit in the pack and this location.']]

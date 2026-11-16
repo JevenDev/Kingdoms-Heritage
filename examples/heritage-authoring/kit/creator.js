@@ -171,7 +171,7 @@ function feedback() {
   $('kit-json').setAttribute('aria-invalid',String(rawInvalid||!!errorState?.validation));
   const issueIndex=errorState?.path?.[0]==='items'?errorState.path[1]:null,issueEntry=issueIndex===null?null:documentState.items?.[issueIndex];
   const issueSlot=issueEntry?E.id(issueEntry):null;
-  for(const id of ['count','title','order','tags','description','item-id','components']){
+  for(const id of ['count','title','title_key','description_key','order','tags','description','item-id','components']){
     const invalid=errorState?.target===id||errorState?.validation&&(errorState.path?.[0]===id||issueSlot===selected&&errorState.path?.at(-1)===id);
     $(id).setAttribute('aria-invalid',String(!!invalid));
   }
@@ -185,7 +185,7 @@ function feedback() {
   $('pending-edits').hidden=!pending;
   $('pending-message').textContent=pending?pending+' slot'+(pending===1?' has':'s have')+' edits to apply. ':'';
   const locked=rawInvalid||documentState.enabled===false;
-  for(const id of ['title','description','order','tags','selected-slot','add-equipment','item-id','apply-id','components','apply-components','count','fill-stack','clear-slot','set-start','paste-slot'])$(id).disabled=locked;
+  for(const id of ['title','description','title_key','description_key','order','tags','selected-slot','add-equipment','item-id','apply-id','components','apply-components','count','fill-stack','clear-slot','set-start','paste-slot'])$(id).disabled=locked;
   $('count').disabled=locked||!view.entry(selected);
   $('fill-stack').disabled=locked||!view.entry(selected)||view.entry(selected).ignore_stack_limit===true||(view.entry(selected).item.count??1)>=K.maxCount(view.entry(selected))||(K.items.get(K.normalize(view.entry(selected).item.id))?.max===undefined&&view.entry(selected).item.components?.['minecraft:max_stack_size']===undefined&&!view.entry(selected).ignore_stack_limit);
   $('set-start').disabled=locked||typeof selected!=='number'||selected>8;
@@ -292,7 +292,7 @@ function renderInventory() {
 }
 function display() {
   renderInventory();
-  $('title').value=documentState.title??'';$('description').value=documentState.description??'';
+  for(const id of ['title','description','title_key','description_key'])$(id).value=documentState[id]??'';
   $('order').value=documentState.order??0;$('selected-slot').value=documentState.selected_slot??0;
   $('tags').value=Array.isArray(documentState.tags)?documentState.tags.join(', '):'';
   statsEditor.render(documentState,invalidStats());
@@ -644,7 +644,7 @@ document.addEventListener('keydown',event=>{
   if(document.querySelector('dialog[open]'))return;
   const modifier=event.ctrlKey||event.metaKey,field=event.target.closest('input,textarea,select,[contenteditable=true]'),slot=event.target.closest('.mc-slot');
   if(modifier&&event.key.toLowerCase()==='f'){event.preventDefault();if(!shopStage())author?.show('inventory');$('search-items').focus();$('search-items').select();return;}
-  if(modifier&&!event.altKey&&['z','y'].includes(event.key.toLowerCase())&&(!field||field.closest('#lore-lines,#shop-panel')||['kit-json','title','description','order','tags','count'].includes(field.id))){
+  if(modifier&&!event.altKey&&['z','y'].includes(event.key.toLowerCase())&&(!field||field.closest('#lore-lines,#shop-panel')||['kit-json','title','description','title_key','description_key','order','tags','count'].includes(field.id))){
     event.preventDefault();restore(event.key.toLowerCase()==='y'||event.shiftKey?1:-1);return;
   }
   if(author?.current!=='inventory')return;
@@ -663,12 +663,13 @@ $('format').addEventListener('click',()=>attempt(()=>{
   const field=$('kit-json'),scroll=field.scrollTop;field.value=JSON.stringify(K.parse(source()),null,2);field.scrollTop=scroll;parse(false,false);record();notice('JSON formatted.');
 }));
 $('restore').addEventListener('click',()=>commit(validDocument,null,{replace:true}));
-for(const id of ['title','description','order','selected-slot','tags'])$(id).addEventListener('input',()=>{
+for(const id of ['title','description','title_key','description_key','order','selected-slot','tags'])$(id).addEventListener('input',()=>{
   if(!canEdit(id))return;
   const next=K.copy(documentState);
   if(id==='order')next.order=Number($(id).value);
   else if(id==='selected-slot')next.selected_slot=Number($(id).value);
   else if(id==='tags')next.tags=$(id).value.split(',').map(value=>value.trim()).filter(Boolean);
+  else if(id.endsWith('_key')&&!$(id).value)delete next[id];
   else next[id]=$(id).value;
   const active=document.activeElement,selection=active.selectionStart;
   commit(next,id);
@@ -824,7 +825,7 @@ if(linked!==null){
 function authorIssue(){
   if(rawInvalid||invalidStats()||errorState?.validation&&errorState.path?.[0]==='shop')return {stage:'json',field:'kit-json',message:errorState?.message||'Fix the kit JSON before continuing.'};
   if(errorState?.target?.startsWith('kit-stat-'))return {stage:'details',field:errorState.target,message:errorState.message};
-  if(errorState){const property=errorState.path?.[0],details=['title','description','order','tags','selected_slot'];return {stage:details.includes(errorState.target)||details.includes(property)?'details':'inventory',field:errorState.target==='kit-json'?(details.includes(property)?property==='selected_slot'?'selected-slot':property:'item-id'):errorState.target,message:errorState.message};}
+  if(errorState){const property=errorState.path?.[0],details=['title','description','title_key','description_key','order','tags','selected_slot'];return {stage:details.includes(errorState.target)||details.includes(property)?'details':'inventory',field:errorState.target==='kit-json'?(details.includes(property)?property==='selected_slot'?'selected-slot':property:'item-id'):errorState.target,message:errorState.message};}
   if(carried)return {stage:'inventory',field:'return-carried',message:'Place or return the held item before using this kit.'};
   if(drafts.size)return {stage:'inventory',field:'go-to-draft',message:'Apply or revert the pending item edits before using this kit.'};
   if(saveBlocked||saveUnavailable)return {stage:'json',field:'kit-json',message:'Browser storage is unavailable. Copy or download your JSON before leaving.'};
