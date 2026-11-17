@@ -479,9 +479,10 @@ public final class SelectionManager {
                 }
                 choice.addProperty("problem", "");
             } catch (IllegalArgumentException failure) {
-                choice.addProperty("problem", failure.getMessage());
-                choice.addProperty("problem_component", Component.Serializer.toJson(
-                        HeritageException.component(failure), player.registryAccess()));
+                var problem = HeritageException.component(failure);
+                String message = failure.getMessage();
+                choice.addProperty("problem", message != null ? message : problem.getString());
+                choice.addProperty("problem_component", Component.Serializer.toJson(problem, player.registryAccess()));
             }
         }
         String payload = json.toString();
