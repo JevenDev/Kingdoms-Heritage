@@ -354,7 +354,7 @@ function applyMouse(state,slot=selected) {
 }
 function clickSlot(slot,event={}) {
   attempt(()=>{
-    if(!canEdit())return;checkDraft(slot);
+    if(!canEdit())return;selectSlot(slot);checkDraft(slot);
     if(selectedSlots.size)deselectSlots();
     if(event.shiftKey&&!carried){applyMouse(M.quickMove(documentState,slot),slot);return;}
     applyMouse(M.click(documentState,carried,slot,event.button===1?1:0),slot);
