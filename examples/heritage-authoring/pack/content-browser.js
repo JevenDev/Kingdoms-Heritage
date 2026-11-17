@@ -17,7 +17,7 @@ function create(config){
   document.querySelector('.location-toolbar').append(document.querySelector('.location-sections'));
   $('location-editor').prepend($('shared-entry-context'));document.querySelector('.content-bin').hidden=true;
   function refresh(){
-    const records=config.records(),kind=select.value,found=filter(records,input.value,kind),locations=new Set(found.filter(record=>record.kind==='location').map(record=>record.id)),assets=found.filter(record=>record.kind!=='location'),showLocations=kind==='location'||kind==='all';
+    const kind=select.value,records=config.records(kind),found=filter(records,input.value,kind),locations=new Set(found.filter(record=>record.kind==='location').map(record=>record.id)),assets=found.filter(record=>record.kind!=='location'),showLocations=kind==='location'||kind==='all';
     $('select-locations').hidden=!showLocations;$('location-count').hidden=true;$('content-browser-regular').hidden=!showLocations;
     for(const row of $('locations').children)row.hidden=!locations.has(row.querySelector('[data-open-location]')?.dataset.openLocation);
     results.hidden=!assets.length&&!input.value.trim()&&showLocations;$('clear-content-search').hidden=!input.value.trim();
@@ -37,7 +37,7 @@ function create(config){
   input.addEventListener('input',refresh);select.addEventListener('change',refresh);$('clear-content-search').addEventListener('click',clear);
   input.addEventListener('keydown',event=>{if(event.key==='Escape'){event.preventDefault();event.stopPropagation();if(input.value)clear();else config.leave();}});
   list.addEventListener('click',event=>{const button=event.target.closest('[data-content-kind]');if(button)config.open(button.dataset.contentKind,button.dataset.contentId);});
-  return {refresh,show,visibleLocations:()=>filter(config.records(),input.value,select.value).filter(record=>record.kind==='location').map(record=>record.id)};
+  return {refresh,show,visibleLocations:()=>filter(config.records('location'),input.value,select.value).filter(record=>record.kind==='location').map(record=>record.id)};
 }
 const api={filter,create};if(typeof module!=='undefined')module.exports=api;else globalThis.HeritageContentBrowser=api;
 })();

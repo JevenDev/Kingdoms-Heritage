@@ -196,3 +196,29 @@ test('unrestricted kit selectors and metadata survive import and later edits',as
   const session=new Flow.Session(Flow.catalog(result,{spawns:[],kits:[]}));session.choose(session.choices.spawns[0].id);assert.equal(session.allowed().length,1);
   project.pack.description='Changed description';assert.equal(JSON.parse(rebuilt(project).files.find(file=>file.path==='pack.mcmeta').content).pack.description,'Changed description');
 });
+
+test('pool imports keep one editable copy of their content and retain unknown location fields',async()=>{
+  const state=initial(),location=state.locations[0],intro={text:'Shared arrival',variables:{'story:chapter':2}};
+  location.fields.type='pool';location.document={'story:extra':{chapter:3},outline:false};location.intro='intro';
+  location.destinations=[{type:'default',intro:'intro'},{type:'default',intro:null}];
+  const output=Pack.build(state,{kits:[kit],intros:[{id:'intro',document:intro,error:''}]}),project=await Import.read(Zip.zip(output.files),'pool.zip',ids());
+  assert.equal(project.pack.locations[0].document.pool,undefined);assert.equal(project.pack.locations[0].document.intro,undefined);
+  assert.deepEqual(project.pack.locations[0].document['story:extra'],{chapter:3});compare(output.files,rebuilt(project).files);
+  assert.equal(project.intros.intros.length,2);project.intros.intros[0].state.document.variables['story:chapter']=9;
+  assert.equal(project.intros.intros[1].state.document.variables['story:chapter'],2);
+  project.kits.kits[0].state.document.title='Changed';assert.equal(project.kits.kits[0].state.validDocument.title,'Traveler');
+});
+
+test('ZIP import validates resources without preparing export text',async t=>{
+  const state=initial();state.locations[0].picture={name:'Home.png',data:'data:image/png;base64,'+png.toString('base64')};
+  const output=Pack.build(state,{kits:[kit],intros:[]});
+  t.mock.method(Pack,'build',()=>{throw new Error('Export preparation must wait for export');});
+  const project=await Import.read(bundled(output),'story-packs.zip',ids());assert.equal(project.pack.locations.length,1);assert.ok(project.pack.locations[0].picture.data);
+});
+
+test('unique pool intros are validated once during import',async t=>{
+  const state=initial(),location=state.locations[0];location.fields.type='pool';location.intro='one';location.destinations=[{type:'default',intro:'two'}];
+  const output=Pack.build(state,{kits:[kit],intros:[{id:'one',document:{text:'First'},error:''},{id:'two',document:{text:'Second'},error:''}]});
+  const preview=require('../editor/engine.js'),read=preview.readJson;let calls=0;t.mock.method(preview,'readJson',(...args)=>{calls++;return read(...args);});
+  await Import.read(Zip.zip(output.files),'pool.zip',ids());assert.equal(calls,2);
+});

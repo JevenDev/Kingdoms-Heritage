@@ -359,3 +359,34 @@ test('saving projects writes an isolated snapshot without cloning through the ba
   const saved=values.get(Project.keys.packs);storage.setItem=(key,value)=>{if(value!==saved)throw new Error('Storage full');values.set(key,value);};
   assert.throws(()=>projects.save(),/Previous data was restored/);assert.equal(values.get(Project.keys.packs),saved);
 });
+
+test('identical intro drafts share validation work while keeping independent editable documents',()=>{
+  let calls=0;const validators={intro:source=>{calls++;return {document:JSON.parse(source),wrapped:false};}},source='{"text":"Arrival","variables":{"chapter":1}}';
+  const library={version:2,intros:[{id:'one',state:{source,document:JSON.parse(source)}},{id:'two',state:{source,document:JSON.parse(source)}}]};
+  const result=Pack.drafts(library,'intros',validators);assert.equal(calls,1);assert.equal(result.entries[0].error,'');
+  result.entries[0].document.variables.chapter=2;assert.equal(result.entries[1].document.variables.chapter,1);
+  library.intros[0].state.source='{"text":"Changed"}';assert.equal(Pack.drafts(library,'intros',validators).entries[0].document.text,'Changed');assert.equal(calls,3);
+});
+
+test('equal pool intros validate once per inspection and changed content is still checked',t=>{
+  const preview=require('../editor/engine.js'),read=preview.readJson;let calls=0;t.mock.method(preview,'readJson',(...args)=>{calls++;return read(...args);});
+  const input=state(),entry=input.locations[0];entry.fields.type='pool';entry.destinations=Array.from({length:12},()=>({type:'default',intro:{text:'Arrival'}}));
+  assert.deepEqual(Pack.inspect(input,catalog).errors,[]);assert.equal(calls,1);
+  entry.destinations[1].intro.text=42;assert.ok(Pack.inspect(input,catalog).errors.length);assert.equal(calls,2);
+});
+
+test('intro validation cache cannot let serialized text stand in for an intro object',()=>{
+  const input=state(),entry=input.locations[0],intro={text:'Arrival'};entry.fields.type='pool';
+  entry.destinations=[{type:'default',intro},{type:'default',intro:JSON.stringify({intro})}];
+  const document={title:'Pool',type:'pool',pool:entry.destinations};
+  assert.throws(()=>Pack.validateSpawn(document),/intro must be a JSON object/);
+});
+
+test('validated library intros avoid repeated inspection work and invalidate after direct edits',t=>{
+  const preview=require('../editor/engine.js'),read=preview.readJson;let calls=0;t.mock.method(preview,'readJson',(...args)=>{calls++;return read(...args);});
+  const source='{"text":"Arrival"}',library={version:2,intros:[{id:'intro',state:{source,document:JSON.parse(source)}}]};
+  const intros=Pack.drafts(library,'intros',{intro:preview.readJson}).entries,input=state();input.locations[0].intro='intro';
+  assert.equal(calls,1);assert.deepEqual(Pack.inspect(input,{kits:[],intros}).errors,[]);assert.equal(calls,1);
+  intros[0].document.text=42;assert.ok(Pack.inspect(input,{kits:[],intros}).errors.length);assert.equal(calls,2);
+  intros[0].document.text='Changed';assert.deepEqual(Pack.inspect(input,{kits:[],intros}).errors,[]);assert.equal(calls,3);
+});

@@ -6,6 +6,7 @@ const fieldError=(field,message)=>Object.assign(new Error(message),{field});
 const labels={search_radius:'Search distance',random_radius:'Random spawn distance',order:'Position in the menu',title:'Location name'};
 const object=value=>value!==null&&typeof value==='object'&&!Array.isArray(value);
 const copy=value=>JSON.parse(JSON.stringify(value));
+const validatedIntroDocuments=new WeakMap();
 const resourceId=value=>value.includes(':')?value:'minecraft:'+value;
 const types=['default','random','biome','structure','fixed','pool'];
 const bundledSpawns=['default','random','plains','village'];
@@ -87,7 +88,7 @@ function drafts(raw,kind,validators) {
   const collection=kind==='kits'?'kits':'intros';
   const entries=saved?.version===2&&Array.isArray(saved[collection])?saved[collection]:typeof saved?.source==='string'?[{id:'legacy',state:saved}]:null;
   if(!entries)return {entries:[],error:'Saved '+kind+' use an unsupported format. Open the editor to save them again.'};
-  const ids=new Set(),result=[];
+  const ids=new Set(),result=[],intros=new Map();
   for(const entry of entries) {
     if(!entry||typeof entry.id!=='string'||ids.has(entry.id)||!object(entry.state))return {entries:result,error:'Saved '+kind+' contain an invalid or duplicate draft.'};
     ids.add(entry.id);
@@ -104,7 +105,9 @@ function drafts(raw,kind,validators) {
         if(parsed.document.enabled===false)throw new Error('This kit is disabled. Enable it in the kit creator.');
         draft.name=parsed.document.title||parsed.document.title_key||draft.name;
       } else {
-        const parsed=validators.intro(state.source);draft.document=parsed.wrapped?parsed.document.intro:parsed.document;
+        if(!intros.has(state.source)){const {document,wrapped}=validators.intro(state.source);intros.set(state.source,{document,wrapped});}
+        const parsed=intros.get(state.source);draft.document=copy(parsed.wrapped?parsed.document.intro:parsed.document);
+        if(validators.intro===preview.readJson)validatedIntroDocuments.set(draft.document,JSON.stringify({intro:draft.document}));
         if(parsed.wrapped&&parsed.document.type)draft.spawn=copy(parsed.document);
         if(state.validation?.error&&!state.validation.fromJson)throw new Error(state.validation.error.message||'Fix the draft error in the intro editor.');
       }
@@ -164,8 +167,8 @@ function validateSpawn(document,allowUnknown=false,validatedIntros=new Set()) {
   const type=typeof document.type==='string'?document.type.toLowerCase():'';
   if(!types.includes(type))throw fieldError('type','Choose a location type.');
   if(document.enabled===false)throw fieldError('enabled','This location is disabled.');
-  if(document.intro!==undefined&&!validatedIntros.has(document.intro)) {
-    try{preview.readJson(JSON.stringify({intro:document.intro}));validatedIntros.add(document.intro);}
+  if(document.intro!==undefined&&(!object(document.intro)||!validatedIntros.has(document.intro))) {
+    try{const source=JSON.stringify({intro:document.intro});if(!validatedIntros.has(source)&&validatedIntroDocuments.get(document.intro)!==source)preview.readJson(source);validatedIntros.add(source);validatedIntros.add(document.intro);validatedIntroDocuments.set(document.intro,source);}
     catch(error){throw Object.assign(fieldError('intro',error.message),{path:error.path});}
   }
   if(document.dimension!==undefined)knownResource(document.dimension,'dimension',allowUnknown);
@@ -198,7 +201,9 @@ function linkedIntro(id,catalog) {
   const intro=catalog.intros.find(draft=>draft.id===id);
   if(!intro)throw fieldError('intro','The linked intro is missing. Restore it or choose another intro.');
   if(intro.error)throw Object.assign(fieldError('intro','Intro '+intro.name+': '+intro.error),{path:['intro',...(intro.issue?.path?.[0]==='intro'?intro.issue.path.slice(1):intro.issue?.path??[])]});
-  return copy(intro.document);
+  const document=copy(intro.document),source=JSON.stringify({intro:document});
+  if(validatedIntroDocuments.get(intro.document)===source)validatedIntroDocuments.set(document,source);
+  return document;
 }
 function orderedKitIds(state,catalog){
   const selections=Array.isArray(state.kits)?state.kits:[],stock=new Map(bundledKits(state).map(entry=>[entry.id,entry]));
@@ -209,8 +214,8 @@ function orderedKitIds(state,catalog){
   return ids.sort((a,b)=>{if(ranks.has(a)||ranks.has(b))return (ranks.get(a)??Infinity)-(ranks.get(b)??Infinity);const first=definitions.get(a),second=definitions.get(b);return first.order-second.order||(first.path<second.path?-1:first.path>second.path?1:first.namespace<second.namespace?-1:first.namespace>second.namespace?1:0);});
 }
 function locationDocument(entry,namespace,{strict=true,resolveIntro,kits}) {
-  const document=copy(entry.document??{}),type=entry.fields?.type;
-  for(const key of [...fields,'pool','intro','kits','enabled'])if(key!=='outline'||entry.fields?.outline!==undefined)delete document[key];
+  const replaced=new Set([...fields,'pool','intro','kits','enabled'].filter(key=>key!=='outline'||entry.fields?.outline!==undefined)),type=entry.fields?.type;
+  const document=copy(Object.fromEntries(Object.entries(entry.document??{}).filter(([key])=>!replaced.has(key))));
   const relevant=fields.filter(key=>key!=='piece'||type==='structure').filter(key=>key!=='target'||['biome','structure'].includes(type)).filter(key=>!['x','y','z'].includes(key)||type==='fixed');
   Object.assign(document,settings(entry.fields??{},relevant,strict));
   if(usesPicture(entry))document.image=pictureId(namespace,entry.path);

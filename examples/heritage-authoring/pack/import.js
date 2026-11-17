@@ -4,11 +4,10 @@ const Zip=typeof module!=='undefined'?require('./zip.js'):HeritageZip;
 const Pack=typeof module!=='undefined'?require('./engine.js'):HeritagePack;
 if(typeof module!=='undefined')require('../kit/catalog.js');
 const Kit=typeof module!=='undefined'?require('../kit/engine.js'):HeritageKit;
-const Intro=typeof module!=='undefined'?require('../editor/engine.js'):HeritagePreview;
 const Project=typeof module!=='undefined'?require('./project.js'):HeritageProject;
 const object=value=>value!==null&&typeof value==='object'&&!Array.isArray(value);
 const decoder=new TextDecoder('utf-8',{fatal:true});
-function base64(bytes){let result='';for(let at=0;at<bytes.length;at+=32768)result+=String.fromCharCode(...bytes.subarray(at,at+32768));return btoa(result);}
+function base64(bytes){if(typeof bytes.toBase64==='function')return bytes.toBase64();let result='';for(let at=0;at<bytes.length;at+=32768)result+=String.fromCharCode(...bytes.subarray(at,at+32768));return btoa(result);}
 function json(files,path,parse=JSON.parse){
   if(!files.has(path))throw new Error('Missing '+path+'. Open a ZIP with pack.mcmeta at its root.');
   try{return parse(decoder.decode(files.get(path)));}
@@ -47,7 +46,7 @@ async function read(bytes,name='Imported pack.zip',createId=()=>crypto.randomUUI
   if(bundled.some(id=>disabled.has(id))&&bundled.some(id=>!definitions.some(entry=>entry.namespace==='kingdomsheritage'&&entry.kind==='spawns'&&entry.id===id)))throw new Error('This pack partially overrides the bundled locations. Include all four bundled location definitions before importing.');
   const description=typeof metadata.pack.description==='string'?metadata.pack.description:JSON.stringify(metadata.pack.description??'Imported Heritage pack');
   const state={version:1,name:name.replace(/(?:-packs|-data)?\.zip$/i,'')||'Imported pack',namespace,description,keepKits:true,keepLocations:!bundled.some(id=>disabled.has(id)),allowCustomTargets:true,kits:[],locations:[],active:'',packMetadata:metadata,importedFiles:{data:[],resources:[]}};
-  const libraries={kits:{version:2,active:'',kits:[]},intros:{version:2,active:'',intros:[]}},kits=new Map(),catalog={kits:[],intros:[]};
+  const libraries={kits:{version:2,active:'',kits:[]},intros:{version:2,active:'',intros:[]}},kits=new Map(),catalog={kits:[],intros:[]},validatedIntros=new Set();
   const stock=new Set(Pack.bundledKits(state).map(entry=>entry.resource));
   const overrides=definitions.filter(entry=>entry.kind==='kits'&&stock.has(entry.namespace+':'+entry.id));
   state.keepKits=![...stock].every(id=>overrides.some(entry=>entry.namespace+':'+entry.id===id&&entry.document.enabled===false));
@@ -57,12 +56,12 @@ async function read(bytes,name='Imported pack.zip',createId=()=>crypto.randomUUI
     data.delete(entry.path);
   }
   function draft(kind,document,title){
-    const id=createId(),source=JSON.stringify(document,null,2),value={source,document:Pack.copy(document)};
+    const id=createId(),source=JSON.stringify(document,null,2),value={source,document};
     if(kind==='kits'){
-      Kit.read(source);Object.assign(value,{validDocument:Pack.copy(document),cursor:null,selected:0,selection:[],selectionMode:false,drafts:[],loreSources:[],error:null,preview:null});
-    }else{Intro.readJson(source);Object.assign(value,{name:title,selection:[0,0],validation:{error:null,fromJson:false}});}
+      Kit.read(source);Object.assign(value,{validDocument:document,cursor:null,selected:0,selection:[],selectionMode:false,drafts:[],loreSources:[],error:null,preview:null});
+    }else{Object.assign(value,{name:title,selection:[0,0],validation:{error:null,fromJson:false}});}
     libraries[kind][kind].push({id,state:value});if(!libraries[kind].active)libraries[kind].active=id;
-    catalog[kind].push({id,name:title,document:Pack.copy(document),error:'',warnings:[]});return id;
+    catalog[kind].push({id,name:title,document,error:'',warnings:[]});return id;
   }
   for(const entry of definitions){
     if(entry.namespace!==namespace||entry.kind!=='kits'||entry.document.enabled===false
@@ -78,8 +77,8 @@ async function read(bytes,name='Imported pack.zip',createId=()=>crypto.randomUUI
       else throw new Error('Unsupported Heritage namespace in '+entry.path);
       continue;
     }
-    const document=entry.document;Pack.validateSpawn(document,true);
-    const location=Pack.location(createId());location.path=entry.id;location.document=Pack.copy(document);
+    const document=entry.document;Pack.validateSpawn(document,true,validatedIntros);
+    const location=Pack.location(createId());location.path=entry.id;const {pool,intro,...extra}=document;location.document=extra;
     location.fields=Object.fromEntries(Pack.fields.filter(key=>Object.hasOwn(document,key)).map(key=>[key,document[key]]));location.fields.type=document.type.toLowerCase();
     location.kitMode='all';location.importedKitSelectors=Pack.copy(document.kits??[]);
     if(document.kits?.length){
@@ -93,7 +92,7 @@ async function read(bytes,name='Imported pack.zip',createId=()=>crypto.randomUUI
     if(document.intro)location.intro=draft('intros',document.intro,(document.title??entry.id)+' intro');
     location.destinations=(document.pool??[]).map((destination,index)=>{
       const result=Pack.copy(destination);result.type=destination.type.toLowerCase();
-      if(object(result.intro))result.intro=draft('intros',result.intro,(document.title??entry.id)+' place '+(index+1)+' intro');
+      if(object(result.intro))result.intro=draft('intros',destination.intro,(document.title??entry.id)+' place '+(index+1)+' intro');
       return result;
     });
     if(document.image){
@@ -121,7 +120,7 @@ async function read(bytes,name='Imported pack.zip',createId=()=>crypto.randomUUI
   if(resourceMetadata)state.resourceMetadata=resourceMetadata;
   for(const [path,content] of data)state.importedFiles.data.push({path,base64:base64(content)});
   for(const [path,content] of resources)state.importedFiles.resources.push({path,base64:base64(content)});
-  const output=Pack.build(state,catalog);if(output.errors.length)throw new Error(output.errors.join(' '));
+  const output=Pack.inspect(state,catalog,{resources:true});if(output.errors.length)throw new Error(output.errors.join(' '));
   return Project.backup(state,libraries.kits,libraries.intros);
 }
 const api={read};if(typeof module!=='undefined')module.exports=api;else globalThis.HeritagePackImport=api;

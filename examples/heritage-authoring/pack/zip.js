@@ -7,7 +7,7 @@ const table=Uint32Array.from({length:256},(_,n)=>{
 });
 const crc32=data=>{
   let crc=0xffffffff;
-  for(const byte of data)crc=(crc>>>8)^table[(crc^byte)&255];
+  for(let index=0;index<data.length;index++)crc=(crc>>>8)^table[(crc^data[index])&255];
   return (crc^0xffffffff)>>>0;
 };
 function zip(files,date=new Date()) {
