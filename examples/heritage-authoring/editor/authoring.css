@@ -519,6 +519,7 @@ body[data-embedded=true] .author-shared-context { display:none; }
 
 #author-workspace .shop-editor:has(#shop-pages[hidden]) > .shop-page-nav { display:none; }
 @media(min-width:900px) {
+  body.kit-editor[data-author-stage] #author-workspace #inventory { max-height:none; }
   body.kit-editor[data-author-stage] #author-workspace .kit-inventory-panel,
   body.kit-editor[data-author-stage=inventory] #author-workspace .slot-inspector,
   body.kit-editor[data-author-stage=shop] #author-workspace :is(.shop-editor,.shop-preview) { display:flex; flex-direction:column; overflow:hidden; scrollbar-gutter:auto; }

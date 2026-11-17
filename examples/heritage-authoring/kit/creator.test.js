@@ -62,3 +62,20 @@ test('unfinished count and malformed JSON errors keep their editing guards',()=>
     assert.equal(context.documentState.items[0].item.count,3);
   }
 });
+
+test('inventory modes share a width budget including custom and cosmetic slots',()=>{
+  const documentState={items:[]},state={profiles:E.defaults(),cosmetics:{curios:false,accessories:false}},view={set(){}};
+  let mode='player';
+  const context=vm.createContext({E,documentState,selected:0,rawInvalid:true,invalidStats:()=>false,view,preview:{state,reveal(){},sync:()=>({mode,profiles:state.profiles,cosmetics:state.cosmetics[mode]??false})}});
+  vm.runInContext(source.match(/^function renderInventory\([^]*?^\}/m)[0],context);
+  for(const custom of [false,true])for(const cosmetics of [false,true]){
+    if(custom)state.profiles.curios=[{name:'ring',count:48,order:0}];
+    state.cosmetics.accessories=cosmetics;
+    const widths=[];
+    for(mode of ['player','curios','accessories']){
+      context.renderInventory();widths.push(view.scaleWidth);
+      assert.ok(view.scaleWidth>=E.layout(documentState,{mode,profiles:state.profiles,cosmetics:state.cosmetics[mode]??false}).width);
+    }
+    assert.equal(new Set(widths).size,1);
+  }
+});

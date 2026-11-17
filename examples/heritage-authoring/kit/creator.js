@@ -286,7 +286,7 @@ function editLore(update,key=null) {
 }
 function renderInventory() {
   preview.reveal(selected);const options=preview.sync();
-  view.scaleWidth=0;view.scaleHeight=0;
+  view.scaleWidth=Math.max(...['player','curios','accessories'].map(mode=>E.layout(documentState,{...options,mode,offset:0,cosmetics:preview.state.cosmetics[mode]??false}).width));view.scaleHeight=0;
   const purse=rawInvalid||invalidStats()||documentState.enabled===false?[]:HeritageKitStats.pursePreview(documentState);
   view.selected=selected;view.set(documentState,{...options,hideCrafting:true,purse,showStats:!rawInvalid&&!invalidStats()});
 }
