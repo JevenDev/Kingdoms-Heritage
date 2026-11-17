@@ -106,7 +106,8 @@ class JsonEditor {
   resize() {
     this.highlight.style.width=this.field.clientWidth+'px';
     const lines=this.highlight.children,numbers=this.numbers.children;
-    for(let i=0;i<lines.length;i++)numbers[i].style.height=lines[i].getBoundingClientRect().height+'px';
+    const heights=Array.from(lines,line=>line.getBoundingClientRect().height);
+    for(let i=0;i<heights.length;i++)numbers[i].style.height=heights[i]+'px';
     this.syncScroll();
   }
   sync() {

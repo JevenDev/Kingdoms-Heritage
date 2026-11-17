@@ -99,7 +99,7 @@ function create({editLocation,editIntro,testFlow,selectContext,reorder,editText,
     try{
       await prepare();if(token!==request)return;const fits=documents();textFits(new Map(fits.ordered.map(spawn=>[spawn.id,monitors.pack.textFit(spawn)])));if(!['pack','locations'].includes(value.step)){tools.update(null);return;}
       const pictures=Object.values(value.pictureData).map(data=>({data}));await Promise.all(Object.values(monitors).map(monitor=>monitor.pictures(pictures)));if(token!==request)return;
-      const model=documents(),field=$('intro-preview-destination');field.replaceChildren(new Option('Pool default',''),...(model.spawn?.pool??[]).map((destination,index)=>new Option('Place '+(index+1)+' · '+(F.place(destination.target)||destination.type),String(index))));
+      const model=fits,field=$('intro-preview-destination');field.replaceChildren(new Option('Pool default',''),...(model.spawn?.pool??[]).map((destination,index)=>new Option('Place '+(index+1)+' · '+(F.place(destination.target)||destination.type),String(index))));
       if(poolIndex!==''&&!model.spawn?.pool?.[Number(poolIndex)])poolIndex='';field.value=poolIndex;$('arrival-destination-field').hidden=true;
       currentModel=model;syncShop(model);
       for(const [name,controls] of Object.entries(kitControls)){

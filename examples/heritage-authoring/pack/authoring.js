@@ -6,14 +6,14 @@ function create(config){
   const modeLabel=document.createElement('label'),mode=document.createElement('select');modeLabel.className='stack';modeLabel.textContent='Kit assignment';mode.id='bulk-kit-mode';mode.append(new Option('Add kits','add'),new Option('Replace kit choices','replace'),new Option('Remove kits','remove'));modeLabel.append(mode);$('bulk-kits').before(modeLabel);
   const current=()=>{const value=config.read();if(!histories.has(value.id))histories.set(value.id,new E.History(value.pack,value.libraries));return {value,history:histories.get(value.id)};};
   const report=message=>{$('project-status').textContent=message;};
-  function refresh(){
-    let history;try{({history}=current());}catch(error){for(const id of ['pack-undo','pack-redo','pack-checkpoints','select-locations'])$(id).disabled=true;report('Pack tools are unavailable: '+error.message);return;}$('pack-undo').disabled=busy||!history.canUndo;$('pack-redo').disabled=busy||!history.canRedo;
+  function refresh(snapshot){
+    let value,history;try{({value,history}=snapshot??current());}catch(error){for(const id of ['pack-undo','pack-redo','pack-checkpoints','select-locations'])$(id).disabled=true;report('Pack tools are unavailable: '+error.message);return;}$('pack-undo').disabled=busy||!history.canUndo;$('pack-redo').disabled=busy||!history.canRedo;
     $('pack-undo').dataset.tooltip=JSON.stringify(['Undo pack edit',history.canUndo?'Ctrl+Z. Undo '+history.actions[history.index-1].label.toLowerCase()+'.':'No pack edits to undo.']);$('pack-redo').dataset.tooltip=JSON.stringify(['Redo pack edit',history.canRedo?'Ctrl+Y. Redo '+history.actions[history.index].label.toLowerCase()+'.':'No pack edits to redo.']);
-    const ids=new Set(config.read().pack.locations.map(entry=>entry.id));for(const id of selected)if(!ids.has(id))selected.delete(id);
+    const ids=new Set(value.pack.locations.map(entry=>entry.id));for(const id of selected)if(!ids.has(id))selected.delete(id);
     $('select-locations').textContent=selecting?'Done':'Select';$('select-locations').setAttribute('aria-pressed',String(selecting));
     $('location-selection-controls').hidden=!selecting;$('location-selection-status').hidden=!selecting;$('location-selection-status').textContent=selected.size+' selected';$('bulk-location-actions').hidden=!selected.size;
   }
-  function capture(options){try{const {value,history}=current();history.record(value.pack,value.libraries,options);refresh();}catch(error){report('Pack history could not record this change: '+error.message);}}
+  function capture(options){try{const snapshot=current(),{value,history}=snapshot;history.record(value.pack,value.libraries,options);refresh(snapshot);}catch(error){report('Pack history could not record this change: '+error.message);}}
   async function restore(direction){
     if(busy)return;busy=true;refresh();
     try{
@@ -117,5 +117,10 @@ function create(config){
   refresh();
   return {capture,refresh,decorate,observe:()=>{try{const {value,history}=current();history.observe(value.libraries);}catch(error){report('Pack history could not read the libraries: '+error.message);}},get selecting(){return selecting;}};
 }
-globalThis.HeritagePackAuthoring={create};
+function updates(apply){
+  let timer=null;
+  const flush=()=>{if(timer===null)return false;clearTimeout(timer);timer=null;apply();return true;};
+  return {schedule(){if(timer!==null)clearTimeout(timer);timer=setTimeout(flush,150);},flush};
+}
+globalThis.HeritagePackAuthoring={create,updates};
 })();

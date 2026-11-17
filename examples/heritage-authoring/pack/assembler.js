@@ -26,6 +26,7 @@ const active=()=>state.locations.find(entry=>entry.id===state.active);
 const orderedLocations=()=>[...state.locations].sort((a,b)=>(Number(a.fields.order)||0)-(Number(b.fields.order)||0)||(a.path<b.path?-1:a.path>b.path?1:0));
 const pictureRequests=new WeakMap(),picturePreviews=new WeakMap();
 let packTools,coverageView,contentBrowser,pendingContentFocus,cardFits=new Map(),historyGroup='',historyLabel='',historyDrafts=[];
+const pendingChanges=HeritagePackAuthoring.updates(applyChanges);
 const plainText=text=>HeritagePreview.parse(text).map(glyph=>glyph.ch).join('');
 const placeName=value=>{
   const name=String(value||'Not chosen').split(':').at(-1).replace(/^is_/,'').replaceAll('_',' ');
@@ -34,13 +35,13 @@ const placeName=value=>{
 function editorUrl(kind,draft,create=false){return W.editorUrl(kind,{draft,create,packId:projects?.active,locationId:state.active});}
 function fingerprint(){const {active,...pack}=state;return JSON.stringify([pack,catalog]);}
 function fieldKey(field){return (field.hasAttribute('data-location-field')||field.hasAttribute('data-destination-field')||['location-id','kit-mode','location-intro'].includes(field.id)?state.active:'pack')+':'+(field.dataset.destination??'')+':'+(field.id||field.dataset.locationField||field.dataset.destinationField||field.dataset.kitPath);}
-function setLocationPart(value,{route=true}={}){
+function setLocationPart(value,{route=true,render=true}={}){
   if(!['details','kits','intro'].includes(value))value='details';
   if(embeddedSession&&value!==(embeddedSession.kind==='kit'?'kits':'intro')&&!closeEmbedded())return;locationPart=value;if(state?.active)locationParts.set(state.active,value);
   for(const panel of document.querySelectorAll('[data-location-section]'))panel.hidden=panel.dataset.locationSection!==value;
   for(const button of document.querySelectorAll('[data-location-section-button]'))if(button.dataset.locationSectionButton===value)button.setAttribute('aria-current','page');else button.removeAttribute('aria-current');
   if(route){const url=new URL(location.href);url.searchParams.set('part',value);history.replaceState(null,'',url);}
-  if(output)renderCard();updateSteps();
+  if(output&&render){renderPool();kitChoices();renderOutput();}updateSteps();
 }
 function syncEmbedded(status){
   const session=embeddedSession;if(!session||status.kind!==session.kind||projects?.active!==session.packId||state.active!==session.locationId)return;
@@ -53,10 +54,12 @@ function syncEmbedded(status){
   const url=new URL(location.href);url.searchParams.set('editing',session.kind);url.searchParams.set('entry',status.id);if(session.library)url.searchParams.set('library','1');else url.searchParams.delete('library');if(Number.isInteger(session.destination))url.searchParams.set('destination',String(session.destination));history.replaceState(null,'',url);
 }
 function flushEmbedded(){
+  pendingChanges.flush();
   if(!embeddedSession)return true;const editor=$('content-editor').contentWindow?.HeritageEmbeddedEditor;if(!editor)return true;
   const status=editor.flush();if(!status.persisted){$('embedded-editor-status').textContent='The draft could not be saved. Keep a JSON copy before leaving this editor.';return false;}syncEmbedded(status);return true;
 }
 function closeEmbedded(){
+  pendingChanges.flush();
   if(!embeddedSession)return true;if(!flushEmbedded())return false;workspaceVisuals.detach();const frame=$('content-editor');embeddedSession=null;
   const replacement=frame.cloneNode(false);replacement.removeAttribute('src');frame.replaceWith(replacement);$('embedded-editor').hidden=true;$('close-embedded-editor').hidden=true;$('embedded-editor-status').textContent='';document.body.classList.remove('editor-open');delete document.body.dataset.editorKind;refreshShared();renderContentBrowser();updateSteps();
   const url=new URL(location.href);url.searchParams.delete('editing');url.searchParams.delete('entry');url.searchParams.delete('library');url.searchParams.delete('destination');history.replaceState(null,'',url);return true;
@@ -155,13 +158,15 @@ function renderContentSummary(){
   for(const [part,label,text] of [['kits','Starting kits',kits.join(', ')||'Choose at least one kit'],['intro','Arrival intro',intro?.name||(entry.intro?'Missing saved intro':'No intro, optional')]]){const button=element('button',{type:'button','data-edit-content':part});button.append(element('strong',{},label),element('span',{},text));host.append(button);}
 }
 function renderOverview() {
+  if(currentStep!=='preview')return;
+  const orderedKits=P.orderedKitIds(state,catalog);
   const list=$('location-summary'),focused=document.activeElement,focusId=list.contains(focused)?focused.closest('.review-location-entry')?.querySelector('.review-location-open').dataset.reviewLocation:null,focusAction=focusId?(focused.dataset.reviewPart??(focused.hasAttribute('data-review-test')?'test':focused.hasAttribute('data-review-issue')?'issue':'details')):null;list.replaceChildren();
   if(!state.locations.length)list.append(element('li',{class:'review-note hint'},'Add a starting location to choose its destination, kits and intro.'));
   const preparing=state.locations.some(entry=>pictureRequests.has(entry));
   for(const entry of orderedLocations()) {
     const row=element('li',{class:'review-location-entry'}),button=element('button',{type:'button',class:'review-location-open','data-review-location':entry.id,'aria-label':'Edit location '+(entry.fields.title||entry.path)}),content=element('span',{class:'review-location-content'});
     content.append(element('strong',{title:entry.fields.title||'Unnamed location'},entry.fields.title||'Unnamed location'),element('span',{class:'summary-detail'},locationDescription(entry)));
-    const intro=catalog.intros.find(draft=>draft.id===entry.intro),ids=locationKitIds(entry),names=ids.map(kitName),fullKits=names.join(', ')||'Choose a kit',kits=names.slice(0,2).join(', ')+(names.length>2?' +'+(names.length-2):'');
+    const intro=catalog.intros.find(draft=>draft.id===entry.intro),ids=locationKitIds(entry,orderedKits),names=ids.map(kitName),fullKits=names.join(', ')||'Choose a kit',kits=names.slice(0,2).join(', ')+(names.length>2?' +'+(names.length-2):'');
     const overrides=entry.fields.type==='pool'?entry.destinations.filter(destination=>Object.hasOwn(destination,'intro')&&destination.intro!=='').length:0;
     const introSummary=(entry.fields.type==='pool'?'Default intro: ':'Intro: ')+(intro?.name||(entry.intro?'Missing intro':'None'))+(overrides?' · '+overrides+' place override'+(overrides===1?'':'s'):'');
     content.append(element('span',{class:'summary-detail',title:fullKits},ids.length+' kit'+(ids.length===1?'':'s')+': '+(kits||'Choose a kit')),element('span',{class:'summary-detail',title:introSummary},introSummary));
@@ -220,17 +225,19 @@ function projectOptions() {
   select.value=projects?.active??'';select.disabled=saveBlocked;
 }
 function save() {
-  clearTimeout(saveTimer);
+  pendingChanges.flush();clearTimeout(saveTimer);
   if(saveBlocked){$('save-status').textContent='Read only';$('save-status').title=storageError;$('project-status').textContent=storageError;return false;}
   try{projects.update(state);projects.save();projectOptions();$('save-status').textContent='Saved';$('save-status').title='Saved in this browser';return true;}
   catch(error){$('save-status').textContent='Save failed';$('save-status').title=error.message;$('project-status').textContent='Your changes could not be saved. Download a copy. '+error.message;return false;}
 }
-function changed() {
+function applyChanges(){
   packTools?.capture({drafts:historyDrafts,group:historyGroup,label:historyLabel||'Edit pack'});historyDrafts=[];historyGroup='';historyLabel='';refreshShared();
-  $('project-status').textContent='';
-  $('export-status').textContent='';
   projectOptions();renderOutput();
+}
+function changed({defer=false}={}) {
+  $('project-status').textContent='';$('export-status').textContent='';
   if(!saveBlocked)$('save-status').textContent='Saving…';
+  pendingChanges.schedule();if(!defer)pendingChanges.flush();
   clearTimeout(saveTimer);saveTimer=setTimeout(save,350);
 }
 function renderKits() {
@@ -271,10 +278,11 @@ function locationThumbnail(entry){
   const image=entry.imageMode!=='upload'&&/^kingdomsheritage:textures\/gui\/locations\/(default|random|plains|village)\.png$/.exec(entry.fields.image??'');
   return element('img',{class:'location-thumbnail',src:locationPicture(entry).data??'pack/assets/'+(image?.[1]??'card_fallback')+'.png',width:'48',height:'72',alt:''});
 }
-function locationKitIds(entry){
-  const ids=entry.kitMode==='selected'?entry.kits:[...state.kits.filter(kit=>kit.included).map(kit=>kit.id),...P.bundledKits(state).map(kit=>kit.id)],ordered=P.orderedKitIds(state,catalog);return [...ordered.filter(id=>ids.includes(id)),...ids.filter(id=>!ordered.includes(id))];
+function locationKitIds(entry,ordered=P.orderedKitIds(state,catalog)){
+  const ids=entry.kitMode==='selected'?entry.kits:[...state.kits.filter(kit=>kit.included).map(kit=>kit.id),...P.bundledKits(state).map(kit=>kit.id)],allowed=new Set(ids),known=new Set(ordered);return [...ordered.filter(id=>allowed.has(id)),...ids.filter(id=>!known.has(id))];
 }
 function locationOptions(){
+  const orderedKits=P.orderedKitIds(state,catalog);
   const list=$('locations');list.replaceChildren();$('location-count').textContent=String(state.locations.length);
   const selected=active();$('editing-location').textContent=selected?.fields.title||'Untitled location';$('editing-location').title=selected?.fields.title||'Untitled location';$('location-position').textContent=selected?(orderedLocations().findIndex(entry=>entry.id===selected.id)+1)+' of '+state.locations.length:'';
   document.querySelector('.location-toolbar').hidden=!selected;
@@ -282,7 +290,7 @@ function locationOptions(){
     const row=element('li'),button=contentNode(element('button',{type:'button','data-open-location':entry.id,'aria-current':String(entry.id===state.active)}),'location',entry.id),content=element('span',{class:'location-list-content'});
     button.append(locationThumbnail(entry));
     content.append(element('strong',{},entry.fields.title||'Untitled location'),element('span',{},locationDescription(entry)));
-    const kits=locationKitIds(entry).length,intro=catalog.intros.find(draft=>draft.id===entry.intro),overrides=entry.fields.type==='pool'&&entry.destinations.some(destination=>destination.intro);
+    const kits=locationKitIds(entry,orderedKits).length,intro=catalog.intros.find(draft=>draft.id===entry.intro),overrides=entry.fields.type==='pool'&&entry.destinations.some(destination=>destination.intro);
     content.append(element('span',{},kits+' kit'+(kits===1?'':'s')+' · '+(intro?'Intro':entry.intro?'Missing intro':overrides?'Place intros':'No intro')));
     if(revealValidation&&output?.issues.some(issue=>issue.locationId===entry.id))content.append(element('span',{class:'error'},'Needs attention'));
     button.append(content);row.append(button);packTools?.decorate(row,entry);list.append(row);
@@ -437,7 +445,7 @@ function kitChoiceStatus(){
   $('kit-choice-status').textContent=(entry.kitMode==='all'?'Uses every included kit, including kits added later. ':'')+(count?count+' kit'+(count===1?'':'s')+' available to players at this location.':'Choose at least one kit. Use Empty-handed to start without items.');
 }
 function kitChoices(){
-  const entry=active(),container=$('location-kits');container.replaceChildren();if(!entry)return;container.hidden=false;
+  const entry=active(),container=$('location-kits');container.replaceChildren();if(!entry||locationPart!=='kits')return;container.hidden=false;
   const all=entry.kitMode==='all';$('manage-kits').hidden=!all;kitChoiceStatus();
   const choices=catalog.kits.map(draft=>({id:draft.id,name:draft.name,draft,included:state.kits.find(kit=>kit.id===draft.id)?.included}));for(const draft of P.bundledKits(state))choices.push({id:draft.id,name:draft.name,draft,included:true,bundled:true});
   for(const id of entry.kits)if(!choices.some(kit=>kit.id===id))choices.push({id,name:'Missing saved kit',missing:true});
@@ -478,7 +486,10 @@ function destinationType(row,index,type) {
 }
 function renderPool() {
   const container=$('pool-destinations'),intros=$('pool-intro-choices'),focused=document.activeElement,focusIndex=focused.dataset?.destination,focusField=focused.dataset?.destinationField;container.replaceChildren();intros.replaceChildren();
-  const entry=active();$('pool-intros').hidden=entry?.fields.type!=='pool';if(!entry)return;
+  const entry=active();$('pool-intros').hidden=entry?.fields.type!=='pool';if(!entry||entry.fields.type!=='pool'||locationPart==='kits')return;
+  const rows=document.createDocumentFragment(),introRows=document.createDocumentFragment(),drafts=new Map(catalog.intros.map(draft=>[draft.id,draft])),excerpts=new Map();
+  const introTemplate=element('select');introTemplate.append(option('','Use the pool’s default intro'),option(':none','No intro'),...catalog.intros.map(draft=>option(draft.id,draft.name+(draft.error?' (needs fixing)':''))));
+  const excerpt=draft=>{if(!draft)return '';if(!excerpts.has(draft))excerpts.set(draft,draft.error||plainText(draft.document?.text??''));return excerpts.get(draft);};
   entry.destinations.forEach((destination,index)=>{
     const row=element('div',{class:'pool-destination'}),heading=element('div',{class:'section-heading'});
     heading.append(element('h3',{},'Place '+(index+1)),element('button',{type:'button','data-remove-destination':String(index),'aria-label':'Remove place '+(index+1)},'Remove'));row.append(heading);
@@ -496,21 +507,23 @@ function renderPool() {
     for(const [key,name] of [['search_radius','Search distance (blocks)'],['random_radius','Random spawn distance (blocks)']]){const field=inputField(name,key,destination[key],index,true,'Use location setting');field.dataset.poolTypes=key==='search_radius'?'biome structure':'random';grid.append(field);}
     const piece=inputField('Preferred building piece (optional)','piece',destination.piece,index);piece.dataset.poolTypes='structure';grid.append(piece);
     options.append(grid);row.append(options);
-    const introRow=element('div',{class:'pool-intro-entry'}),introHeading=element('div',{class:'section-heading'});introHeading.append(element('h3',{},'Place '+(index+1)+' · '+locationDescription({fields:destination,destinations:[]})),element('button',{type:'button','data-open-place':String(index),'aria-label':'Edit place '+(index+1)},'Edit place'));introRow.append(introHeading);
-    const introLabel=element('label',{class:'stack'},'Intro for place '+(index+1));
-    const intro=element('select',{'data-destination':String(index),'data-destination-field':'intro'});
-    intro.append(option('','Use the pool’s default intro'),option(':none','No intro'),...catalog.intros.map(draft=>option(draft.id,draft.name+(draft.error?' (needs fixing)':''))));
-    const value=destination.intro;
-    if(value&&typeof value==='object')intro.append(option(':imported','Imported intro'));
-    else if(value&&!catalog.intros.some(draft=>draft.id===value))intro.append(option(value,'Missing saved intro'));
-    intro.value=value===null?':none':typeof value==='object'?':imported':value??'';
-    introLabel.append(intro);const introControls=element('div',{class:'pool-intro-controls'});introControls.append(introLabel);const create=element('button',{type:'button','data-create-destination-intro':String(index),'aria-label':'New intro for place '+(index+1)},'New intro');introControls.append(create);const introId=typeof value==='string'&&value?value:entry.intro;if(value!==null&&catalog.intros.some(draft=>draft.id===introId))introControls.append(element('button',{type:'button','data-edit-destination-intro':String(index),'data-intro-id':introId,'aria-label':'Edit intro for place '+(index+1)},'Edit intro'));introRow.append(introControls);
-    const draft=catalog.intros.find(draft=>draft.id===(value||entry.intro));
-    const text=value===null?'Players will start here without an intro.':value&&typeof value==='object'?plainText(value.text??''):draft?.error||plainText(draft?.document?.text??'');
-    const status=element('p',{class:'intro-excerpt hint'},text||(value?'This intro is missing. Choose another intro.':entry.intro?'The pool’s default intro is missing.':'The pool has no default intro.'));
-    status.classList.toggle('error',value!==null&&typeof value!=='object'&&(!!draft?.error||!!(value||entry.intro)&&!draft));
-    introRow.append(status);intros.append(introRow);const introName=value===null?'None':value&&typeof value==='object'?'Imported':value?draft?.name||'Missing intro':'Pool default';row.append(element('button',{type:'button',class:'place-intro-link','data-open-place-intro':String(index)},'Intro: '+introName));container.append(row);destinationType(row,index,destination.type);
+    const value=destination.intro,draft=drafts.get(value||entry.intro);
+    if(locationPart==='intro'){
+      const introRow=element('div',{class:'pool-intro-entry'}),introHeading=element('div',{class:'section-heading'});introHeading.append(element('h3',{},'Place '+(index+1)+' · '+locationDescription({fields:destination,destinations:[]})),element('button',{type:'button','data-open-place':String(index),'aria-label':'Edit place '+(index+1)},'Edit place'));introRow.append(introHeading);
+      const introLabel=element('label',{class:'stack'},'Intro for place '+(index+1));
+      const intro=introTemplate.cloneNode(true);intro.dataset.destination=String(index);intro.dataset.destinationField='intro';
+      if(value&&typeof value==='object')intro.append(option(':imported','Imported intro'));
+      else if(value&&!drafts.has(value))intro.append(option(value,'Missing saved intro'));
+      intro.value=value===null?':none':typeof value==='object'?':imported':value??'';
+      introLabel.append(intro);const introControls=element('div',{class:'pool-intro-controls'});introControls.append(introLabel);const create=element('button',{type:'button','data-create-destination-intro':String(index),'aria-label':'New intro for place '+(index+1)},'New intro');introControls.append(create);const introId=typeof value==='string'&&value?value:entry.intro;if(value!==null&&drafts.has(introId))introControls.append(element('button',{type:'button','data-edit-destination-intro':String(index),'data-intro-id':introId,'aria-label':'Edit intro for place '+(index+1)},'Edit intro'));introRow.append(introControls);
+      const text=value===null?'Players will start here without an intro.':value&&typeof value==='object'?plainText(value.text??''):excerpt(draft);
+      const status=element('p',{class:'intro-excerpt hint'},text||(value?'This intro is missing. Choose another intro.':entry.intro?'The pool’s default intro is missing.':'The pool has no default intro.'));
+      status.classList.toggle('error',value!==null&&typeof value!=='object'&&(!!draft?.error||!!(value||entry.intro)&&!draft));
+      introRow.append(status);introRows.append(introRow);
+    }
+    const introName=value===null?'None':value&&typeof value==='object'?'Imported':value?draft?.name||'Missing intro':'Pool default';row.append(element('button',{type:'button',class:'place-intro-link','data-open-place-intro':String(index)},'Intro: '+introName));rows.append(row);destinationType(row,index,destination.type);
   });
+  container.replaceChildren(rows);intros.replaceChildren(introRows);
   if(focusIndex!==undefined&&focusField)document.querySelector('[data-destination="'+focusIndex+'"][data-destination-field="'+focusField+'"]')?.focus({preventScroll:true});
 }
 function renderPicture() {
@@ -563,7 +576,7 @@ async function uploadPicture(files) {
   }
 }
 function renderLocation({sync=true}={}) {
-  if(renderedLocation&&renderedLocation!==state.active)locationPart=locationParts.get(state.active)??'details';renderedLocation=state.active;setLocationPart(locationPart,{route:false});
+  if(renderedLocation&&renderedLocation!==state.active)locationPart=locationParts.get(state.active)??'details';renderedLocation=state.active;setLocationPart(locationPart,{route:false,render:false});
   if(sync&&currentStep==='locations'){const url=new URL(location.href);if(projects)url.searchParams.set('pack',projects.active);if(state.active)url.searchParams.set('location',state.active);else url.searchParams.delete('location');window.history.replaceState(null,'',url);}
   locationOptions();renderOverview();renderContentBrowser();
   const entry=active();document.querySelector('.location-sections').hidden=!entry;$('location-empty').hidden=!!entry;$('location-form').hidden=!entry;$('delete-location').disabled=!entry;
@@ -588,13 +601,14 @@ function renderDownloadDetails(){
   $('install-data-name').textContent=data;$('install-resource-name').textContent=resource;$('install-bundle-name').textContent=base+'-packs.zip';$('install-extract-step').hidden=$('install-resource-step').hidden=!resources;
 }
 function previewFile() {
+  if(currentStep!=='export'||!document.querySelector('.file-inspector').open)return;
   const file=output.previewFiles.find(entry=>entry.path===$('export-file').value);
   $('copy').disabled=!file;$('copy-status').textContent='';$('file-preview-heading').textContent=file?fileLabel(file.path):'JSON preview';$('file-preview-path').textContent=file?.path??'';
   $('export-json').value=file?.content??'';code.setError(file?output.issues.find(issue=>issue.filePath===file.path):null);$('export-json').scrollTop=0;
   if(!file)$('line-count').textContent='';
 }
-function renderOutput() {
-  output=P.build(state,catalog);if(active()){showType();document.querySelectorAll('#pool-destinations > .pool-destination').forEach((row,index)=>destinationType(row,index,active().destinations[index]?.type));}renderOverview();
+function renderOutput({validate=false}={}) {
+  output=currentStep==='export'?P.build(state,catalog):P.inspect(state,catalog,{resources:validate||currentStep==='preview'});if(active()){showType();document.querySelectorAll('#pool-destinations > .pool-destination').forEach((row,index)=>destinationType(row,index,active().destinations[index]?.type));}renderOverview();
   for(const field of document.querySelectorAll('[data-location-field],[data-destination-field],#pack-gui-scale,#pack-kit-preview,[data-kit-path],#namespace,#pack-name,#pack-description,#location-id,#kit-mode,#location-intro')) {
     const property=field.dataset.destinationField??field.dataset.locationField??({'pack-name':'name','pack-description':'description','namespace':'namespace','location-id':'path','kit-mode':'kits','location-intro':'intro','pack-gui-scale':'guiScale','pack-kit-preview':'kitPreview'})[field.id]??'path';
     const location=field.hasAttribute('data-location-field')||field.hasAttribute('data-destination-field')||['location-id','kit-mode','location-intro'].includes(field.id);
@@ -648,7 +662,7 @@ function render() {
   $('keep-locations').checked=state.keepLocations;$('keep-kits').checked=state.keepKits;
   projectOptions();renderKits();renderIntros();renderLocation({sync:false});renderOutput();packTools?.refresh();refreshShared();
 }
-function refresh() {loadCatalog();discoverKits();renderKits();renderIntros();introOptions();kitChoices();renderPool();changed();}
+function refresh() {pendingChanges.flush();loadCatalog();discoverKits();renderKits();renderIntros();introOptions();kitChoices();renderPool();changed();}
 $('refresh-drafts').addEventListener('click',()=>{refresh();$('project-status').textContent='Your latest saved kits and intros are ready.';});
 $('new-pack').addEventListener('click',()=>$('new-pack-dialog').showModal());
 $('confirm-new-pack').addEventListener('click',()=>{
@@ -663,7 +677,7 @@ $('confirm-new-pack').addEventListener('click',()=>{
 });
 window.addEventListener('storage',event=>{if(['heritage.kitCreator.v1','heritage.introEditor.v1'].includes(event.key))refresh();});
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh();});
-for(const [id,key] of [['pack-name','name'],['namespace','namespace'],['pack-description','description']])$(id).addEventListener('input',event=>{state[key]=event.target.value;changed();});
+for(const [id,key] of [['pack-name','name'],['namespace','namespace'],['pack-description','description']])$(id).addEventListener('input',event=>{state[key]=event.target.value;changed({defer:true});});
 for(const [id,key] of [['keep-locations','keepLocations'],['keep-kits','keepKits'],['allow-custom-targets','allowCustomTargets']])$(id).addEventListener('change',event=>{state[key]=event.target.checked;kitChoices();changed();});
 $('pack-gui-scale').addEventListener('change',event=>{
   const value=Number(event.target.value);if(value)state.guiScale=value;else delete state.guiScale;changed();
@@ -684,7 +698,7 @@ $('kit-library').addEventListener('change',event=>{
 });
 $('kit-library').addEventListener('input',event=>{
   if(!event.target.hasAttribute('data-kit-path'))return;
-  state.kits.find(kit=>kit.id===event.target.dataset.kitPath).path=event.target.value;changed();
+  state.kits.find(kit=>kit.id===event.target.dataset.kitPath).path=event.target.value;changed({defer:true});
 });
 $('location-summary').addEventListener('click',event=>{
   const issue=event.target.closest('[data-review-issue]');if(issue){fixIssue(output.issues[Number(issue.dataset.reviewIssue)]);return;}
@@ -774,7 +788,7 @@ $('location-form').addEventListener('input',event=>{
       renderPool();
     }
   } else return;
-  changed();
+  changed({defer:field.tagName!=='SELECT'&&field.type!=='checkbox'});
   if(field.dataset.destinationField==='intro'){$('intro-preview-destination').value=field.dataset.destination;$('intro-preview-destination').dispatchEvent(new Event('change'));}
 });
 $('location-intro').addEventListener('change',event=>{const id=event.target.value;if(!closeEmbedded()){event.target.value=active().intro;return;}active().intro=id;introOptions();renderPool();changed();});
@@ -801,6 +815,7 @@ $('pool-destinations').addEventListener('click',event=>{
   const index=Number(button.dataset.removeDestination);active().destinations.splice(index,1);renderPool();changed();const field=document.querySelector('[data-destination="'+Math.min(index,active().destinations.length-1)+'"][data-destination-field=type]')??$('add-destination');field.focus({preventScroll:true});field.scrollIntoView({block:'nearest'});
 });
 $('export-file').addEventListener('change',previewFile);
+document.querySelector('.file-inspector').addEventListener('toggle',previewFile);
 $('copy').addEventListener('click',async()=>{
   if($('copy').disabled)return;
   const file=output.previewFiles.find(entry=>entry.path===$('export-file').value);if(!file)return;
@@ -885,6 +900,7 @@ for(const button of document.querySelectorAll('[data-pack-step],[data-go-step]')
 $('step-back').addEventListener('click',()=>advance('back'));$('step-next').addEventListener('click',()=>advance('next'));
 $('export-fix').addEventListener('click',()=>setStep('preview'));$('export-save-project').addEventListener('click',()=>$('save-project').click());
 window.addEventListener('popstate',()=>{if(!closeEmbedded())return;$('project-status').textContent='';const params=new URLSearchParams(location.search),id=params.get('pack');if(id&&id!==projects?.active&&projects?.projects.some(entry=>entry.id===id)){save();projects.active=id;state=projects.state();discoverKits();revealValidation=false;touched.clear();previewed='';render();save();}const selected=params.get('location');if(selected&&state.locations.some(entry=>entry.id===selected)){state.active=selected;renderLocation();save();}setStep(params.get('step'),{history:false});if(currentStep==='locations')setLocationPart(params.get('part')??locationPart,{route:false});});
+document.addEventListener('focusout',()=>pendingChanges.flush());
 document.addEventListener('input',event=>{if(state&&event.target.matches('[data-location-field],[data-destination-field],#pack-gui-scale,#pack-kit-preview,[data-kit-path],#namespace,#pack-name,#pack-description,#location-id,#kit-mode,#location-intro')){touched.add(fieldKey(event.target));historyGroup=event.target.type==='checkbox'||event.target.tagName==='SELECT'?'':fieldKey(event.target);historyLabel='Edit '+(event.target.getAttribute('aria-label')||'pack');}},{capture:true});
 for(const kind of ['biome','structure','dimension']) {
   const ids=[...HeritageLocations[kind],...(HeritageLocations[kind+'Tags']??[]).map(id=>'#'+id)];
@@ -934,7 +950,7 @@ function editPreviewChoice(detail){
   if(!closeEmbedded())return;const entry=state.locations.find(entry=>entry.id===detail.locationId);if(!entry){$('project-status').textContent='This location is unavailable.';return;}
   state.active=entry.id;renderLocation();save();setStep('locations');returnToReview=true;updateSteps();if(detail.kind==='location'){setLocationPart('details');document.querySelector('[data-location-field=title]').focus();}else openEmbedded(detail.kind,detail.id,false,detail.kind==='intro'&&Number.isInteger(detail.resume?.poolIndex)?detail.resume.poolIndex:null);
 }
-coverageView=HeritageCoverageView.create({get:()=>({id:projects?.active??'',state,output}),visible:()=>currentStep==='preview'||currentStep==='export',summary:text=>{$('export-preview-status').textContent=text;},prepare:flushEmbedded,started:()=>{previewing=fingerprint();},completed:()=>{previewed=previewing;renderOutput();},
+coverageView=HeritageCoverageView.create({get:()=>({id:projects?.active??'',state,output}),visible:()=>currentStep==='preview'||currentStep==='export',summary:text=>{$('export-preview-status').textContent=text;},prepare:()=>{if(!flushEmbedded())return false;renderOutput({validate:true});return true;},started:()=>{previewing=fingerprint();},completed:()=>{previewed=previewing;renderOutput();},
   editable:route=>state.locations.some(entry=>state.namespace+':'+entry.path===route.spawnId),edit:editPreviewChoice,
   editRoute:route=>{const entry=state.locations.find(entry=>state.namespace+':'+entry.path===route.spawnId);if(entry)editPreviewChoice({kind:'location',locationId:entry.id});}
 });

@@ -13,12 +13,12 @@ function catalog(output,bundled) {
   for(const file of output.files) {
     const match=/^data\/([^/]+)\/heritage\/(spawns|kits)\/(.+)\.json$/.exec(file.path);
     if(!match)continue;
-    const [,namespace,kind,name]=match,document=JSON.parse(file.content),id=namespace+':'+name;
+    const [,namespace,kind,name]=match,document=file.document?structuredClone(file.document):JSON.parse(file.content),id=namespace+':'+name;
     if(document.enabled===false)entries[kind].delete(id);
     else entries[kind].set(id,{...document,id});
   }
   const settings=output.files.find(file=>file.path==='data/kingdomsheritage/heritage/selection.json');
-  const selection=settings?JSON.parse(settings.content):bundled.selection;
+  const selection=settings?(settings.document??JSON.parse(settings.content)):bundled.selection;
   const result={...Object.fromEntries(Object.entries(entries).map(([kind,values])=>[kind,[...values.values()].sort(compare)])),guiScale:selection?.gui_scale??0,kitPreview:selection?.kit_preview??'inventory'};
   for(const spawn of result.spawns){const selectors=spawn.kits;spawn.kits=result.kits.filter(kit=>!selectors?.length||selectors.some(selector=>selector.startsWith('#')?(kit.tags??[]).some(tag=>K.normalize(tag)===K.normalize(selector.slice(1))):K.normalize(selector)===kit.id)).map(kit=>kit.id);}
   return result;

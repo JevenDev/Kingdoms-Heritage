@@ -306,3 +306,48 @@ test('typing changes reuse decoded image bytes until the source changes',()=>{
   for(const field of ['title','subtitle','description']){input.locations[0].fields[field]='Updated '+field;assert.equal(engine.build(input,catalog).errors.length,0);}assert.equal(decodes,1);
   Object.assign(input.locations[0].picture,nativePicture(512,768));assert.equal(engine.build(input,catalog).errors.length,0);assert.equal(decodes,2);
 });
+
+test('shared intros are validated once per build and edits still invalidate every affected location',t=>{
+  const Preview=require('../editor/engine.js'),read=Preview.readJson;let calls=0;
+  t.mock.method(Preview,'readJson',(...args)=>{calls++;return read(...args);});
+  const input=state(),entries={kits:[],intros:[{id:'arrival',document:{text:'Welcome',bar_height:48},error:''}]};
+  input.locations=Array.from({length:4},(_,index)=>{
+    const entry=Pack.location('place-'+index);entry.path='place_'+index;entry.fields.type='pool';entry.intro='arrival';
+    entry.destinations=Array.from({length:8},()=>({type:'default'}));return entry;
+  });
+  const result=Pack.build(input,entries);assert.deepEqual(result.errors,[]);assert.equal(calls,1);
+  entries.intros[0].document.bar_height=1.5;calls=0;
+  const invalid=Pack.build(input,entries);assert.equal(invalid.issues.filter(issue=>issue.field==='intro').length,4);assert.deepEqual(invalid.files,[]);assert.equal(calls,4);
+  entries.intros[0].document.bar_height=32;calls=0;
+  const repaired=Pack.build(input,entries);assert.deepEqual(repaired.errors,[]);assert.equal(calls,1);
+  const documents=repaired.files.filter(file=>file.path.includes('/spawns/place_')).map(file=>JSON.parse(file.content));assert.ok(documents.every(document=>document.intro.bar_height===32));
+});
+
+test('pool intro reuse keeps destination overrides and their error paths independent',()=>{
+  const input=state(),entry=input.locations[0];entry.fields.type='pool';entry.intro='arrival';
+  entry.destinations=[{type:'default'},{type:'default',intro:'alternate'},{type:'default',intro:null}];
+  const entries={kits:[],intros:[{id:'arrival',document:{text:'Welcome'},error:''},{id:'alternate',document:{text:'Elsewhere',bar_height:1.5},error:''}]};
+  const result=Pack.build(input,entries);assert.deepEqual(result.files,[]);assert.equal(result.issues[0].destination,1);assert.match(result.issues[0].message,/Bar thickness/);
+  entries.intros[1].document.bar_height=32;
+  const repaired=Pack.build(input,entries);assert.deepEqual(repaired.errors,[]);assert.equal(spawn(repaired).pool[1].intro.text,'Elsewhere');assert.equal(spawn(repaired).pool[2].intro,null);
+});
+
+test('editing inspects documents without export serialization and preserves playable preview content',()=>{
+  const Flow=require('./flow.js'),defaults=require('./assets/defaults.json'),input=state();input.locations[0].picture=picture();
+  const entry=input.locations[0];entry.fields.type='pool';entry.intro='arrival';entry.destinations=[{type:'fixed',x:'1',y:'64',z:'3'},{type:'default',intro:null}];
+  const entries={kits:[],intros:[{id:'arrival',document:{text:'Welcome'},error:''}]},original=JSON.stringify({input,entries});
+  const inspected=Pack.inspect(input,entries),exported=Pack.build(input,entries);
+  assert.deepEqual(inspected.errors,exported.errors);assert.deepEqual(inspected.issues,exported.issues);assert.deepEqual(inspected.warnings,exported.warnings);
+  assert.ok(inspected.previewFiles.every(file=>file.document&&!Object.hasOwn(file,'content')));assert.ok(inspected.resourceFiles.every(file=>!Object.hasOwn(file,'content')));
+  assert.deepEqual(require('./coverage.js').pictures(Pack.inspect(input,entries,{resources:true})),require('./coverage.js').pictures(exported));
+  const preview=Flow.catalog(inspected,defaults);assert.deepEqual(preview,Flow.catalog(exported,defaults));
+  preview.spawns.find(spawn=>spawn.id==='my_pack:location_1').intro.text='Changed preview';assert.equal(Flow.catalog(inspected,defaults).spawns.find(spawn=>spawn.id==='my_pack:location_1').intro.text,'Welcome');
+  assert.equal(JSON.stringify({input,entries}),original);
+  entry.destinations[0].x='unfinished';const invalid=Pack.inspect(input,entries),invalidExport=Pack.build(input,entries);assert.deepEqual(invalid.issues,invalidExport.issues);assert.deepEqual(invalid.files,[]);assert.ok(invalid.previewFiles.every(file=>file.document));
+});
+
+test('export still checks binary resources omitted from the editing preview',()=>{
+  const input=state();input.locations[0].picture={name:'Broken.png',data:'broken'};
+  assert.equal(Pack.inspect(input,catalog).resourceFiles.length,2);
+  const result=Pack.build(input,catalog);assert.ok(result.errors.length);assert.deepEqual(result.files,[]);assert.deepEqual(result.resourceFiles,[]);assert.deepEqual(Pack.inspect(input,catalog,{resources:true}).errors,result.errors);
+});

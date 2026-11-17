@@ -96,3 +96,9 @@ test('an intro with no valid kits keeps context available and kit navigation hid
   const draw=await view.render(state,catalog,'intro',true);assert.equal(draw.kitCount,0);assert.equal(view.controls()[1].hidden,true);assert.equal(view.find('preview-context')[1].hidden,false);
   view.node('location-card').events.keydown({key:'Home',preventDefault(){}});
 });
+
+test('workspace updates parse the exported catalog once and refresh it after edits',async t=>{
+  const catalog=Flow.catalog;let calls=0;t.mock.method(Flow,'catalog',(...args)=>{calls++;return catalog(...args);});
+  const view=workspace(),data=fixture();let draw=await view.render(data.state,data.catalog);assert.equal(calls,1);assert.equal(draw.kit.title,'one');
+  data.catalog.kits[0].document.title='Renamed';draw=await view.render(data.state,data.catalog);assert.equal(calls,2);assert.equal(draw.kit.title,'Renamed');
+});
