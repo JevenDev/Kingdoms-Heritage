@@ -856,7 +856,7 @@ async function restoreProject(input) {
     });
   });
 }
-function setOpeningProject(value){openingProject=value;$('open-project').disabled=value;$('start-example').disabled=value;}
+function setOpeningProject(value){openingProject=value;$('open-project').disabled=value;$('import-pack').disabled=value;$('edit-pack-json').disabled=value;$('start-example').disabled=value;}
 async function startExample(){
   if(openingProject||!closeEmbedded())return;
   try{
@@ -868,6 +868,7 @@ async function startExample(){
   finally{setOpeningProject(false);}
 }
 $('start-example').addEventListener('click',startExample);
+$('import-pack').addEventListener('click',()=>$('open-project').click());
 $('open-project').addEventListener('change',async()=>{
   const file=$('open-project').files[0];if(!file||openingProject)return;if(!closeEmbedded()){$('open-project').value='';return;}
   try {
@@ -928,6 +929,7 @@ if(!saveBlocked){
   });locationOptions();}
   catch(error){$('project-status').textContent='Pack history tools could not load: '+error.message;for(const id of ['pack-undo','pack-redo','pack-checkpoints','select-locations'])$(id).disabled=true;}
 }
+HeritagePackJsonEditor.create({read:readWorkspace,write:writeWorkspace,prepare:()=>{if(!closeEmbedded())return false;if(saveBlocked)throw new Error(storageError);return true;},observe:()=>packTools?.observe(),capture:options=>packTools?.capture(options),report:message=>{$('project-status').textContent=message;}});
 function editPreviewChoice(detail){
   if(!closeEmbedded())return;const entry=state.locations.find(entry=>entry.id===detail.locationId);if(!entry){$('project-status').textContent='This location is unavailable.';return;}
   state.active=entry.id;renderLocation();save();setStep('locations');returnToReview=true;updateSteps();if(detail.kind==='location'){setLocationPart('details');document.querySelector('[data-location-field=title]').focus();}else openEmbedded(detail.kind,detail.id,false,detail.kind==='intro'&&Number.isInteger(detail.resume?.poolIndex)?detail.resume.poolIndex:null);

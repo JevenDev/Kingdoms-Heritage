@@ -532,3 +532,10 @@ a.content-asset:hover { background:var(--panel); }
 .preview-shop-refunds { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
 .coverage-filters { display:flex; align-items:end; gap:16px; }
 .coverage-filters .coverage-filter { flex:1; }
+
+#pack-json-dialog { width:960px; max-width:calc(100vw - 32px); max-height:calc(100dvh - 32px); overflow:auto; }
+#pack-json-dialog .stack { margin-top:16px; }
+#pack-json-dialog .code-editor { height:50dvh; min-height:180px; }
+#pack-json-dialog .dialog-actions { margin-top:16px; }
+#pack-json-status { white-space:pre-wrap; overflow-wrap:anywhere; }
+.pack-toolbar-group > button { flex-shrink:0; white-space:nowrap; }
