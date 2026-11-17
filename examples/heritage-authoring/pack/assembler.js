@@ -51,7 +51,7 @@ function syncEmbedded(status){
   session.id=status.id;$('embedded-editor').dataset.ready='true';$('embedded-editor-status').textContent=status.valid?'':'Draft saved. Resolve its issues before previewing.';
   historyDrafts=[...new Set([previousId,status.id].filter(Boolean))].map(id=>({kind:session.kind==='kit'?'kits':'intros',id}));historyGroup='draft:'+session.kind+':'+status.id;historyLabel='Edit '+session.kind;
   renderKits();renderIntros();kitChoices();introOptions();renderPool();changed();
-  if(pendingContentFocus?.token===session.token){const field=$('content-editor').contentDocument?.getElementById(pendingContentFocus.field);if(field){field.focus({preventScroll:true});field.select?.();pendingContentFocus=null;}}
+  if(pendingContentFocus?.token===session.token){const field=$('content-editor').contentDocument?.getElementById(pendingContentFocus.field);if(field){const activate=pendingContentFocus.activate;pendingContentFocus=null;field.focus({preventScroll:true});field.select?.();if(activate)field.click();}}
   const url=new URL(location.href);url.searchParams.set('editing',session.kind);url.searchParams.set('entry',status.id);if(session.library)url.searchParams.set('library','1');else url.searchParams.delete('library');if(Number.isInteger(session.destination))url.searchParams.set('destination',String(session.destination));history.replaceState(null,'',url);
 }
 function flushEmbedded(){
@@ -347,6 +347,10 @@ function showContentLocation(id,part='details'){
 function editContentDraft(kind,id,destination=null,rename=false){
   if(!closeEmbedded())return;if(rename)editorStages.set(kind+':'+id,kind==='kit'?'details':'text');openEmbedded(kind,id,false,destination);if(rename&&embeddedSession?.id===id)pendingContentFocus={token:embeddedSession.token,field:kind==='kit'?'title':'intro-name'};
 }
+function deleteContentKit(id){
+  if(!closeEmbedded())return;openEmbedded('kit',id,false,null,locationPart,true);
+  if(embeddedSession?.kind==='kit'&&embeddedSession.id===id)pendingContentFocus={token:embeddedSession.token,field:'delete-kit',activate:true};
+}
 async function copyContentDraft(target,local=false){
   if(!closeEmbedded())return;const before=readWorkspace(),id=crypto.randomUUID(),kind=target.kind==='kit'?'kits':'intros',next=local?HeritageEditing.privateCopy(before.pack,before.libraries,target.kind,target.id,target.locationId,id):HeritageEditing.duplicateDraft(before.pack,before.libraries,target.kind,target.id,target.locationId,id,target.destination);
   await writeWorkspace(next,before);historyDrafts=[{kind,id}];historyLabel=local?'Make a local '+target.kind+' copy':'Duplicate '+target.kind;changed();editContentDraft(target.kind,id,target.destination,!local);
@@ -374,6 +378,8 @@ function contentMenuActions(node){
   if(kind==='location')add('Delete location…',()=>{if(showContentLocation(id))$('delete-location').click();},false,{destructive:true});
   else if(kind==='kit'){
     const assigned=entry&&locationKitIds(entry).includes(id);add(assigned?'Remove from this location':'Use in this location',()=>{if(!showContentLocation(locationId,'kits'))return;const location=active();if(assigned){location.kits=locationKitIds(location).filter(value=>value!==id);location.kitMode='selected';}else if(bundledKit(id))location.kits=[...new Set([...location.kits,id])];else W.attach(state,'kit',id);historyLabel=assigned?'Remove kit from location':'Assign kit';kitChoices();renderKits();changed();},!entry,{destructive:!!assigned});
+    const editable=!!kitDraft(id)&&id!==P.emptyKit.id&&!bundledKit(id);
+    add('Delete kit…',()=>deleteContentKit(id),!editable,{destructive:true});
   }else{
     const assigned=entry&&(Number.isInteger(destination)?entry.destinations[destination]?.intro===id:entry.intro===id);add(assigned?(Number.isInteger(destination)?'Remove intro from this place':'Remove intro from this location'):'Use as this location’s intro',()=>{if(!showContentLocation(locationId,'intro'))return;if(assigned&&Number.isInteger(destination))active().destinations[destination].intro=null;else active().intro=assigned?'':id;historyLabel=assigned?'Remove intro from location':'Assign intro';introOptions();renderPool();changed();},!entry,{destructive:!!assigned});
   }
