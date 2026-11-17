@@ -28,7 +28,7 @@ const place=value=>String(value||'').replace(/^#?[^:]+:/,'').split(/[/_]+/).filt
 function destination(spawn,index=0) {
   if(spawn.type!=='pool')return structuredClone(spawn);
   if(!Number.isInteger(index)||!spawn.pool[index])throw new Error('Choose an available pool destination.');
-  const result={...structuredClone(spawn),...structuredClone(spawn.pool[index])};
+  const {pool,...base}=spawn,result={...structuredClone(base),...structuredClone(pool[index])};
   delete result.pool;
   return result;
 }

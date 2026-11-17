@@ -12,8 +12,8 @@ function workspace(){
     requestAnimationFrame(callback){frames.set(++frameId,callback);return frameId;},cancelAnimationFrame(id){frames.delete(id);}});
   vm.runInContext(fs.readFileSync(require.resolve('./workspace-visuals.js'),'utf8'),context);
   const view=context.HeritageWorkspaceVisuals.create({textFits(){}});
-  return {node,monitorOptions,find:className=>[...nodes.values()].filter(node=>node.className===className),controls:()=>[...nodes.values()].filter(node=>node.className==='kit-preview-controls'),async render(state,catalog,part='kits',invalid=false){
-    const output=Pack.build(state,catalog);if(!invalid)assert.deepEqual(output.errors,[]);else assert.ok(output.errors.length);
+  return {node,monitorOptions,find:className=>[...nodes.values()].filter(node=>node.className===className),controls:()=>[...nodes.values()].filter(node=>node.className==='kit-preview-controls'),async render(state,catalog,part='kits',invalid=false,output=Pack.build(state,catalog)){
+    if(!invalid)assert.deepEqual(output.errors,[]);else assert.ok(output.errors.length);
     await view.update({state,catalog,output,step:'locations',part,pictureData:{}});
     const [id,callback]=frames.entries().next().value??[];assert.ok(callback,node('card-preview-status').textContent);frames.delete(id);callback(1000);
     assert.ok(draws.length,node('card-preview-status').textContent);return draws.at(-1);
@@ -101,4 +101,12 @@ test('workspace updates parse the exported catalog once and refresh it after edi
   const catalog=Flow.catalog;let calls=0;t.mock.method(Flow,'catalog',(...args)=>{calls++;return catalog(...args);});
   const view=workspace(),data=fixture();let draw=await view.render(data.state,data.catalog);assert.equal(calls,1);assert.equal(draw.kit.title,'one');
   data.catalog.kits[0].document.title='Renamed';draw=await view.render(data.state,data.catalog);assert.equal(calls,2);assert.equal(draw.kit.title,'Renamed');
+});
+
+test('changing workspace views reuses parsed preview data until the output changes',async t=>{
+  const catalog=Flow.catalog;let calls=0;t.mock.method(Flow,'catalog',(...args)=>{calls++;return catalog(...args);});
+  const view=workspace(),data=fixture(),output=Pack.build(data.state,data.catalog);
+  await view.render(data.state,data.catalog,'kits',false,output);await view.render(data.state,data.catalog,'intro',false,output);assert.equal(calls,1);
+  view.monitorOptions[1].selectKit('preview:two');const draw=await view.render(data.state,data.catalog,'kits',false,output);assert.equal(draw.kit.id,'preview:two');assert.equal(calls,1);
+  data.catalog.kits[1].document.title='Changed';const updated=await view.render(data.state,data.catalog);assert.equal(updated.kit.title,'Changed');assert.equal(calls,2);
 });

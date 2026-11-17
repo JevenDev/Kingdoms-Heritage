@@ -2,7 +2,7 @@
 'use strict';
 const P=HeritagePreview,F=HeritageFlow,$=id=>document.getElementById(id);
 function create({editLocation,editIntro,testFlow,selectContext,reorder,editText,undo,crop,textFits}){
-  let current,packView='cards',previewKit='',previewLocation='',expanded=false,poolIndex='',frame=0,lastFrame=0,playing=false,time=0,introKey='',request=0,ready,monitors,currentModel,currentStory;
+  let current,packView='cards',previewKit='',previewLocation='',expanded=false,poolIndex='',frame=0,lastFrame=0,playing=false,time=0,introKey='',request=0,ready,monitors,currentModel,currentStory,previewOutput,previewChoices;
   const speech=HeritageDialogueAudio.create({muted:()=>$('flow-mute').checked});let speechRunning=false,playAttempt=0;
   const stopSpeech=()=>{speech.stop();speechRunning=false;};
   const seconds=ticks=>(Math.round(ticks/2)/10)+' s';
@@ -55,8 +55,11 @@ function create({editLocation,editIntro,testFlow,selectContext,reorder,editText,
   }
   function documents(){
     const {state,output}=current,defaults=monitors.pack.defaults;
-    const invalidKits=new Set(state.kits.filter(kit=>current.catalog.kits.some(draft=>draft.id===kit.id&&draft.error)).map(kit=>'data/'+state.namespace+'/heritage/kits/'+kit.path+'.json'));
-    const choices=F.catalog({errors:[],files:output.previewFiles.filter(file=>!invalidKits.has(file.path))},{...defaults,spawns:state.keepLocations?defaults.spawns:[],kits:state.keepKits?defaults.kits:[]}),ordered=choices.spawns;
+    if(previewOutput!==output){
+      const invalidKits=new Set(state.kits.filter(kit=>current.catalog.kits.some(draft=>draft.id===kit.id&&draft.error)).map(kit=>'data/'+state.namespace+'/heritage/kits/'+kit.path+'.json'));
+      previewChoices=F.catalog({errors:[],files:output.previewFiles.filter(file=>!invalidKits.has(file.path))},{...defaults,spawns:state.keepLocations?defaults.spawns:[],kits:state.keepKits?defaults.kits:[]});previewOutput=output;
+    }
+    const choices=previewChoices,ordered=choices.spawns;
     const entry=state.locations.find(entry=>entry.id===state.active),id=entry?state.namespace+':'+entry.path:'',spawn=ordered.find(spawn=>spawn.id===id)??ordered[0];
     const kits=choices.kits.filter(kit=>spawn?.kits.includes(kit.id)).map(document=>{
       const selection=state.kits.find(kit=>kit.included&&state.namespace+':'+kit.path===document.id),draft=current.catalog.kits.find(kit=>kit.id===selection?.id);

@@ -90,7 +90,7 @@ class Projects {
   update(state){this.projects.find(entry=>entry.id===this.active).state=copy(state);}
   add(state){this.active=this.createId();this.projects.push({id:this.active,state:copy(state)});}
   serialize(){return {version:1,active:this.active,projects:copy(this.projects)};}
-  save(){write(this.storage,{[keys.packs]:this.serialize()});}
+  save(){write(this.storage,{[keys.packs]:{version:1,active:this.active,projects:this.projects}});}
 }
 const api={keys,validatePack,library,backup,merge,write,Projects};
 if(typeof module!=='undefined')module.exports=api;

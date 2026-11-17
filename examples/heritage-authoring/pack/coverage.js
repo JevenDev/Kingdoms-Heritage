@@ -4,24 +4,27 @@ const F=typeof module!=='undefined'?require('./flow.js'):HeritageFlow;
 const canonical=value=>Array.isArray(value)?value.map(canonical):value&&typeof value==='object'?Object.fromEntries(Object.keys(value).sort().map(key=>[key,canonical(value[key])])):value;
 function hash(value){const text=ArrayBuffer.isView(value)?value:typeof value==='string'?value:JSON.stringify(canonical(value));let a=2166136261,b=2654435769;for(let index=0;index<text.length;index++){const code=typeof text==='string'?text.charCodeAt(index):text[index];a=Math.imul(a^code,16777619);b=Math.imul(b^code,2246822519);}return (a>>>0).toString(16).padStart(8,'0')+(b>>>0).toString(16).padStart(8,'0');}
 function pictures(output){return Object.fromEntries((output.resourceFiles??[]).map(file=>[file.path,hash(file.content)]));}
-function scene(choices,images,spawnId,kitId,poolIndex=null){
+const sceneCache=()=>({location:new Map(),kit:new Map(),intro:new Map()});
+function cached(values,key,create){if(!values.has(key))values.set(key,create());return values.get(key);}
+function scene(choices,images,spawnId,kitId,poolIndex=null,cache=sceneCache()){
   const spawn=choices.spawns.find(entry=>entry.id===spawnId),kit=choices.kits.find(entry=>entry.id===kitId);if(!spawn||!kit||spawn.kits&&!spawn.kits.includes(kit.id))return null;
   if(spawn.type!=='pool')poolIndex=null;else if(!Number.isInteger(poolIndex)||!spawn.pool[poolIndex])return null;
   const arrival=F.destination(spawn,poolIndex??0),{intro,...destination}=arrival,{pool,intro:defaultIntro,...card}=spawn;
   const image=spawn.image?.split(':'),picture=image?images['assets/'+image[0]+'/'+image[1]]??'external':null,scale=choices.guiScale??0;
-  const kitInputs=[kit,choices.kits.filter(entry=>!spawn.kits||spawn.kits.includes(entry.id)).map(entry=>entry.id),scale];
-  if(choices.kitPreview==='model')kitInputs.push('model');
-  if(kit.shop)kitInputs.push('shop');
+  const kitPart=cached(cache.kit,JSON.stringify([spawnId,kitId]),()=>{
+    const inputs=[kit,choices.kits.filter(entry=>!spawn.kits||spawn.kits.includes(entry.id)).map(entry=>entry.id),scale];
+    if(choices.kitPreview==='model')inputs.push('model');if(kit.shop)inputs.push('shop');return hash(inputs);
+  });
   const emptyLoadout=kit.items?.length?false:kit.shop??true;
-  const parts={location:hash([card,picture,choices.spawns.map(entry=>entry.id),scale]),kit:hash(kitInputs),arrival:hash([destination,kit.title,kit.title_key,emptyLoadout,scale]),intro:hash([intro??null,scale])};
+  const parts={location:cached(cache.location,spawn,()=>hash([card,picture,choices.spawns.map(entry=>entry.id),scale])),kit:kitPart,arrival:hash([destination,kit.title,kit.title_key,emptyLoadout,scale]),intro:cached(cache.intro,JSON.stringify([spawnId,poolIndex]),()=>hash([intro??null,scale]))};
   return {key:JSON.stringify([spawnId,kitId,poolIndex]),spawnId,kitId,poolIndex,spawn,kit,arrival,parts,fingerprint:hash(parts)};
 }
 function count(choices,filter=''){
   let total=0;for(const spawn of choices.spawns)if(!filter||spawn.id===filter)total+=choices.kits.filter(kit=>!spawn.kits||spawn.kits.includes(kit.id)).length*(spawn.type==='pool'?spawn.pool.length:1);return total;
 }
 function page(choices,images,{filter='',offset=0,limit=25}={}){
-  const result=[];let index=0;
-  for(const spawn of choices.spawns){if(filter&&spawn.id!==filter)continue;for(const kit of choices.kits){if(spawn.kits&&!spawn.kits.includes(kit.id))continue;for(let pool=0;pool<(spawn.type==='pool'?spawn.pool.length:1);pool++){if(index++<offset)continue;result.push(scene(choices,images,spawn.id,kit.id,spawn.type==='pool'?pool:null));if(result.length>=limit)return result;}}}return result;
+  const result=[],cache=sceneCache();let index=0;
+  for(const spawn of choices.spawns){if(filter&&spawn.id!==filter)continue;for(const kit of choices.kits){if(spawn.kits&&!spawn.kits.includes(kit.id))continue;for(let pool=0;pool<(spawn.type==='pool'?spawn.pool.length:1);pool++){if(index++<offset)continue;result.push(scene(choices,images,spawn.id,kit.id,spawn.type==='pool'?pool:null,cache));if(result.length>=limit)return result;}}}return result;
 }
 class Ledger {
   constructor(raw=null){
@@ -40,14 +43,14 @@ class Ledger {
   }
   status(pack,route){const record=this.value.packs[pack]?.[route.key];return {record,state:record?Object.entries(route.parts).every(([key,value])=>record.parts[key]===value)?'tested':record.testedAt?'changed':'partial':'untested'};}
   summary(pack,choices,images){
-    let tested=0,changed=0,partial=0;for(const key of Object.keys(this.value.packs[pack]??{})){const [spawn,kit,pool]=JSON.parse(key),route=scene(choices,images,spawn,kit,pool);if(!route)continue;const status=this.status(pack,route).state;if(status==='tested')tested++;else if(status==='changed')changed++;else if(status==='partial')partial++;}
+    const cache=sceneCache();let tested=0,changed=0,partial=0;for(const key of Object.keys(this.value.packs[pack]??{})){const [spawn,kit,pool]=JSON.parse(key),route=scene(choices,images,spawn,kit,pool,cache);if(!route)continue;const status=this.status(pack,route).state;if(status==='tested')tested++;else if(status==='changed')changed++;else if(status==='partial')partial++;}
     return {total:count(choices),tested,changed,partial};
   }
   changed(pack,choices,images,filter=''){
-    const routes=[];
+    const routes=[],cache=sceneCache();
     for(const key of Object.keys(this.value.packs[pack]??{})){
       const [spawn,kit,pool]=JSON.parse(key);if(filter&&spawn!==filter)continue;
-      const route=scene(choices,images,spawn,kit,pool);if(route&&this.status(pack,route).state==='changed')routes.push(route);
+      const route=scene(choices,images,spawn,kit,pool,cache);if(route&&this.status(pack,route).state==='changed')routes.push(route);
     }
     const spawns=new Map(choices.spawns.map((entry,index)=>[entry.id,index])),kits=new Map(choices.kits.map((entry,index)=>[entry.id,index]));
     return routes.sort((a,b)=>spawns.get(a.spawnId)-spawns.get(b.spawnId)||kits.get(a.kitId)-kits.get(b.kitId)||(a.poolIndex??0)-(b.poolIndex??0));

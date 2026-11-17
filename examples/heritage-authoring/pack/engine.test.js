@@ -351,3 +351,11 @@ test('export still checks binary resources omitted from the editing preview',()=
   assert.equal(Pack.inspect(input,catalog).resourceFiles.length,2);
   const result=Pack.build(input,catalog);assert.ok(result.errors.length);assert.deepEqual(result.files,[]);assert.deepEqual(result.resourceFiles,[]);assert.deepEqual(Pack.inspect(input,catalog,{resources:true}).errors,result.errors);
 });
+
+test('saving projects writes an isolated snapshot without cloning through the backup serializer',()=>{
+  const values=new Map(),storage={getItem:key=>values.get(key)??null,setItem:(key,value)=>values.set(key,value),removeItem:key=>values.delete(key)},input=state();
+  const projects=new Project.Projects(storage,input,()=> 'saved');projects.serialize=()=>{throw new Error('Backup serializer should not run during save');};projects.save();
+  input.name='Unsaved';assert.equal(new Project.Projects(storage,state()).state().name,'My pack');
+  const saved=values.get(Project.keys.packs);storage.setItem=(key,value)=>{if(value!==saved)throw new Error('Storage full');values.set(key,value);};
+  assert.throws(()=>projects.save(),/Previous data was restored/);assert.equal(values.get(Project.keys.packs),saved);
+});

@@ -77,3 +77,16 @@ test('changed shop arrivals start at the shop so the tested loadout can be chose
   const before=C.scene(value,{},'test:forest','test:ranger',0);ledger.record('pack',before,all,{},100);value.spawns[0].intro.text='New shop arrival';
   const route=C.scene(value,{},'test:forest','test:ranger',0);assert.equal(ledger.resumeChanged('pack',route).phase,'kit-shop');
 });
+
+test('batched coverage matches individual routes and never reuses stale hashes across edits',()=>{
+  const value=choices(),images={},before=C.page(value,images);
+  for(const route of before)assert.deepEqual(route,C.scene(value,images,route.spawnId,route.kitId,route.poolIndex));
+  value.spawns[0].intro.text='Updated';value.kits[0].title='Renamed';
+  const after=C.page(value,images);for(const route of after)assert.deepEqual(route,C.scene(value,images,route.spawnId,route.kitId,route.poolIndex));
+  assert.notEqual(before[0].fingerprint,after[0].fingerprint);after[0].arrival.intro.text='Only this route';assert.equal(after[3].arrival.intro.text,'Updated');
+});
+
+test('shared pool entries still inherit each location’s own intro in coverage batches',()=>{
+  const value=choices(),destination={type:'default'};value.spawns[0].pool=[destination];value.spawns[1]={...value.spawns[1],type:'pool',intro:{text:'Home'},pool:[destination]};
+  const routes=C.page(value,{});assert.notEqual(routes[0].parts.intro,routes[2].parts.intro);
+});

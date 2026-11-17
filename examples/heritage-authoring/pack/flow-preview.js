@@ -238,7 +238,7 @@ async function cardPreview(target,spawn,pictureData){
 async function monitorPreview(target,{selectKit}={}){
   const context=target.getContext('2d');if(!context)throw new Error('The player view needs Canvas support.');
   const painter=new HeritageCanvas(context);await Promise.all([load(),painter.load()]);
-  let layout,signature='',pointer={x:-1000,y:-1000},inventory,inventorySource,kitSignature='',shownSpawns=[],shownPictures={},drag=null,reorderMotion=null,settling=false,slotSignature='',shownPage=0;const stats=new HeritageInventory.StatPanel(target.parentElement);const uploaded=new Map();let kitCarousel,kitListSignature='',kitCards=[],equipmentState={};
+  let layout,signature='',pointer={x:-1000,y:-1000},inventory,inventorySource,kitSignature='',shownSpawns=[],shownPictures={},drag=null,reorderMotion=null,settling=false,slotSignature='',shownPage=0;const stats=new HeritageInventory.StatPanel(target.parentElement);const uploaded=new Map();let kitCarousel,kitListSignature='',kitCards=[],equipmentState={};const modelFrames=new Map();
   const point=event=>{const box=target.getBoundingClientRect(),view=P.guiViewport(target.width,target.height,target.dataset.guiScale?Number(target.dataset.guiScale):3);return {x:(event.clientX-box.left)*view.guiWidth/box.width,y:(event.clientY-box.top)*view.guiHeight/box.height};};
   const move=event=>{pointer=point(event);},leave=event=>{if(event?.relatedTarget?.closest?.('.card-text-editor')?.parentElement===target.parentElement)return;pointer={x:-1000,y:-1000};};
   const outside=event=>{if(event.target!==target&&event.target.closest?.('.card-text-editor')?.parentElement!==target.parentElement)leave();};
@@ -293,13 +293,19 @@ async function monitorPreview(target,{selectKit}={}){
           if(!inventory){inventorySource=document.createElement('div');inventorySource.className='monitor-inventory';inventorySource.hidden=true;target.after(inventorySource);inventory=new HeritageInventory.Inventory(inventorySource,{fillHost:true,onControl:control=>{if(['page','scroll'].includes(control.kind))equipmentState.offset=control.value;if(control.kind==='cosmetics')equipmentState.cosmetics=!equipmentState.cosmetics;kitSignature='';}});}
           const modelOnly=kitPreview==='model';
           const mode=modelOnly?'player':inventoryMode,key=JSON.stringify([kit,mode,modelOnly,equipmentState]);
-          if(key!==kitSignature){kitSignature=key;inventory.set(kit,{...equipmentState,mode,modelOnly,hideCrafting:true,controlledAim:true});}
-          inventory.setRenderScale(Math.max(pixelWidth/w,pixelHeight/h));inventory.visible=true;inventory.draw();const bw=inventory.layout.width,bh=inventory.layout.height,x=Math.trunc((w-bw)/2),y=Math.trunc((h-bh)/2);
+          if(key!==kitSignature){kitSignature=key;modelFrames.clear();inventory.set(kit,{...equipmentState,mode,modelOnly,hideCrafting:true,controlledAim:true});}
+          inventory.setRenderScale(Math.max(pixelWidth/w,pixelHeight/h));inventory.visible=true;if(!modelOnly)inventory.draw();const bw=inventory.layout.width,bh=inventory.layout.height,x=Math.trunc((w-bw)/2),y=Math.trunc((h-bh)/2);
           const choices=kits.length?kits:[kit],selected=Math.max(0,choices.findIndex(entry=>entry.id===kit.id)),listKey=JSON.stringify([choices,mode,modelOnly]);
+          if(listKey!==kitListSignature)modelFrames.clear();
           if(listKey!==kitListSignature||reduceMotion.matches){kitListSignature=listKey;kitCarousel=new HeritagePresentation.KitCarousel(selected,clock());}else kitCarousel.select(selected,clock());
           for(const card of kitCarousel.poses({x,y,width:bw,height:bh},w,choices.length,clock())){
             if(card.opacity<=0)continue;const entry=choices[card.index],cw=bw*card.scale,ch=bh*card.scale,neighbor=card.index!==selected;
-            inventory.preview(neighbor?entry:null,false);ctx.save();ctx.globalAlpha=card.opacity;ctx.drawImage(inventory.canvas,card.x,card.y,cw,ch);ctx.restore();
+            let image=modelOnly?modelFrames.get(entry.id):null;
+            if(!image||image.width!==inventory.canvas.width||image.height!==inventory.canvas.height){
+              inventory.preview(neighbor?entry:null,false);image=inventory.canvas;
+              if(modelOnly&&inventory.ready){const snapshot=document.createElement('canvas');snapshot.width=image.width;snapshot.height=image.height;snapshot.getContext('2d').drawImage(image,0,0);modelFrames.set(entry.id,snapshot);image=snapshot;}
+            }
+            ctx.save();ctx.globalAlpha=card.opacity;ctx.drawImage(image,card.x,card.y,cw,ch);ctx.restore();
             kitCards.push({id:entry.id,x:card.x,y:card.y,width:cw,height:ch});
             if(!neighbor){inventorySource.hidden=modelOnly;Object.assign(inventorySource.style,{left:target.offsetLeft+card.x/w*target.clientWidth+'px',top:target.offsetTop+card.y/h*target.clientHeight+'px',width:cw/w*target.clientWidth+'px',height:ch/h*target.clientHeight+'px'});}
             if(neighbor){const alpha=Math.round(card.opacity*P.clamp((Math.abs(card.distance)-.85)/.15)*255),budget=kitBudgetLabel(entry);if(alpha>=4){text(label(entry,'title'),card.x+cw/2,card.y-(budget?25:13),{center:true,limit:cw-8,maxLines:1,alpha});if(budget)text(budget,card.x+cw/2,card.y-13,{center:true,color:0xf2cd83,limit:cw-8,maxLines:1,alpha});}}

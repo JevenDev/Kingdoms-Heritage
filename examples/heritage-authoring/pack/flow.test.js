@@ -323,3 +323,10 @@ test('review highlights match the player, normalized place and equipment compone
     assert.deepEqual(segments.filter(segment=>segment.highlight).map(segment=>{const [start,length]=segment.highlight;return Array.from(segment.text).slice(start,start+length).join('');}),expected);
   }
 });
+
+test('pool resolution copies only the chosen destination and keeps nested edits isolated',()=>{
+  let unrelatedReads=0;
+  const other={type:'default',get intro(){unrelatedReads++;return {text:'Other'};}},spawn={type:'pool',intro:{text:'Default'},custom:{flag:true},pool:[{type:'fixed',x:1,y:64,z:2,intro:{text:'Chosen'}},other]};
+  const destination=Flow.destination(spawn,0);assert.equal(unrelatedReads,0);assert.equal(destination.pool,undefined);assert.equal(destination.intro.text,'Chosen');
+  destination.intro.text='Changed';destination.custom.flag=false;assert.equal(spawn.pool[0].intro.text,'Chosen');assert.equal(spawn.custom.flag,true);
+});
