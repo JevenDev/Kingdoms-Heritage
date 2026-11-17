@@ -386,6 +386,7 @@ function contentMenuActions(node){
   return actions;
 }
 HeritageContentActions.create({actions:contentMenuActions,name:contentName,reorder:reorderContentKits,focusKit:focusContentKit,report:message=>$('project-status').textContent=message});
+HeritagePackSidebar.create(message=>$('project-status').textContent=message);
 const assignEntry=element('button',{id:'assign-current-entry',type:'button'});$('shared-entry-context').append(assignEntry);
 assignEntry.addEventListener('click',()=>{if(!flushEmbedded()||!embeddedSession||!active())return;W.attach(state,embeddedSession.kind,embeddedSession.id);historyLabel='Assign '+embeddedSession.kind;renderKits();kitChoices();introOptions();changed();});
 const testPack=element('button',{id:'workspace-preview',type:'button'},'Test pack');document.querySelector('.pack-toolbar-actions').prepend(testPack);$('close-embedded-editor').classList.remove('primary');

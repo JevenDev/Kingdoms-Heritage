@@ -498,9 +498,19 @@ a.content-asset:hover { background:var(--panel); }
 #location-editor > .shared-entry-context { flex:0 0 auto; gap:8px; margin:0 0 12px; padding:0 0 8px; }
 #shared-entry-usage { font-size:12px; }
 .assembler[data-workspace-step=locations] #pack-workspace #workspace-preview { background:var(--text); color:var(--site-background); }
+.pack-sidebar-divider { display:none; }
 @media(min-width:1200px) {
   .assembler:not(.content-browser-collapsed) #card-context-strip { display:none !important; }
-  .assembler #pack-workspace .assembly-workspace { grid-template-columns:248px minmax(0,1fr); gap:20px; }
+  .assembler #pack-workspace .assembly-workspace { grid-template-columns:var(--pack-sidebar-width,248px) 20px minmax(0,1fr); gap:0; }
+  .assembler #pack-workspace .location-collection { border-right:0; }
+  .pack-sidebar-divider { display:flex; position:relative; align-items:center; justify-content:center; cursor:col-resize; touch-action:none; }
+  .pack-sidebar-divider::before { content:""; width:1px; height:100%; background:var(--line-soft); }
+  .pack-sidebar-divider::after { content:""; position:absolute; width:3px; height:28px; background:var(--muted); }
+  .pack-sidebar-divider:is(:hover,:focus-visible)::before,.pack-sidebar-divider:is(:hover,:focus-visible)::after { background:var(--accent-strong); }
+  .pack-sidebar-divider:focus-visible { outline:2px solid var(--accent-strong); outline-offset:-2px; }
+  .content-browser-collapsed .pack-sidebar-divider { display:none; }
+  body.pack-sidebar-resizing,body.pack-sidebar-resizing * { cursor:col-resize !important; user-select:none !important; }
+  body.pack-sidebar-resizing iframe { pointer-events:none; }
   .assembler #pack-workspace .location-list .location-thumbnail { width:28px; height:42px; flex-basis:28px; }
   .assembler #pack-workspace .location-list button { min-height:64px; padding:8px; gap:8px; }
   .location-list-content { gap:2px; }
