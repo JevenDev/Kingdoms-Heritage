@@ -267,7 +267,7 @@ a.content-asset:hover { background:var(--panel); }
   [data-pack-panel=locations]:not([hidden]) { display:flex; flex:1; min-height:0; flex-direction:column; padding-top:12px; }
   [data-pack-panel=locations] > .step-heading { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
   .assembler #pack-workspace .assembly-workspace { display:grid; flex:1; min-height:0; grid-template-columns:300px minmax(0,1fr); gap:20px; align-items:stretch; overflow:hidden; }
-  .assembler #pack-workspace .location-collection { scrollbar-gutter:stable; position:static; min-height:0; padding:0 16px 16px 0; overflow:auto; }
+  .assembler #pack-workspace .location-collection { display:flex; flex-direction:column; position:static; min-height:0; padding:0; overflow:hidden; }
   .assembler #pack-workspace .location-editor { display:flex; flex-direction:column; min-height:0; overflow:hidden; }
   .assembler #pack-workspace .location-list .location-thumbnail { width:48px; height:72px; flex-basis:48px; }
   .location-toolbar { flex:0 0 auto; position:static; margin-bottom:12px; }
@@ -515,7 +515,8 @@ a.content-asset:hover { background:var(--panel); }
   .assembler #pack-workspace .location-list button { min-height:64px; padding:8px; gap:8px; }
   .location-list-content { gap:2px; }
   .location-list-content > span { font-size:12px; }
-  .location-collection > .content-browser-tools { padding-top:0; }
+  .location-collection > .content-browser-tools { flex:0 0 auto; position:static; padding:0 16px 0 0; }
+  .content-browser-scroll { flex:1; min-height:0; padding:0 16px 16px 0; overflow:auto; scrollbar-gutter:stable; overscroll-behavior:contain; }
   #pack-workspace .builder-chrome .pack-steps { justify-self:center; }
 }
 

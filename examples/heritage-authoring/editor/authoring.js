@@ -2,14 +2,23 @@
 'use strict';
 const embeddedRoute=new URLSearchParams(location.search),embedded=embeddedRoute.get('embedded')==='1'&&window.parent!==window;
 if(embedded)document.body.dataset.embedded='true';
+function scrollPanel(panel,className,fixed){
+  const body=document.createElement('div');body.className=className;
+  for(const child of [...panel.children])if(!fixed.includes(child))body.append(child);
+  panel.append(body);return body;
+}
 function create(config){
   const $=id=>document.getElementById(id),W=HeritageWorkflow,stages=embedded?config.stages.filter(stage=>stage.id!=='review'):config.stages,first=stages[0].id;
   const shared=document.createElement('div'),sharedText=document.createElement('p'),copyLocal=document.createElement('button');shared.className='author-shared-context';sharedText.className='hint';copyLocal.type='button';copyLocal.textContent='Make a copy for this location';shared.append(sharedText,copyLocal);document.querySelector('.author-content > .document-toolbar').after(shared);
   if(config.kind==='kit'){
     const catalog=document.createElement('button');catalog.id='toggle-item-catalog';catalog.type='button';catalog.textContent='Item catalog';catalog.setAttribute('aria-expanded','true');catalog.setAttribute('aria-controls','item-browser');document.querySelector('.author-content > .document-toolbar').append(catalog);catalog.addEventListener('click',()=>{const collapsed=document.body.classList.toggle('catalog-collapsed');catalog.setAttribute('aria-expanded',String(!collapsed));window.dispatchEvent(new Event('resize'));});
     const shopWorkspace=document.querySelector('.shop-workspace'),shopEditor=document.createElement('div');shopEditor.className='shop-editor';
-    shopWorkspace.prepend($('shop-preview'));shopEditor.append(document.querySelector('.shop-setup'),$('shop-pages'));shopWorkspace.append(shopEditor);
+    shopWorkspace.prepend($('shop-preview'));shopEditor.append(document.querySelector('.shop-heading'),document.querySelector('.shop-page-nav'),document.querySelector('.shop-setup'),$('shop-pages'));shopWorkspace.append(shopEditor);
+    scrollPanel(shopEditor,'shop-editor-scroll',[document.querySelector('.shop-heading'),document.querySelector('.shop-page-nav')]);
+    scrollPanel($('shop-preview'),'shop-preview-scroll',[$('shop-layout-heading')]);
     const toolbar=document.querySelector('.author-content > .document-toolbar'),history=document.createElement('div');history.className='intro-history-actions';history.setAttribute('role','group');history.setAttribute('aria-label','Kit history');history.append($('undo'),$('redo'));toolbar.querySelector('.document-actions-menu').before(history);toolbar.querySelector('.document-file-actions').prepend($('json-tab'));toolbar.append(document.querySelector('.author-footer'));document.querySelector('.kit-inventory-panel').append(document.querySelector('.kit-extra-equipment'));
+    scrollPanel(document.querySelector('.kit-inventory-panel'),'inventory-scroll',[document.querySelector('.kit-inventory-heading'),document.querySelector('.inventory-modes')]);
+    scrollPanel(document.querySelector('.slot-inspector'),'slot-inspector-scroll',[document.querySelector('.slot-heading')]);
   }
   const actions=document.querySelector('.document-toolbar .document-file-actions');actions.append($('author-use-another'),$('author-preview-pack'));$('author-stage-status').classList.add('sr-only');
   const saveContext=document.createElement('div'),usageNote=document.createElement('span'),saveStatus=$(config.kind==='kit'?'draft-status':'intro-draft-status');saveContext.className='document-save-context';usageNote.className='document-usage hint';usageNote.hidden=true;saveStatus.before(saveContext);saveContext.append(usageNote);const navStatus=document.createElement('div');navStatus.className='nav-save-status';navStatus.setAttribute('role','status');navStatus.setAttribute('aria-live','polite');navStatus.setAttribute('aria-atomic','true');saveStatus.removeAttribute('role');navStatus.append(saveStatus);document.querySelector('header h1').after(navStatus);

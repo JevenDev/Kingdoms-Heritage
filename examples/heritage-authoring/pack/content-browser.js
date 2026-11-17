@@ -16,6 +16,8 @@ function create(config){
   const library=document.querySelector('.pack-library');library.querySelector('summary').textContent='Library & file settings';$('pack-content-browser').append(library);
   document.querySelector('.location-toolbar').append(document.querySelector('.location-sections'));
   $('location-editor').prepend($('shared-entry-context'));document.querySelector('.content-bin').hidden=true;
+  const browser=$('pack-content-browser'),body=document.createElement('div');body.className='content-browser-scroll';
+  for(const child of [...browser.children])if(!child.classList.contains('content-browser-tools'))body.append(child);browser.append(body);
   function refresh(){
     const kind=select.value,records=config.records(kind),found=filter(records,input.value,kind),locations=new Set(found.filter(record=>record.kind==='location').map(record=>record.id)),assets=found.filter(record=>record.kind!=='location'),showLocations=kind==='location'||kind==='all';
     $('select-locations').hidden=!showLocations;$('location-count').hidden=true;$('content-browser-regular').hidden=!showLocations;

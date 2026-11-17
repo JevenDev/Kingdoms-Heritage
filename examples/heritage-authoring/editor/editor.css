@@ -1,4 +1,4 @@
-@import url('site.css?v=9');
+@import url('site.css?v=10');
 h2 { font-size: 15px; font-weight: 600; margin: 0; }
 nav { display: flex; align-items: center; gap: 24px; font-size: 13px; }
 a { display: inline-flex; align-items: center; gap: 7px; color: var(--link); text-decoration: none; }
@@ -58,7 +58,7 @@ textarea { resize: vertical; width: 100%; font-family: 'Monocraft', monospace; f
 .code-editor { position: relative; flex: 1; min-height: 250px; overflow: hidden; background: var(--code); }
 .code-input, .code-highlight, .code-line-numbers { font: var(--json-font-size)/1.65 'Monocraft', monospace; font-variant-ligatures: none; font-kerning: none; tab-size: 2; white-space: pre; margin: 0; }
 .code-input, .code-highlight { padding: 16px 20px 24px 58px; white-space: pre-wrap; overflow-wrap: anywhere; word-break: normal; }
-.code-input { overflow-x: hidden; overflow-y: scroll; }
+.code-input { overflow-x: hidden; overflow-y: auto; scrollbar-gutter: stable; }
 .json-line { min-height: 1.65em; }
 .code-line-numbers span { display: block; }
 .code-input { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; border-radius: 0; background: transparent; resize: none; outline: none; caret-color: #eee; z-index: 2; }
