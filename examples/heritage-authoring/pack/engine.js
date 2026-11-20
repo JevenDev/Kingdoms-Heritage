@@ -10,6 +10,11 @@ const validatedIntroDocuments=new WeakMap();
 const resourceId=value=>value.includes(':')?value:'minecraft:'+value;
 const types=['default','random','biome','structure','fixed','pool'];
 const bundledSpawns=['default','random','plains','village'];
+function bundledLocationIds(state){
+  if(!state.keepLocations)return [];
+  const custom=new Set(state.locations.map(entry=>state.namespace+':'+entry.path));
+  return bundledSpawns.map(name=>'kingdomsheritage:'+name).filter(id=>!custom.has(id)&&state.bundledLocations?.[id]?.enabled!==false);
+}
 const selectionPath='data/kingdomsheritage/heritage/selection.json';
 const bundledKitPath=resource=>'data/'+resource.replace(':','/heritage/kits/')+'.json';
 let stockKits=[];
@@ -319,7 +324,7 @@ function inspect(state,catalog,{exporting=false,resources=exporting}={}) {
   if(count>128)errors.push('A datapack can contain at most 128 enabled kits, including bundled kits.');
   const locations=Array.isArray(state.locations)?state.locations:[];
   if(locations.length<1)errors.push('Add at least one starting location.');
-  const spawnIds=new Set(state.keepLocations?bundledSpawns.map(id=>'kingdomsheritage:'+id):[]);
+  const spawnIds=new Set(bundledLocationIds(state));
   for(const entry of locations)report('Location '+(entry.fields?.title||entry.path||'Untitled'),()=>{
     const path=fileId(entry.path,'Location file name');
     const picture=usesPicture(entry)?(resources?pictureBytes(entry.picture):true):null;
@@ -348,7 +353,12 @@ function inspect(state,catalog,{exporting=false,resources=exporting}={}) {
   },entry.id,'data/'+namespace+'/heritage/spawns/'+entry.path+'.json');
   if(state.keepLocations&&state.bundledLocations!==undefined)report('Default location order',()=>{
     if(!object(state.bundledLocations)||Object.keys(state.bundledLocations).some(id=>!bundledSpawns.some(name=>id==='kingdomsheritage:'+name)))throw fieldError('keepLocations','The saved default locations are invalid.');
-    for(const [id,document] of Object.entries(state.bundledLocations)){const path='data/kingdomsheritage/heritage/spawns/'+id.split(':')[1]+'.json';if(paths.has(path))continue;validateSpawn(document.type==='structure'&&document.target==='minecraft:village'?{...document,target:'#minecraft:village'}:document,state.allowCustomTargets===true);integer(document.order,-2147483648,2147483647,'Order');add(path,copy(document));}
+    for(const [id,document] of Object.entries(state.bundledLocations)){
+      const path='data/kingdomsheritage/heritage/spawns/'+id.split(':')[1]+'.json';
+      if(paths.has(path))continue;
+      if(document.enabled!==false)validateSpawn(document.type==='structure'&&document.target==='minecraft:village'?{...document,target:'#minecraft:village'}:document,state.allowCustomTargets===true);
+      add(path,copy(document));
+    }
   });
   if(spawnIds.size>50)errors.push('A datapack can contain at most 50 starting locations, including bundled locations.');
   const originalDescription=state.packMetadata?.pack?.description;
@@ -376,7 +386,7 @@ function inspect(state,catalog,{exporting=false,resources=exporting}={}) {
   return {files:errors.length?[]:files,resourceFiles:errors.length?[]:resourceFiles,pictureCount,previewFiles:errors.length?previewFiles(state,catalog,exporting):files.filter(file=>file.document||typeof file.content==='string'),errors,issues,warnings:[...new Set(warnings)],kitCount:count,locationCount:spawnIds.size};
 }
 function build(state,catalog){return inspect(state,catalog,{exporting:true});}
-const api={copy,setBundledKits,bundledKits,orderedKitIds,slug,fileId,resource,drafts,location,importSpawn,dimensionSuggestion,knownResource,validateSpawn,build,inspect,emptyKit,types,fields,destinationFields,usesPicture,pictureId,pictureBytes,selectionPath,kitPreview};
+const api={copy,setBundledKits,bundledKits,bundledLocationIds,orderedKitIds,slug,fileId,resource,drafts,location,importSpawn,dimensionSuggestion,knownResource,validateSpawn,build,inspect,emptyKit,types,fields,destinationFields,usesPicture,pictureId,pictureBytes,selectionPath,kitPreview};
 if(typeof module!=='undefined')module.exports=api;
 else globalThis.HeritagePack=api;
 })();

@@ -91,7 +91,6 @@ function apply(value,group,path,source,createId=()=>crypto.randomUUID()){
       location.kitMode=selectors.length?'selected':'all';location.kits=selected;location.importedKitSelectors=P.copy(selectors);
     }else if(match&&match[2]==='spawns'&&Object.hasOwn(pack.bundledLocations??{},resource)){
       P.validateSpawn(document,pack.allowCustomTargets===true);
-      if(!Number.isInteger(document.order))throw new Error('Bundled locations require a whole-number order.');
       pack.bundledLocations[resource]=document;
     }else{
       const imported=pack.importedFiles?.[group]?.find(file=>file.path===path);

@@ -36,6 +36,25 @@ test('partial bundled kit overrides retain every other bundled kit',async()=>{
   }
 });
 
+test('mixed bundled locations survive import, reordering and a second ZIP round trip',async()=>{
+  const output=Pack.build(initial(),{kits:[kit],intros:[]});
+  const path='data/kingdomsheritage/heritage/spawns/default.json';
+  const override={title:'Harbor',type:'fixed',x:12,y:64,z:30};
+  output.files.find(file=>file.path===path).content=JSON.stringify(override);
+  const project=await Import.read(Zip.zip(output.files),'harbor.zip',ids());
+  const result=rebuilt(project),defaults=require('./assets/defaults.json');
+  compare(output.files,result.files);
+  const spawns=Flow.catalog(result,defaults).spawns;
+  assert.equal(result.locationCount,2);
+  assert.deepEqual(spawns.map(entry=>entry.id).sort(),['kingdomsheritage:default','story:location_1']);
+  project.pack=require('./editing.js').reorderCards(project.pack,spawns.map(entry=>entry.id).reverse(),spawns);
+  const reordered=rebuilt(project);
+  compare(reordered.files,rebuilt(await Import.read(Zip.zip(reordered.files),'reordered.zip',ids())).files);
+  assert.equal(Flow.catalog(reordered,defaults).spawns.length,2);
+  project.pack.keepLocations=false;
+  assert.deepEqual(JSON.parse(rebuilt(project).files.find(file=>file.path===path).content),{enabled:false});
+});
+
 test('shorthand kit IDs and mixed tag namespaces survive import and preview',async()=>{
   for(const selector of ['starter','minecraft:starter','#starter','#minecraft:starter']) {
     const files=[

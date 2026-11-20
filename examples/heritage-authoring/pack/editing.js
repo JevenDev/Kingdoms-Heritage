@@ -2,7 +2,8 @@
 'use strict';
 const copy=value=>JSON.parse(JSON.stringify(value)),equal=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
 const kinds=['kits','intros'];
-const bundledKits=state=>(typeof module!=='undefined'?require('./engine.js'):HeritagePack).bundledKits(state);
+const packEngine=()=>typeof module!=='undefined'?require('./engine.js'):HeritagePack;
+const bundledKits=state=>packEngine().bundledKits(state);
 const empty=kind=>({version:2,active:'',[kind]:[]});
 const library=(value,kind)=>copy(value??empty(kind));
 const draft=(value,kind,id)=>value?.[kind]?.find(entry=>entry.id===id)?.state??null;
@@ -80,16 +81,16 @@ function reorder(pack,ids,spawns=null){
   if(ids.length!==pack.locations.length||new Set(ids).size!==ids.length||ids.some(id=>!pack.locations.some(entry=>entry.id===id)))throw new Error('Choose each location once when reordering.');
   if(pack.keepLocations&&(spawns?.length||pack.bundledLocations)){
     const custom=new Map(pack.locations.map(entry=>[pack.namespace+':'+entry.path,entry])),text=(a,b)=>a<b?-1:a>b?1:0;
-    const locations=(spawns?.length?[...spawns]:[...Object.entries(pack.bundledLocations).filter(([id])=>!custom.has(id)).map(([id,document])=>({...copy(document),id})),...pack.locations.map(entry=>({id:pack.namespace+':'+entry.path,order:Number(entry.fields.order)||0}))]).sort((a,b)=>(a.order??0)-(b.order??0)||text(a.id.split(':')[1],b.id.split(':')[1])||text(a.id.split(':')[0],b.id.split(':')[0]));
+    const locations=(spawns?.length?[...spawns]:[...Object.entries(pack.bundledLocations).filter(([id,document])=>!custom.has(id)&&document.enabled!==false).map(([id,document])=>({...copy(document),id})),...pack.locations.map(entry=>({id:pack.namespace+':'+entry.path,order:Number(entry.fields.order)||0}))]).sort((a,b)=>(a.order??0)-(b.order??0)||text(a.id.split(':')[1],b.id.split(':')[1])||text(a.id.split(':')[0],b.id.split(':')[0]));
     const queue=ids.map(id=>pack.locations.find(entry=>entry.id===id)).map(entry=>pack.namespace+':'+entry.path);
     return reorderCards(pack,locations.map(spawn=>custom.has(spawn.id)?queue.shift():spawn.id),locations);
   }
   const result=copy(pack);ids.forEach((id,index)=>{result.locations.find(entry=>entry.id===id).fields.order=String(index);});return result;
 }
 function reorderCards(pack,ids,spawns=[]){
-  const custom=new Map(pack.locations.map(entry=>[pack.namespace+':'+entry.path,entry.id])),defaults=pack.keepLocations?['default','random','plains','village'].map(id=>'kingdomsheritage:'+id).filter(id=>!custom.has(id)):[],available=[...custom.keys(),...defaults];
+  const custom=new Map(pack.locations.map(entry=>[pack.namespace+':'+entry.path,entry.id])),defaults=packEngine().bundledLocationIds(pack),available=[...custom.keys(),...defaults];
   if(!Array.isArray(ids)||ids.length!==available.length||new Set(ids).size!==ids.length||ids.some(id=>!available.includes(id)))throw new Error('Choose each starting location once when reordering.');
-  const result=copy(pack);if(defaults.length)result.bundledLocations={};
+  const result=copy(pack);if(defaults.length)result.bundledLocations=Object.fromEntries(Object.entries(result.bundledLocations??{}).filter(([id,document])=>!custom.has(id)&&document.enabled===false));
   ids.forEach((id,index)=>{if(custom.has(id))result.locations.find(entry=>entry.id===custom.get(id)).fields.order=String(index);else{const source=spawns.find(spawn=>spawn.id===id);if(!source)throw new Error('Default locations are still loading. Try again.');const document=copy(source);delete document.id;document.order=index;result.bundledLocations[id]=document;}});
   return result;
 }

@@ -11,7 +11,7 @@ function validatePack(value) {
     ||Object.entries(value.bundledKits).some(([id,document])=>!/^kingdomsheritage:(default|miner|adventurer|byo)$/.test(id)
       ||!document||typeof document!=='object'||Array.isArray(document))))throw new Error('Bundled kit definitions are invalid.');
   if(value.locations.some(entry=>entry.keepImageResolution!==undefined&&typeof entry.keepImageResolution!=='boolean'))throw new Error('Keep source resolution must be enabled or disabled.');
-  if(value.bundledLocations!==undefined&&(!value.bundledLocations||typeof value.bundledLocations!=='object'||Array.isArray(value.bundledLocations)||Object.entries(value.bundledLocations).some(([id,document])=>!/^kingdomsheritage:(default|random|plains|village)$/.test(id)||!document||typeof document!=='object'||Array.isArray(document)||!Number.isInteger(document.order))))throw new Error('Default location order is invalid.');
+  if(value.bundledLocations!==undefined&&(!value.bundledLocations||typeof value.bundledLocations!=='object'||Array.isArray(value.bundledLocations)||Object.entries(value.bundledLocations).some(([id,document])=>!/^kingdomsheritage:(default|random|plains|village)$/.test(id)||!document||typeof document!=='object'||Array.isArray(document)||document.enabled!==false&&document.order!==undefined&&!Number.isInteger(document.order))))throw new Error('Default location order is invalid.');
   const result=copy(value);
   if(result.guiScale>4)result.guiScale=4;
   if(new Set(result.locations.map(entry=>entry.id)).size!==result.locations.length||new Set(result.kits.map(entry=>entry.id)).size!==result.kits.length)throw new Error('Duplicate project entries.');

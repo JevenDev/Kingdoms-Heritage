@@ -177,7 +177,8 @@ function renderOverview() {
     for(const [part,label] of [['kits','Kits'],['intro',entry.intro?'Intro':'Add intro']])actions.append(element('button',{type:'button','data-review-location':entry.id,'data-review-part':part,'aria-label':(part==='intro'&&!entry.intro?'Add intro':'Edit '+part)+' for '+(entry.fields.title||entry.path)},label));
     const action=element('button',{type:'button',...(issues.length?{'data-review-issue':String(output.issues.indexOf(issues[0]))}:{'data-review-test':entry.id}),'aria-label':(issues.length?'Fix issues for ':'Preview location ')+(entry.fields.title||entry.path)},issues.length?'Fix':'Preview');action.disabled=!issues.length&&(!!output?.errors.length||preparing);if(action.disabled)action.title=preparing?'Wait for the card pictures to finish processing.':'Resolve the pack issues before previewing.';actions.append(action);row.append(actions);list.append(row);
   }
-  if(state.keepLocations)list.append(element('li',{class:'review-note hint'},'Also includes Heritage’s 4 default starting locations.'));
+  const bundledCount=P.bundledLocationIds(state).length;
+  if(bundledCount)list.append(element('li',{class:'review-note hint'},'Also includes '+bundledCount+' default starting location'+(bundledCount===1?'':'s')+'.'));
   if(focusId){const main=list.querySelector('.review-location-open[data-review-location="'+CSS.escape(focusId)+'"]'),row=main?.parentElement,selector=focusAction==='details'?'.review-location-open':focusAction==='test'?'[data-review-test]':focusAction==='issue'?'[data-review-issue]':'[data-review-part="'+focusAction+'"]';(row?.querySelector(selector)??main)?.focus({preventScroll:true});}
 }
 
@@ -653,7 +654,7 @@ function renderOutput({validate=false,rebuild=true}={}) {
   $('export-pack').textContent=output.resourceFiles.length?'Download datapack & resource pack':'Download datapack';
   $('export-file').disabled=!output.previewFiles.length;
   $('preview-state').textContent=output.errors.length?'Draft preview. Fix the highlighted issues before downloading.':'Read-only preview';
-  const kitCount=state.kits.filter(kit=>kit.included).length+P.bundledKits(state).length,locationCount=state.locations.length+(state.keepLocations?4:0);
+  const kitCount=state.kits.filter(kit=>kit.included).length+P.bundledKits(state).length,locationCount=state.locations.length+P.bundledLocationIds(state).length;
   $('pack-summary').textContent=locationCount+' starting location'+(locationCount===1?'':'s')+' · '+kitCount+' included kit'+(kitCount===1?'':'s');
   $('export-fix').hidden=!output.errors.length;
   const errors=$('export-errors');errors.replaceChildren();
