@@ -1,11 +1,13 @@
 package com.jvn.kingdomsheritage.server;
 
 import com.google.common.collect.AbstractIterator;
+import com.google.common.collect.Iterators;
 import java.util.Iterator;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 
 final class BiomeSearchCursor extends AbstractIterator<BlockPos> {
+    static final int SPACING = 32;
     private static final int COARSE_STEP = 8;
     private static final int FINE_COLUMNS = 3;
     private final Iterator<BlockPos.MutableBlockPos> coarse;
@@ -13,9 +15,18 @@ final class BiomeSearchCursor extends AbstractIterator<BlockPos> {
     private int remainingFine;
 
     BiomeSearchCursor(int radius) {
-        int size = radius / 32;
-        coarse = BlockPos.spiralAround(BlockPos.ZERO, size / COARSE_STEP, Direction.EAST, Direction.SOUTH).iterator();
-        fine = BlockPos.spiralAround(BlockPos.ZERO, size, Direction.EAST, Direction.SOUTH).iterator();
+        coarse = grid(radius, SPACING * COARSE_STEP);
+        fine = grid(radius, SPACING);
+    }
+
+    private static Iterator<BlockPos.MutableBlockPos> grid(int radius, int spacing) {
+        var positions = BlockPos.spiralAround(BlockPos.ZERO, radius / spacing, Direction.EAST, Direction.SOUTH);
+        return Iterators.filter(positions.iterator(), pos ->
+                withinRadius((long) pos.getX() * spacing, (long) pos.getZ() * spacing, radius));
+    }
+
+    static boolean withinRadius(long dx, long dz, int radius) {
+        return dx * dx + dz * dz <= (long) radius * radius;
     }
 
     @Override

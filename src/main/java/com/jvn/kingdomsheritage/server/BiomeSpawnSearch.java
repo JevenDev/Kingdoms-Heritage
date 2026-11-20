@@ -33,7 +33,7 @@ final class BiomeSpawnSearch implements AutoCloseable {
     private int height;
     private BlockPos result;
 
-    BiomeSpawnSearch(ServerLevel level, SpawnDefinition definition, BlockPos origin) {
+    BiomeSpawnSearch(ServerLevel level, SpawnDefinition definition, BlockPos origin, int radius) {
         SpawnResolver.validateBiome(level, definition);
         source = level.getChunkSource().getGenerator().getBiomeSource();
         sampler = level.getChunkSource().randomState().sampler();
@@ -42,7 +42,7 @@ final class BiomeSpawnSearch implements AutoCloseable {
                 .filter(holder -> definition.targetTag() ? holder.is(TagKey.create(Registries.BIOME, definition.target()))
                         : holder.is(ResourceKey.create(Registries.BIOME, definition.target())))
                 .collect(Collectors.toUnmodifiableSet());
-        columns = new BiomeSearchCursor(SpawnResolver.searchRadius(definition));
+        columns = new BiomeSearchCursor(radius);
         int minY = level.getMinBuildHeight() + 1;
         int maxY = level.dimensionType().hasCeiling()
                 ? Math.min(level.getMaxBuildHeight() - 1, level.getMinBuildHeight() + level.dimensionType().logicalHeight() - 1)
@@ -81,7 +81,8 @@ final class BiomeSpawnSearch implements AutoCloseable {
             if (column == null) {
                 if (!columns.hasNext()) throw notFound();
                 var offset = columns.next();
-                column = new BlockPos(origin.getX() + offset.getX() * 32, 0, origin.getZ() + offset.getZ() * 32);
+                column = new BlockPos(origin.getX() + offset.getX() * BiomeSearchCursor.SPACING, 0,
+                        origin.getZ() + offset.getZ() * BiomeSearchCursor.SPACING);
                 height = 0;
                 if (column.getX() < minX || column.getX() >= maxX || column.getZ() < minZ || column.getZ() >= maxZ) {
                     column = null;

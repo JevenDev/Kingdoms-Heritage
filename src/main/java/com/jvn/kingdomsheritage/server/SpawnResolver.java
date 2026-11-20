@@ -77,10 +77,15 @@ public final class SpawnResolver {
             return structure == null || chunks.prepare(destination.position(), PARTY_RADIUS + 1);
         }
 
+        private boolean withinBiomeRadius(BlockPos position) {
+            return definition.kind() != SpawnDefinition.Kind.BIOME || BiomeSearchCursor.withinRadius(
+                    (long) position.getX() - origin.getX(), (long) position.getZ() - origin.getZ(), cacheKey.radius());
+        }
+
         Destination partyArrival(List<BlockPos> assigned) {
             if (assigned.isEmpty()) return destination;
             Predicate<BlockPos> safeArrival = candidate ->
-                    level.hasChunksAt(candidate.offset(-1, 0, -1), candidate.offset(1, 0, 1))
+                    withinBiomeRadius(candidate) && level.hasChunksAt(candidate.offset(-1, 0, -1), candidate.offset(1, 0, 1))
                             && safe(level, candidate)
                             && (definition.kind() != SpawnDefinition.Kind.BIOME || matchesBiome(level, candidate, definition));
             Predicate<BlockPos> inside = structure == null ? null : candidate -> StructureSpawnResolver.contains(structure, candidate);
@@ -114,7 +119,7 @@ public final class SpawnResolver {
                             pendingColumn = columns.next();
                         }
                     }
-                    if (!level.getWorldBorder().isWithinBounds(pendingColumn)) {
+                    if (!withinBiomeRadius(pendingColumn) || !level.getWorldBorder().isWithinBounds(pendingColumn)) {
                         pendingColumn = null;
                         continue;
                     }
@@ -169,7 +174,7 @@ public final class SpawnResolver {
                 structure = structureSearch.structure();
                 complete(structureSearch.result());
             } else if (definition.kind() == SpawnDefinition.Kind.BIOME) {
-                if (biomeSearch == null) biomeSearch = new BiomeSpawnSearch(level, definition, origin);
+                if (biomeSearch == null) biomeSearch = new BiomeSpawnSearch(level, definition, origin, cacheKey.radius());
                 if (!biomeSearch.step()) return false;
                 columns = columns(biomeSearch.result(), 48);
             }
