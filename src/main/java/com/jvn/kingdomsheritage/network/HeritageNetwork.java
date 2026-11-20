@@ -47,8 +47,8 @@ public final class HeritageNetwork {
         public static final Type<Review> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(KingdomsHeritage.MOD_ID, "review"));
         public static final StreamCodec<RegistryFriendlyByteBuf, Review> CODEC = StreamCodec.of(
                 (buffer, value) -> {
-                    buffer.writeUtf(value.spawn, 256);
-                    buffer.writeUtf(value.kit, 256);
+                    buffer.writeUtf(value.spawn, CatalogPayload.MAX_CHOICE_ID_LENGTH);
+                    buffer.writeUtf(value.kit, CatalogPayload.MAX_CHOICE_ID_LENGTH);
                     buffer.writeLong(value.revision);
                     buffer.writeVarInt(value.offers.size());
                     for (var pick : value.offers) {
@@ -56,8 +56,8 @@ public final class HeritageNetwork {
                         buffer.writeVarInt(pick.slot());
                     }
                 }, buffer -> {
-                    String spawn = buffer.readUtf(256);
-                    String kit = buffer.readUtf(256);
+                    String spawn = buffer.readUtf(CatalogPayload.MAX_CHOICE_ID_LENGTH);
+                    String kit = buffer.readUtf(CatalogPayload.MAX_CHOICE_ID_LENGTH);
                     long revision = buffer.readLong();
                     int count = buffer.readVarInt();
                     if (count < 0 || count > KitShop.MAX_PICKS) throw new io.netty.handler.codec.DecoderException("Invalid starter kit offer count");
@@ -98,9 +98,9 @@ public final class HeritageNetwork {
                 (buffer, value) -> {
                     buffer.writeByte(value.action);
                     buffer.writeUUID(value.target);
-                    buffer.writeUtf(value.spawn, 256);
+                    buffer.writeUtf(value.spawn, CatalogPayload.MAX_CHOICE_ID_LENGTH);
                     buffer.writeLong(value.revision);
-                }, buffer -> new PartyAction(buffer.readUnsignedByte(), buffer.readUUID(), buffer.readUtf(256), buffer.readLong()));
+                }, buffer -> new PartyAction(buffer.readUnsignedByte(), buffer.readUUID(), buffer.readUtf(CatalogPayload.MAX_CHOICE_ID_LENGTH), buffer.readLong()));
         @Override public Type<PartyAction> type() { return TYPE; }
     }
 
@@ -127,12 +127,12 @@ public final class HeritageNetwork {
                     buffer.writeLong(value.revision);
                     buffer.writeResourceLocation(value.step);
                     buffer.writeByte(value.action);
-                    buffer.writeUtf(value.spawn, 256);
-                    buffer.writeUtf(value.kit, 256);
+                    buffer.writeUtf(value.spawn, CatalogPayload.MAX_CHOICE_ID_LENGTH);
+                    buffer.writeUtf(value.kit, CatalogPayload.MAX_CHOICE_ID_LENGTH);
                     buffer.writeUtf(value.value, FlowDecision.MAX_CHARACTERS);
                     buffer.writeLong(value.version);
                 }, buffer -> new FlowAction(buffer.readUUID(), buffer.readUUID(), buffer.readLong(), buffer.readResourceLocation(),
-                        buffer.readUnsignedByte(), buffer.readUtf(256), buffer.readUtf(256), buffer.readUtf(FlowDecision.MAX_CHARACTERS), buffer.readLong()));
+                        buffer.readUnsignedByte(), buffer.readUtf(CatalogPayload.MAX_CHOICE_ID_LENGTH), buffer.readUtf(CatalogPayload.MAX_CHOICE_ID_LENGTH), buffer.readUtf(FlowDecision.MAX_CHARACTERS), buffer.readLong()));
         @Override public Type<FlowAction> type() { return TYPE; }
     }
 

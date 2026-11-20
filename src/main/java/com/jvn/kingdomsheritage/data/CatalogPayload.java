@@ -8,6 +8,7 @@ import java.util.Map;
 import net.minecraft.resources.ResourceLocation;
 
 public final class CatalogPayload {
+    public static final int MAX_CHOICE_ID_LENGTH = 256;
     public static final int MAX_BYTES = 900_000;
     private static final int MAX_DEFINITION_BYTES = 800_000;
 

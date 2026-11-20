@@ -36,6 +36,14 @@ public final class HeritageCatalog {
         event.addListener(new Loader());
     }
 
+    private static ResourceLocation choiceId(ResourceLocation file, String prefix) {
+        var id = file.withPath(file.getPath().substring(prefix.length()));
+        if (id.toString().length() > CatalogPayload.MAX_CHOICE_ID_LENGTH) {
+            throw new IllegalArgumentException("Selection ID exceeds " + CatalogPayload.MAX_CHOICE_ID_LENGTH + " characters: " + id);
+        }
+        return id;
+    }
+
     static Snapshot parse(Map<ResourceLocation, JsonElement> resources) {
         SelectionSettings selection = resources.containsKey(SELECTION)
                 ? SelectionSettings.parse(GsonHelper.convertToJsonObject(resources.get(SELECTION), "kingdomsheritage:selection"))
@@ -50,10 +58,10 @@ public final class HeritageCatalog {
                 JsonObject json = entry.getValue().getAsJsonObject();
                 if (!GsonHelper.getAsBoolean(json, "enabled", true)) return;
                 if (path.startsWith("spawns/")) {
-                    ResourceLocation id = ResourceLocation.fromNamespaceAndPath(entry.getKey().getNamespace(), path.substring(7));
+                    ResourceLocation id = choiceId(entry.getKey(), "spawns/");
                     spawns.put(id, SpawnDefinition.parse(id, json));
                 } else if (path.startsWith("kits/")) {
-                    ResourceLocation id = ResourceLocation.fromNamespaceAndPath(entry.getKey().getNamespace(), path.substring(5));
+                    ResourceLocation id = choiceId(entry.getKey(), "kits/");
                     kits.put(id, KitDefinition.parse(id, json));
                 } else if (path.startsWith("cinematics/")) {
                     ResourceLocation id = ResourceLocation.fromNamespaceAndPath(entry.getKey().getNamespace(), path.substring(11));
