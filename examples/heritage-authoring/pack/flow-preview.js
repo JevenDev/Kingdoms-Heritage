@@ -386,6 +386,11 @@ function toggleParty(open){
 }
 function resizeParty(){
   session.setPartySize(partyMembers.size+1);
+  if(cards?.expanded){
+    const index=session.choices.spawns.findIndex(spawn=>spawn.id===cards.expanded&&session.fits(spawn));
+    if(index<0){cards=null;outgoingCards=[];expanded='';scroll=0;}
+    else page=Math.floor(index/F.pageSize);
+  }
   if(session.spawn&&(!session.choices.spawns.includes(session.spawn)||!session.fits(session.spawn))&&!['intro','complete'].includes(session.phase)){
     session.phase='location';session.spawn=null;session.kit=null;
     waitingForParty=false;cards=null;outgoingCards=[];transition.clear();enter();

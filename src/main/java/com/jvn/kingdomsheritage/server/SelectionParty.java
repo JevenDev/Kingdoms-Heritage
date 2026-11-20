@@ -453,13 +453,18 @@ public final class SelectionParty {
             INVITES.clear();
             for (var party : Set.copyOf(PARTIES.values())) {
                 party.spawn = "";
-                party.suggestions.values().removeIf(id -> !HeritageCatalog.spawns().containsKey(net.minecraft.resources.ResourceLocation.parse(id)));
                 refresh(PLAYERS.get(party.leader).player, Component.translatable("error.kingdomsheritage.reloaded"));
             }
             dirty = true;
         }
         if (!dirty) return;
         dirty = false;
+        for (var party : Set.copyOf(PARTIES.values())) {
+            if (party.suggestions.isEmpty()) continue;
+            var usage = SpawnUsage.of(PLAYERS.get(party.leader).player);
+            party.suggestions.values().removeIf(id -> !usage.available(
+                    HeritageCatalog.spawns().get(net.minecraft.resources.ResourceLocation.parse(id)), party.members.size()));
+        }
         var nextRoster = new LinkedHashMap<UUID, RosterEntry>();
         for (var participant : PLAYERS.values()) {
             UUID id = participant.player.getUUID();
