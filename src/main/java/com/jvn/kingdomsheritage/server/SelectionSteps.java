@@ -96,10 +96,10 @@ public final class SelectionSteps {
     }
 
     private static void validateChoices(String spawn, String kit) {
-        var spawnId = ResourceLocation.tryParse(spawn);
+        var spawnId = SelectionLifecycle.parseChoice(spawn);
         var definition = spawnId == null ? null : HeritageCatalog.spawns().get(spawnId);
         if (!spawn.isEmpty() && definition == null) throw new IllegalArgumentException("The chosen homeland is unavailable");
-        var kitId = ResourceLocation.tryParse(kit);
+        var kitId = SelectionLifecycle.parseChoice(kit);
         var equipment = kitId == null ? null : HeritageCatalog.kits().get(kitId);
         if (!kit.isEmpty() && (definition == null || equipment == null || !definition.allows(equipment))) {
             throw new IllegalArgumentException("The chosen kit is unavailable for this homeland");
@@ -134,7 +134,7 @@ public final class SelectionSteps {
                 var from = session.spawn.equals(request.spawn()) ? ScreenStep.Placement.AFTER_KIT : ScreenStep.Placement.AFTER_SPAWN;
                 session.spawn = request.spawn();
                 session.kit = request.kit();
-                SelectionLifecycle.choices(player, ResourceLocation.tryParse(session.spawn), ResourceLocation.tryParse(session.kit));
+                SelectionLifecycle.choices(player, SelectionLifecycle.parseChoice(session.spawn), SelectionLifecycle.parseChoice(session.kit));
                 boolean shared = HeritageFlow.steps().stream().anyMatch(step -> step.placement().compareTo(from) >= 0
                         && step.partyPolicy() != ScreenStep.PartyPolicy.PER_PLAYER);
                 invalidate(shared ? members(player) : List.of(player), from, player.getUUID(), true);
@@ -162,7 +162,7 @@ public final class SelectionSteps {
                     var from = spawnChanged ? ScreenStep.Placement.AFTER_SPAWN : ScreenStep.Placement.AFTER_KIT;
                     session.spawn = request.spawn();
                     session.kit = step.placement() == ScreenStep.Placement.AFTER_KIT ? request.kit() : spawnChanged ? "" : session.kit;
-                    SelectionLifecycle.choices(player, ResourceLocation.tryParse(session.spawn), ResourceLocation.tryParse(session.kit));
+                    SelectionLifecycle.choices(player, SelectionLifecycle.parseChoice(session.spawn), SelectionLifecycle.parseChoice(session.kit));
                     boolean shared = HeritageFlow.steps().stream().anyMatch(value -> value.placement().compareTo(from) >= 0
                             && value.partyPolicy() != ScreenStep.PartyPolicy.PER_PLAYER);
                     invalidate(shared ? members(player) : List.of(player), from, player.getUUID(), true);
@@ -193,7 +193,7 @@ public final class SelectionSteps {
                     throw new IllegalArgumentException("Only the party leader can change this decision");
                 }
                 var selection = SelectionLifecycle.state(player).choices(HeritageCatalog.revision(),
-                        ResourceLocation.tryParse(request.spawn()), ResourceLocation.tryParse(request.kit()));
+                        SelectionLifecycle.parseChoice(request.spawn()), SelectionLifecycle.parseChoice(request.kit()));
                 JsonObject accepted = HeritageFlow.validate(step.id(), player, selection, value);
                 if (complete(player, step, progress) && !accepted.equals(progress.values.get(
                         step.partyPolicy().leaderDecides() ? leader(player) : player.getUUID()))) {

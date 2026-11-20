@@ -13,6 +13,10 @@ import net.neoforged.neoforge.common.NeoForge;
 final class SelectionLifecycle {
     private SelectionLifecycle() {}
 
+    static ResourceLocation parseChoice(String value) {
+        return value.isEmpty() ? null : ResourceLocation.tryParse(value);
+    }
+
     static SelectionState state(ServerPlayer player) {
         start(player);
         return SelectionSession.of(player).state;
@@ -24,8 +28,8 @@ final class SelectionLifecycle {
         if (existing != null) return existing;
         var data = SelectionManager.inspect(player);
         return new SelectionState(UUID.randomUUID(), HeritageCatalog.revision(),
-                Optional.ofNullable(ResourceLocation.tryParse(data.getString("spawn_choice"))),
-                Optional.ofNullable(ResourceLocation.tryParse(data.getString("kit_choice"))),
+                Optional.ofNullable(parseChoice(data.getString("spawn_choice"))),
+                Optional.ofNullable(parseChoice(data.getString("kit_choice"))),
                 Optional.ofNullable(SelectionParty.leader(player)), SelectionParty.memberIds(player));
     }
 
@@ -74,8 +78,8 @@ final class SelectionLifecycle {
         if (state == null) {
             var data = SelectionManager.inspect(player);
             state = new SelectionState(UUID.randomUUID(), HeritageCatalog.revision(),
-                    Optional.ofNullable(ResourceLocation.tryParse(data.getString("spawn_choice"))),
-                    Optional.ofNullable(ResourceLocation.tryParse(data.getString("kit_choice"))), Optional.empty(), Set.of());
+                    Optional.ofNullable(parseChoice(data.getString("spawn_choice"))),
+                    Optional.ofNullable(parseChoice(data.getString("kit_choice"))), Optional.empty(), Set.of());
         }
         NeoForge.EVENT_BUS.post(new SelectionEvent.Reset(player, state));
     }
