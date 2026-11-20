@@ -53,8 +53,8 @@ function selectionDocument(state){
   return document;
 }
 const emptyKit={id:'builtin-empty',name:'Empty-handed',document:{title:'Empty-handed',description:'Begin with an empty inventory.',items:[]},error:'',warnings:[]};
-const numericFields=['x','y','z','order','search_radius','random_radius'];
-const fields=['title','subtitle','description','outline','title_key','subtitle_key','description_key','type','dimension','target','piece','x','y','z','order','search_radius','random_radius','image'];
+const numericFields=['max_uses','x','y','z','order','search_radius','random_radius'];
+const fields=['max_uses','fallback_only','title','subtitle','description','outline','title_key','subtitle_key','description_key','type','dimension','target','piece','x','y','z','order','search_radius','random_radius','image'];
 const destinationFields=['type','dimension','target','piece','x','y','z','search_radius','random_radius','intro'];
 const slug=value=>String(value).toLowerCase().replace(/[^a-z0-9_-]+/g,'_').replace(/^_+|_+$/g,'')||'untitled';
 function fileId(value,label) {
@@ -169,6 +169,11 @@ function validateSpawn(document,allowUnknown=false,validatedIntros=new Set()) {
   if(typeof title!=='string'||!title.trim()||title.length>120)throw fieldError(document.title===undefined&&document.title_key!==undefined?'title_key':'title','Enter a location title or title key from 1 to 120 characters.');
   for(const [key,max] of [['subtitle',120],['description',4000],['title_key',256],['subtitle_key',256],['description_key',256]])if(document[key]!==undefined&&(typeof document[key]!=='string'||document[key].length>max))throw fieldError(key,key+' must be text up to '+max+' characters.');
   if(document.outline!==undefined&&typeof document.outline!=='boolean')throw fieldError('outline','Text outline must be true or false.');
+  if(document.fallback_only!==undefined&&typeof document.fallback_only!=='boolean')throw fieldError('fallback_only','Fallback only must be true or false.');
+  if(document.max_uses!==undefined){
+    if(document.fallback_only)throw fieldError('max_uses','A fallback-only location must be unlimited.');
+    if(!Number.isInteger(document.max_uses)||document.max_uses<1||document.max_uses>2147483647)throw fieldError('max_uses','Use a whole number from 1 to 2147483647, or leave blank for unlimited uses.');
+  }
   const type=typeof document.type==='string'?document.type.toLowerCase():'';
   if(!types.includes(type))throw fieldError('type','Choose a location type.');
   if(document.enabled===false)throw fieldError('enabled','This location is disabled.');
@@ -219,7 +224,7 @@ function orderedKitIds(state,catalog){
   return ids.sort((a,b)=>{if(ranks.has(a)||ranks.has(b))return (ranks.get(a)??Infinity)-(ranks.get(b)??Infinity);const first=definitions.get(a),second=definitions.get(b);return first.order-second.order||(first.path<second.path?-1:first.path>second.path?1:first.namespace<second.namespace?-1:first.namespace>second.namespace?1:0);});
 }
 function locationDocument(entry,namespace,{strict=true,resolveIntro,kits}) {
-  const replaced=new Set([...fields,'pool','intro','kits','enabled'].filter(key=>key!=='outline'||entry.fields?.outline!==undefined)),type=entry.fields?.type;
+  const replaced=new Set([...fields,'pool','intro','kits','enabled'].filter(key=>!['outline','max_uses','fallback_only'].includes(key)||entry.fields?.[key]!==undefined)),type=entry.fields?.type;
   const document=copy(Object.fromEntries(Object.entries(entry.document??{}).filter(([key])=>!replaced.has(key))));
   const relevant=fields.filter(key=>key!=='piece'||type==='structure').filter(key=>key!=='target'||['biome','structure'].includes(type)).filter(key=>!['x','y','z'].includes(key)||type==='fixed');
   Object.assign(document,settings(entry.fields??{},relevant,strict));
@@ -300,6 +305,9 @@ function inspect(state,catalog,{exporting=false,resources=exporting}={}) {
   report('Kit preview',()=>{
     if(selection.kit_preview!==undefined&&!['inventory','model'].includes(selection.kit_preview))throw Object.assign(fieldError('kitPreview','Choose Inventory or Model only.'),{path:['kit_preview']});
   },undefined,selectionPath);
+  report('Card borders',()=>{
+    if(selection.card_borders!==undefined&&typeof selection.card_borders!=='boolean')throw Object.assign(fieldError('cardBorders','Card borders must be true or false.'),{path:['card_borders']});
+  },undefined,selectionPath);
   add(selectionPath,selection);
   report('Kit order',()=>{if(state.kitOrder!==undefined&&(!Array.isArray(state.kitOrder)||state.kitOrder.some(id=>typeof id!=='string')||new Set(state.kitOrder).size!==state.kitOrder.length))throw fieldError('kitOrder','List each kit at most once.');});
   const selected=(Array.isArray(state.kits)?state.kits:[]).filter(entry=>entry.included);
@@ -325,6 +333,7 @@ function inspect(state,catalog,{exporting=false,resources=exporting}={}) {
   const locations=Array.isArray(state.locations)?state.locations:[];
   if(locations.length<1)errors.push('Add at least one starting location.');
   const spawnIds=new Set(bundledLocationIds(state));
+  let unlimited=[...spawnIds].some(id=>state.bundledLocations?.[id]?.max_uses===undefined);
   for(const entry of locations)report('Location '+(entry.fields?.title||entry.path||'Untitled'),()=>{
     const path=fileId(entry.path,'Location file name');
     const picture=usesPicture(entry)?(resources?pictureBytes(entry.picture):true):null;
@@ -343,6 +352,7 @@ function inspect(state,catalog,{exporting=false,resources=exporting}={}) {
     }
     if(document.kits.length>128)throw fieldError('kits','A location can allow at most 128 kits.');
     validateSpawn(document,state.allowCustomTargets===true,validatedIntros);
+    if(document.max_uses===undefined)unlimited=true;
     for(const place of [document,...(document.pool??[])]) {
       if(place.dimension&&knownResource(place.dimension,'dimension',true))warnings.push('Custom dimensions must be installed and checked in-game with /heritage validate @s.');
       if(['biome','structure'].includes(place.type)&&knownResource(place.target,place.type,true))warnings.push('Custom biomes, structures and groups must be installed and checked in-game with /heritage validate @s.');
@@ -360,6 +370,7 @@ function inspect(state,catalog,{exporting=false,resources=exporting}={}) {
       add(path,copy(document));
     }
   });
+  if(spawnIds.size&&!unlimited)errors.push('All spawn locations have limited uses. Make one location unlimited or add a fallback-only card.');
   if(spawnIds.size>50)errors.push('A datapack can contain at most 50 starting locations, including bundled locations.');
   const originalDescription=state.packMetadata?.pack?.description;
   const descriptionChanged=state.description!==(typeof originalDescription==='string'?originalDescription:JSON.stringify(originalDescription));

@@ -136,9 +136,9 @@ function fixIssue(issue){
     if(issue.field!=='path'&&catalog.kits.some(draft=>draft.id===issue.kitId))openEmbedded('kit',issue.kitId);else showKitLibrary(issue.kitId,issue.field==='path');return;
   }
   if(issue.locationId){state.active=issue.locationId;renderLocation();setStep('locations');}
-  else setStep(['name','namespace','description','guiScale','kitPreview'].includes(issue.field)?'pack':'locations');
+  else setStep(['name','namespace','description','guiScale','kitPreview','cardBorders'].includes(issue.field)?'pack':'locations');
   if(issue.locationId)setLocationPart(issue.field==='intro'?'intro':issue.field==='kits'?'kits':'details');returnToReview=returning;updateSteps();
-  const selector=issue.locationId?(issue.destination!==undefined?'[data-destination="'+issue.destination+'"][data-destination-field="'+issue.field+'"]':issue.field==='path'?'#location-id':issue.field==='intro'?'#location-intro':issue.field==='kits'?'#kit-mode':'[data-location-field="'+issue.field+'"]'):({'name':'#pack-name','namespace':'#namespace','description':'#pack-description','guiScale':'#pack-gui-scale','kitPreview':'#pack-kit-preview'})[issue.field]??'#kit-mode';
+  const selector=issue.locationId?(issue.destination!==undefined?'[data-destination="'+issue.destination+'"][data-destination-field="'+issue.field+'"]':issue.field==='path'?'#location-id':issue.field==='intro'?'#location-intro':issue.field==='kits'?'#kit-mode':'[data-location-field="'+issue.field+'"]'):({'name':'#pack-name','namespace':'#namespace','description':'#pack-description','guiScale':'#pack-gui-scale','kitPreview':'#pack-kit-preview','cardBorders':'#pack-card-borders'})[issue.field]??'#kit-mode';
   const field=document.querySelector(selector)??$('kit-mode');for(let parent=field.parentElement;parent;parent=parent.parentElement)if(parent.tagName==='DETAILS')parent.open=true;field.focus();
 }
 function locationDescription(entry) {
@@ -599,7 +599,13 @@ function renderLocation({sync=true,refreshContext=true}={}) {
   if(!entry)return;
   $('create-kit').href=editorUrl('kit',undefined,true);$('create-intro').href=editorUrl('intro',undefined,true);
   $('location-id').value=entry.path;
-  document.querySelectorAll('[data-location-field]').forEach(field=>{field.value=entry.fields[field.dataset.locationField]??(field.dataset.locationField==='outline'?entry.document?.outline??true:'');});
+  document.querySelectorAll('[data-location-field]').forEach(field=>{
+    const key=field.dataset.locationField;
+    field.value=entry.fields[key]??(['outline','max_uses','fallback_only'].includes(key)?entry.document?.[key]:undefined)??(key==='outline'?true:'');
+  });
+  const fallback=(entry.fields.fallback_only??entry.document?.fallback_only)===true;
+  document.querySelector('[data-location-field="fallback_only"]').value=String(fallback);
+  $('location-uses').hidden=fallback;
   $('kit-mode').value=entry.kitMode;
   showType();introOptions();kitChoices();renderPool();renderPicture();renderTextFits();
   if(output&&refreshContext){$('export-file').value='data/'+state.namespace+'/heritage/spawns/'+entry.path+'.json';previewFile();renderCard();}
@@ -608,7 +614,7 @@ function fileLabel(path){
   const match=/^data\/([^/]+)\/heritage\/(spawns|kits)\/(.+)\.json$/.exec(path);
   if(match){const own=match[1]===state.namespace,kind=match[2]==='spawns'?'Location':'Kit',entry=own?(kind==='Location'?state.locations.find(entry=>entry.path===match[3]):state.kits.find(entry=>entry.path===match[3])):null;
     const name=kind==='Location'?entry?.fields.title:catalog.kits.find(draft=>draft.id===entry?.id)?.name;return kind+': '+(name||placeName(match[3]))+(own?'':' ('+match[1]+')');}
-  return path==='pack.mcmeta'?'Pack information':path===P.selectionPath?'GUI scaling':path;
+  return path==='pack.mcmeta'?'Pack information':path===P.selectionPath?'Selection settings':path;
 }
 function renderDownloadDetails(){
   const base=P.slug(state.name),resources=!!output.resourceFiles.length,data=base+(resources?'-data':'')+'.zip',resource=base+'-resources.zip',host=$('export-contents');host.replaceChildren();
@@ -660,7 +666,7 @@ function renderOutput({validate=false,rebuild=true}={}) {
   const errors=$('export-errors');errors.replaceChildren();
   if(output.errors.length){errors.append(element('p',{},output.errors.length+' issue'+(output.errors.length===1?' needs':'s need')+' fixing before preview or download:'));const list=element('ul');
     for(const issue of output.issues){const row=element('li'),entry=state.locations.find(entry=>entry.id===issue.locationId),button=element('button',{type:'button'},(issue.label||entry?.fields.title||entry?.path||'Pack')+': '+issue.message);button.addEventListener('click',()=>fixIssue(issue));row.append(button);list.append(row);}
-    for(const error of output.errors.filter(error=>!output.issues.some(issue=>error.endsWith(issue.message)))){const row=element('li'),button=element('button',{type:'button'},error);button.addEventListener('click',()=>{setStep('locations');const field=/starting location/i.test(error)?$('new-location'):document.querySelector('[data-include-kit]')??$('new-location');for(let parent=field.parentElement;parent;parent=parent.parentElement)if(parent.tagName==='DETAILS')parent.open=true;field.focus();});row.append(button);list.append(row);}errors.append(list);}
+    for(const error of output.errors.filter(error=>!output.issues.some(issue=>error.endsWith(issue.message)))){const row=element('li'),button=element('button',{type:'button'},error);button.addEventListener('click',()=>{setStep('locations');const field=/starting location|fallback-only card/i.test(error)?$('new-location'):document.querySelector('[data-include-kit]')??$('new-location');for(let parent=field.parentElement;parent;parent=parent.parentElement)if(parent.tagName==='DETAILS')parent.open=true;field.focus();});row.append(button);list.append(row);}errors.append(list);}
   $('export-warnings').replaceChildren(...output.warnings.map(warning=>element('li',{},warning)));
   const select=$('export-file'),previous=select.value;
   select.replaceChildren(...output.previewFiles.map(file=>option(file.path,fileLabel(file.path))));
@@ -674,6 +680,7 @@ function renderOutput({validate=false,rebuild=true}={}) {
 function render({refreshOutput=true}={}) {
   for(const [id,key] of [['pack-name','name'],['namespace','namespace'],['pack-description','description']])$(id).value=state[key];
   $('pack-gui-scale').value=String(state.guiScale??0);
+  $('pack-card-borders').checked=state.selectionMetadata?.card_borders!==false;
   $('pack-kit-preview').value=P.kitPreview(state)??'inventory';
   $('allow-custom-targets').checked=state.allowCustomTargets===true;
   $('keep-locations').checked=state.keepLocations;$('keep-kits').checked=state.keepKits;
@@ -698,6 +705,10 @@ for(const [id,key] of [['pack-name','name'],['namespace','namespace'],['pack-des
 for(const [id,key] of [['keep-locations','keepLocations'],['keep-kits','keepKits'],['allow-custom-targets','allowCustomTargets']])$(id).addEventListener('change',event=>{state[key]=event.target.checked;kitChoices();changed();});
 $('pack-gui-scale').addEventListener('change',event=>{
   const value=Number(event.target.value);if(value)state.guiScale=value;else delete state.guiScale;changed();
+});
+$('pack-card-borders').addEventListener('change',event=>{
+  state.selectionMetadata={...state.selectionMetadata,card_borders:event.target.checked};
+  changed();
 });
 $('pack-kit-preview').addEventListener('change',event=>{
   state.kitPreview=event.target.value;
@@ -758,7 +769,7 @@ $('picture-keep-resolution').addEventListener('change',async event=>{
 });
 $('crop-picture').addEventListener('click',()=>{
   const entry=active(),picture=entry?.picture,pack=state;if(!picture||pictureRequests.has(entry))return;
-  HeritagePictureEditor.open({picture,spawn:{...entry.fields,id:state.namespace+':'+entry.path},apply:next=>{
+  HeritagePictureEditor.open({picture,borders:state.selectionMetadata?.card_borders!==false,spawn:{...entry.fields,id:state.namespace+':'+entry.path},apply:next=>{
     if(saveBlocked||state!==pack||!state.locations.includes(entry)||entry.picture!==picture)return false;
     entry.picture=next;entry.keepImageResolution=next.keepResolution===true;historyLabel='Crop card image';historyGroup='';renderPicture();changed();return true;
   }});
@@ -785,7 +796,12 @@ $('location-form').addEventListener('click',event=>{
 $('location-form').addEventListener('input',event=>{
   const entry=active(),field=event.target;if(!entry)return;
   if(field.hasAttribute('data-location-field')) {
-    const key=field.dataset.locationField;entry.fields[key]=key==='outline'?field.value==='true':field.validity.badInput?'invalid':field.value;
+    const key=field.dataset.locationField;
+    entry.fields[key]=['outline','fallback_only'].includes(key)?field.value==='true':field.validity.badInput?'invalid':field.value;
+    if(key==='fallback_only'){
+      if(entry.fields.fallback_only)entry.fields.max_uses='';
+      renderLocation();
+    }
     if(key==='type') {
       if(field.value==='fixed')for(const [key,value] of [['x','0'],['y','64'],['z','0']])if(entry.fields[key]===undefined)entry.fields[key]=value;
       if(field.value==='pool'&&!entry.destinations.length)entry.destinations.push({type:'biome',target:'minecraft:plains'});

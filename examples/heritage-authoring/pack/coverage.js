@@ -16,7 +16,7 @@ function scene(choices,images,spawnId,kitId,poolIndex=null,cache=sceneCache()){
     if(choices.kitPreview==='model')inputs.push('model');if(kit.shop)inputs.push('shop');return hash(inputs);
   });
   const emptyLoadout=kit.items?.length?false:kit.shop??true;
-  const parts={location:cached(cache.location,spawn,()=>hash([card,picture,choices.spawns.map(entry=>entry.id),scale])),kit:kitPart,arrival:hash([destination,kit.title,kit.title_key,emptyLoadout,scale]),intro:cached(cache.intro,JSON.stringify([spawnId,poolIndex]),()=>hash([intro??null,scale]))};
+  const parts={location:cached(cache.location,spawn,()=>hash([card,picture,choices.spawns.map(entry=>entry.id),scale,...(choices.cardBorders===false?['borderless']:[])])),kit:kitPart,arrival:hash([destination,kit.title,kit.title_key,emptyLoadout,scale]),intro:cached(cache.intro,JSON.stringify([spawnId,poolIndex]),()=>hash([intro??null,scale]))};
   return {key:JSON.stringify([spawnId,kitId,poolIndex]),spawnId,kitId,poolIndex,spawn,kit,arrival,parts,fingerprint:hash(parts)};
 }
 function count(choices,filter=''){

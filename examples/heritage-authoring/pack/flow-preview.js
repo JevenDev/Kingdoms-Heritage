@@ -144,7 +144,7 @@ async function loadOverlayShader(source,toast=false){
 }
 let defaultsLoading;
 function loadDefaults(){
-  return defaultsLoading??=fetch(new URL('defaults.json?v=10',base)).then(response=>{
+  return defaultsLoading??=fetch(new URL('defaults.json?v=11',base)).then(response=>{
     if(!response.ok)throw new Error('Bundled locations and kits could not load.');
     return response.json();
   }).catch(error=>{defaultsLoading=null;throw error;});
@@ -198,12 +198,13 @@ function cover(spawn,uploaded=true){
 function cardTitle(spawn,painter=renderer){return HeritageCardText.title(literal(label(spawn,'title')),painter.advance,P.wrap);}
 function cardFit(spawn,painter=renderer){const title=cardTitle(spawn,painter),subtitle=HeritageCardText.subtitle(literal(label(spawn,'subtitle')),painter.advance);return {titleLines:title.totalLines,titleClipped:title.clipped,subtitleClipped:subtitle.clipped,subtitleVisible:subtitle.text};}
 
-function drawCard(spawn,x,y,scale,details=false,alpha=1,picture=cover(spawn)){
+function drawCard(spawn,x,y,scale,details=false,alpha=1,picture=cover(spawn),borders=true){
   ctx.save();ctx.translate(x,y);ctx.scale(scale,scale);ctx.translate(64,96);ctx.rotate((details.tilt??0)*Math.PI/180);ctx.translate(-64,-96);ctx.globalAlpha=alpha;
-  const fallback=picture===images.get('card_fallback');
+  const fallback=!borders||picture===images.get('card_fallback');
   ctx.drawImage(picture,fallback?0:4,fallback?0:4,fallback?128:120,fallback?192:184);
   const frameWidth=Math.round(details.width??128);
-  if(frameWidth===128)ctx.drawImage(images.get('card'),0,0);else{const image=images.get('card_expanded');ctx.drawImage(image,0,0,frameWidth-3,192,0,0,frameWidth-3,192);ctx.drawImage(image,371,0,3,192,frameWidth-3,0,3,192);}
+  if(!borders){if(frameWidth>128)rect(128,0,frameWidth-128,192,'rgba(0,0,0,.6)');}
+  else if(frameWidth===128)ctx.drawImage(images.get('card'),0,0);else{const image=images.get('card_expanded');ctx.drawImage(image,0,0,frameWidth-3,192,0,0,frameWidth-3,192);ctx.drawImage(image,371,0,3,192,frameWidth-3,0,3,192);}
   const selectionAlpha=Math.round((details.selection??0)*alpha*255),hoverAlpha=Math.round((details.hover??0)*(1-(details.selection??0))*alpha*255);
   for(const [opacity,color] of [[selectionAlpha,'#f2cd83'],[hoverAlpha,'#eeeeee']])if(opacity>0){ctx.globalAlpha=opacity/255;ctx.fillStyle=color;ctx.fillRect(2,2,124,1);ctx.fillRect(2,189,124,1);ctx.fillRect(2,3,1,186);ctx.fillRect(125,3,1,186);}ctx.globalAlpha=alpha;
   const outline=spawn.outline!==false,title=cardTitle(spawn);renderer.block({x:7,y:title.y,scale:title.scale,column:0,lines:title.lines,lineHeight:9},Infinity,Math.round(alpha*255),Math.floor(clock()/50),outline,!outline);
@@ -214,10 +215,16 @@ function drawCard(spawn,x,y,scale,details=false,alpha=1,picture=cover(spawn)){
     const description=literal(label(spawn,'description')),height=P.wrap(description,230,renderer.advance).length*9;scroll=Math.min(scroll,Math.max(0,height-170));
     text(description,134,10-Math.trunc(scroll),{limit:230,alpha:Math.round((details.details??0)*alpha*255),outline,shadow:!outline});ctx.restore();
   }
+  if(details.unavailable)rect(0,0,frameWidth,192,'rgba(0,0,0,.59)');
+  const remaining=details.remaining??spawn.max_uses;
+  if(remaining!==undefined){
+    const count=remaining+' left',x=121-width(literal(count));
+    text(count,x,7,{alpha:Math.round(alpha*255)});
+  }
   ctx.restore();ctx.globalAlpha=1;
 }
 const cardPreviews=new WeakMap();
-async function cardPreview(target,spawn,pictureData){
+async function cardPreview(target,spawn,pictureData,borders=true){
   let preview=cardPreviews.get(target);
   if(!preview){const context=target.getContext('2d');if(!context)throw new Error('Card preview is unavailable in this browser.');preview={context,renderer:new HeritageCanvas(context)};cardPreviews.set(target,preview);}
   const request={};preview.request=request;
@@ -231,7 +238,7 @@ async function cardPreview(target,spawn,pictureData){
   const previousContext=ctx,previousRenderer=renderer;
   try{
     ctx=preview.context;renderer=preview.renderer;target.width=256;target.height=384;ctx.imageSmoothingEnabled=false;ctx.scale(2,2);
-    drawCard(spawn,0,0,1,false,1,picture);
+    drawCard(spawn,0,0,1,false,1,picture,borders);
   }finally{ctx=previousContext;renderer=previousRenderer;}
   return {fallback:picture===images.get('card_fallback')};
 }
@@ -279,7 +286,7 @@ async function monitorPreview(target,{selectKit}={}){
       return {id:card.id,after,x:(after?right:pose.x)/view.guiWidth*box.width,y:pose.y/view.guiHeight*box.height,height:192*pose.scale/view.guiHeight*box.height};
     },
     needsResourcePack(spawn,data){return !!spawn?.image&&!uploaded.has(data)&&cover(spawn)===images.get('card_fallback');},
-    draw({spawns,selectedId,guiScale=3,width:pixelWidth=1920,height:pixelHeight=1080,phase='cards',expanded=false,page=null,intro,time=0,names={},pictureData,kit,kits=[],kitIndex=0,kitCount=1,inventoryMode='player',kitPreview='inventory'}){
+    draw({spawns,selectedId,cardBorders=true,guiScale=3,width:pixelWidth=1920,height:pixelHeight=1080,phase='cards',expanded=false,page=null,intro,time=0,names={},pictureData,kit,kits=[],kitIndex=0,kitCount=1,inventoryMode='player',kitPreview='inventory'}){
       if(target.width!==pixelWidth||target.height!==pixelHeight){target.width=pixelWidth;target.height=pixelHeight;}target.dataset.guiScale=String(guiScale);target.dataset.previewPhase=phase;
       const view=P.guiViewport(pixelWidth,pixelHeight,guiScale),w=view.guiWidth,h=view.guiHeight,old={ctx,renderer,viewport,scroll};
       try{
@@ -324,7 +331,7 @@ async function monitorPreview(target,{selectKit}={}){
           const index=Math.max(0,spawns.findIndex(entry=>entry.id===selectedId)),pageIndex=page===null?Math.floor(index/10):Math.max(0,Math.min(page,Math.floor(Math.max(0,spawns.length-1)/10))),shown=spawns.slice(pageIndex*10,pageIndex*10+10),key=JSON.stringify([shown.map(entry=>entry.id),w,h]);
           if(key!==signature){signature=key;layout=new HeritagePresentation.Cards(shown.map(entry=>entry.id),w,h,clock());}
           const slotsKey=JSON.stringify([pageIndex,w,h]);if(slotsKey!==slotSignature){slotSignature=slotsKey;reorderMotion=null;settling=false;}shownPage=pageIndex;
-          shownSpawns=shown;shownPictures=pictureData??{};const selected=shown.some(spawn=>spawn.id===selectedId)?selectedId:null,targetExpanded=expanded?selected:null;layout.selected=selected;if(selected)layout.preview=selected;if(layout.expanded!==targetExpanded){layout.expanded=targetExpanded;layout.layout(clock(),true);}const frame=layout.frame(clock(),drag?{}:pointer),draw=card=>{const spawn=shown.find(entry=>entry.id===card.id),pose=card.pose();drawCard(spawn,pose.x,pose.y,pose.scale,pose,pose.opacity*(drag?.id===card.id ? .25 : 1),uploaded.get(pictureData?.[spawn.id])??cover(spawn));};
+          shownSpawns=shown;shownPictures=pictureData??{};const selected=shown.some(spawn=>spawn.id===selectedId)?selectedId:null,targetExpanded=expanded?selected:null;layout.selected=selected;if(selected)layout.preview=selected;if(layout.expanded!==targetExpanded){layout.expanded=targetExpanded;layout.layout(clock(),true);}const frame=layout.frame(clock(),drag?{}:pointer),draw=card=>{const spawn=shown.find(entry=>entry.id===card.id),pose=card.pose();drawCard(spawn,pose.x,pose.y,pose.scale,pose,pose.opacity*(drag?.id===card.id ? .25 : 1),uploaded.get(pictureData?.[spawn.id])??cover(spawn),cardBorders);};
           if((drag||settling)&&layout.cards.length){
             reorderMotion??=new HeritagePresentation.Reorder(matchMedia('(prefers-reduced-motion: reduce)').matches?0:180);reorderMotion.seed(layout.cards.map(card=>[card.id,card.pose().x]));
             const ids=drag?.order??spawns.map(spawn=>spawn.id),visible=ids.slice(pageIndex*10,pageIndex*10+10),slots=layout.cards.map(card=>card.target),targets=new Map(),initial=new Map(),all=new Set([...shown.map(spawn=>spawn.id),...visible,...reorderMotion.positions.keys()]),prototype=slots[0];
@@ -336,11 +343,11 @@ async function monitorPreview(target,{selectKit}={}){
             reorderMotion.seed(initial);const positions=reorderMotion.frame(targets,clock());
             for(const id of ids)if(positions.has(id)){
               const index=visible.indexOf(id),slot=slots[index]??prototype,spawn=spawns.find(spawn=>spawn.id===id),native=layout.cards.find(card=>card.id===id),pose={...(native?.pose()??slot),...slot,x:positions.get(id),y:native?.pose().y??slot.y,width:128,details:0,tilt:0};
-              drawCard(spawn,pose.x,pose.y,pose.scale,pose,drag?.id===id ? .25 : 1,uploaded.get(pictureData?.[id])??cover(spawn));
+              drawCard(spawn,pose.x,pose.y,pose.scale,pose,drag?.id===id ? .25 : 1,uploaded.get(pictureData?.[id])??cover(spawn),cardBorders);
             }
             if(!drag){settling=reorderMotion.active;if(!settling)reorderMotion=null;}
           }else{for(const card of layout.cards)if(card.id!==frame.foreground)draw(card);const front=layout.cards.find(card=>card.id===frame.foreground);if(front)draw(front);}
-          if(drag)drawCard(drag.spawn,P.clamp(drag.point.x-drag.offsetX*drag.scale,0,Math.max(0,w-128*drag.scale)),P.clamp(drag.point.y-drag.offsetY*drag.scale,0,Math.max(0,h-192*drag.scale)),drag.scale,{width:128,selection:1},.95,drag.picture);
+          if(drag)drawCard(drag.spawn,P.clamp(drag.point.x-drag.offsetX*drag.scale,0,Math.max(0,w-128*drag.scale)),P.clamp(drag.point.y-drag.offsetY*drag.scale,0,Math.max(0,h-192*drag.scale)),drag.scale,{width:128,selection:1},.95,drag.picture,cardBorders);
           text('Choose your starting location',w/2,12,{center:true});if(!shown.length)text('Add a starting location',w/2,h/2,{center:true});
         }
       }finally{ctx=old.ctx;renderer=old.renderer;viewport=old.viewport;scroll=old.scroll;}
@@ -376,8 +383,16 @@ function toggleParty(open){
   if(open)HeritageInventory.hideTooltip();
   buttons.get('party-trigger')?.focus({preventScroll:true});
 }
+function resizeParty(){
+  session.setPartySize(partyMembers.size+1);
+  if(session.spawn&&(!session.choices.spawns.includes(session.spawn)||!session.fits(session.spawn))&&!['intro','complete'].includes(session.phase)){
+    session.phase='location';session.spawn=null;session.kit=null;
+    waitingForParty=false;cards=null;outgoingCards=[];transition.clear();enter();
+  }
+}
 function leaveParty(){
   partyMembers.clear();partyInvites.clear();
+  resizeParty();
   if(waitingForParty){
     waitingForParty=false;enter(false);visible=Infinity;transition.reveal(clock());
   }else if(session.phase==='review')enter(false);
@@ -390,6 +405,7 @@ $('flow-sample-players').addEventListener('change',()=>{
   const wasGrouped=partyMembers.size>0;
   for(const id of partyMembers.keys())if(id>=sampleCount())partyMembers.delete(id);
   for(const id of partyInvites.keys())if(id>=sampleCount())partyInvites.delete(id);
+  resizeParty();
   if(partyMenu?.id>=sampleCount())partyMenu=null;
   if(wasGrouped&&!partyMembers.size)leaveParty();else if(wasGrouped&&session.phase==='review'&&!waitingForParty)enter(false);
   updateParty();
@@ -398,6 +414,7 @@ $('flow-sample-accept').addEventListener('click',()=>{
   const id=partyInvites.keys().next().value;
   if(id===undefined||partyMembers.size>=7||partyInvites.get(id)<=clock())return;
   partyInvites.delete(id);partyMembers.set(id,clock());
+  resizeParty();
   if(partyMembers.size===7)partyInvites.clear();
   if(session.phase==='review'&&!waitingForParty)enter(false);
   updateParty();buttons.get('party-trigger')?.focus({preventScroll:true});
@@ -656,15 +673,16 @@ function browseLocation(offset,byPage=false){
   keyboard=true;hoverReady=true;if(event.defaultPrevented)return;
 }
 function locationsScreen(w,h,now){
+  page=Math.min(page,Math.max(0,Math.ceil(session.choices.spawns.length/F.pageSize)-1));
   const ids=pageIds();
   if(!cards)cards=new HeritagePresentation.Cards(ids,w,h,now);
-  else if(cards.width!==w||cards.height!==h||cards.cards[0]?.id!==ids[0]){cards.reset(ids,w,h,now);outgoingCards=[];}
+  else if(cards.width!==w||cards.height!==h||cards.cards.length!==ids.length||cards.cards.some((card,index)=>card.id!==ids[index])){cards.reset(ids,w,h,now);outgoingCards=[];}
   if(session.phase==='location-confirm'&&!cards.confirming)cards.confirm(session.spawn.id,true,now);
   const focused=browseFocus??document.activeElement?.dataset.action?.replace(/^card-/,'');
   cardFrame=cards.frame(now,partyOpen?{}:{...pointer,focused,keyboard});expanded=cards.expanded??'';
   const progress=cardFrame.progress,confirming=cards.confirming,active=progress===0&&!confirming;
   if(cardFrame.active!==highlightedCard){if(hoverReady&&cardFrame.active&&active&&transition.phase==='idle')sound('hover');highlightedCard=cardFrame.active;}
-  const draw=card=>{const spawn=session.choices.spawns.find(entry=>entry.id===card.id),pose=card.pose();if(pose.opacity>=.02)drawCard(spawn,pose.x,pose.y,pose.scale,pose,pose.opacity);};
+  const draw=card=>{const spawn=session.choices.spawns.find(entry=>entry.id===card.id),pose=card.pose();if(spawn&&pose.opacity>=.02)drawCard(spawn,pose.x,pose.y,pose.scale,{...pose,remaining:session.remaining(spawn),unavailable:!session.fits(spawn)},pose.opacity,cover(spawn),session.choices.cardBorders);};
   if(layer.width!==canvas.width||layer.height!==canvas.height){layer.width=canvas.width;layer.height=canvas.height;}
   layerContext.setTransform(1,0,0,1,0,0);layerContext.clearRect(0,0,layer.width,layer.height);layerContext.setTransform(canvas.width/w,0,0,canvas.height/h,0,0);layerContext.imageSmoothingEnabled=false;
   ctx=layerContext;renderer=layerRenderer;
@@ -682,11 +700,12 @@ function locationsScreen(w,h,now){
   for(let index=0;index<cards.cards.length;index++){
     const card=cards.cards[index],pose=card.pose();if(!active||!card.visible||pose.opacity<.05)continue;
     const x=Math.round(pose.x),right=cards.expanded===null&&index+1<cards.cards.length?Math.min(x+Math.round(pose.width*pose.scale),Math.round(cards.cards[index+1].layout.x)):x+Math.round(pose.width*pose.scale);
-    hit('card-'+card.id,label(session.choices.spawns.find(spawn=>spawn.id===card.id),'title'),x,card.layout.y-12*pose.scale,right-x,204*pose.scale,()=>{session.choose(card.id);cards.confirm(card.id,true,clock());if(cards.cards.length>1)sound('dissolve');enter();});
+    const location=session.choices.spawns.find(spawn=>spawn.id===card.id);
+    hit('card-'+card.id,label(location,'title'),x,card.layout.y-12*pose.scale,right-x,204*pose.scale,()=>{session.choose(card.id);cards.confirm(card.id,true,clock());if(cards.cards.length>1)sound('dissolve');enter();},!session.fits(location));
   }
   if(browseFocus&&buttons.get('card-'+browseFocus)?.isConnected){buttons.get('card-'+browseFocus).focus({preventScroll:true});browseFocus=null;}
   const preview=cards.cards.find(card=>card.id===cards.preview),spawn=session.choices.spawns.find(entry=>entry.id===cards.preview);
-  if(active&&preview&&(expanded||label(spawn,'description'))){
+  if(active&&preview&&session.fits(spawn)&&(expanded||label(spawn,'description'))){
     const pose=preview.pose(),index=cards.cards.indexOf(preview),x=Math.round(pose.x),right=expanded?x+Math.round(pose.width*pose.scale):Math.min(x+Math.round(pose.width*pose.scale),index+1<cards.cards.length?Math.round(cards.cards[index+1].layout.x):Infinity),aw=Math.max(12,Math.round(19*pose.scale)),ax=x+Math.min(Math.round(109*pose.scale),Math.max(0,right-x-aw));
     const node=hit('description-'+preview.id,expanded?'Collapse description':'Read description',ax,Math.round(pose.y)+Math.round(80*pose.scale),aw,Math.max(18,Math.round(32*pose.scale)),()=>{cards.expand(preview.id,clock());expanded=cards.expanded??'';scroll=0;});
     ctx.save();ctx.translate(pose.x,pose.y);ctx.scale(pose.scale,pose.scale);ctx.translate(64,96);ctx.rotate(pose.tilt*Math.PI/180);ctx.translate(-64,-96);const sprite=images.get((expanded?'unselect':'select')+(node.matches(':hover,:focus-visible')?'_highlighted':''));ctx.drawImage(sprite,expanded?0:8,4,16,24,(ax-cardFrame.cards[index].layout.x)/pose.scale+1,84,16,24);ctx.restore();
@@ -700,8 +719,9 @@ function locationsScreen(w,h,now){
   }
   if(progress<1)text('Choose your starting location',Math.trunc(w/2),12,{center:true,alpha:Math.max(4,Math.round((1-progress)*255))});
   if(active&&!expanded&&session.allowed().length>1)text('Step 1 of 2',Math.trunc(w/2),h-43,{center:true});
-  if(partyMembers.size&&session.choices.spawns.length>1){
-    const id=partyMembers.keys().next().value,player=peer(id),suggestion=session.choices.spawns[1],message=partyText('suggestion',player.name,label(suggestion,'title'));
+  const suggestionIndex=session.choices.spawns.findIndex((spawn,index)=>index>0&&session.fits(spawn));
+  if(partyMembers.size&&suggestionIndex>=0){
+    const id=partyMembers.keys().next().value,player=peer(id),suggestion=session.choices.spawns[suggestionIndex],message=partyText('suggestion',player.name,label(suggestion,'title'));
     const fade=P.clamp((now-partyMembers.get(id))/180),card=cards.cards.find(entry=>entry.id===suggestion.id);
     if(card?.visible&&progress<1){
       const pose=card.pose(),x=Math.round(pose.x+pose.width*pose.scale/2)-4,y=Math.round(pose.y+192*pose.scale)+4;
@@ -711,7 +731,7 @@ function locationsScreen(w,h,now){
       const left=Math.max(4,Math.trunc((w-width(literal(message)))/2)-4);
       const node=hit('party-suggestion',message,left,h-58,w-left*2,13,()=>{
         const current=session.choices.spawns.findIndex(spawn=>spawn.id===cards.preview);
-        browseLocation(1-current);
+        browseLocation(suggestionIndex-current);
       },!active||!!expanded);
       text(message,Math.trunc(w/2),h-56,{center:true,color:node.matches(':hover,:focus-visible')?0xffff55:0xf2cd83,limit:w-8,maxLines:1,alpha:Math.round(fade*255)});
     }

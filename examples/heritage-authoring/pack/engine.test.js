@@ -28,6 +28,23 @@ function archiveFiles(bytes) {
   assert.equal(view.getUint16(bytes.length-12,true),entries.size);
   return entries;
 }
+test('limited locations need an unlimited card and fallback cards cannot set a limit',()=>{
+  const input=state(),location=input.locations[0];
+  location.fields.max_uses='2';
+  assert.match(Pack.build(input,catalog).errors.join(' '),/add a fallback-only card/);
+  assert.deepEqual(Pack.build({...input,keepLocations:true},catalog).errors,[]);
+  const fallback=Pack.location('world',2);
+  fallback.fields.fallback_only=true;
+  input.locations.push(fallback);
+  input.selectionMetadata={card_borders:false};
+  const output=Pack.build(input,catalog);
+  assert.deepEqual(output.errors,[]);
+  assert.equal(spawn(output).max_uses,2);
+  assert.equal(JSON.parse(output.files.find(file=>file.path===Pack.selectionPath).content).card_borders,false);
+  fallback.fields.max_uses='1';
+  assert.match(Pack.build(input,catalog).errors.join(' '),/fallback-only location must be unlimited/);
+});
+
 test('unfinished packs build location previews through the export transformation',()=>{
   for(const type of ['default','biome','structure','fixed','pool']) {
     const input=state(),entry=input.locations[0];

@@ -6,6 +6,22 @@ const path=require('node:path');
 const Pack=require('./engine.js');
 const Flow=require('./flow.js');
 const bundled=require('./assets/defaults.json');
+test('location availability follows the party and counts only confirmed arrivals',()=>{
+  const flow=new Flow.Session({spawns:[
+    {id:'a',type:'default',max_uses:2},{id:'b',type:'default',fallback_only:true}
+  ],kits:[{id:'kit'}]});
+  flow.setPartySize(3);
+  assert.deepEqual(flow.choices.spawns.map(spawn=>spawn.id),['a','b']);
+  assert.throws(()=>flow.choose('a'),/available location/);
+  flow.choose('b');flow.restart();
+  flow.setPartySize(2);
+  assert.deepEqual(flow.choices.spawns.map(spawn=>spawn.id),['a']);
+  flow.choose('a');flow.next();flow.next();
+  assert.equal(flow.remaining(flow.spawn),2);
+  flow.next();flow.restart();
+  assert.equal(flow.remaining(flow.choices.spawns[0]),0);
+  assert.deepEqual(flow.choices.spawns.map(spawn=>spawn.id),['a','b']);
+});
 const native=path.join(__dirname,'../../../src/main/resources');
 const build=(changes={},catalog={kits:[],intros:[]})=>Pack.build({name:'Preview',namespace:'preview',description:'Flow test',keepKits:true,keepLocations:false,kits:[],locations:[Pack.location('home')],...changes},catalog);
 const choices=()=>({spawns:[{id:'pack:home',title:'Home',type:'default',kits:['pack:axe','pack:bread'],intro:{text:'Welcome'}},{id:'pack:empty',title:'Empty',type:'default',kits:['pack:empty']}],kits:[{id:'pack:axe',title:'Axe',items:[{index:0,item:{id:'minecraft:wooden_axe'}}]},{id:'pack:bread',title:'Bread',items:[{index:0,item:{id:'minecraft:bread'}}]},{id:'pack:empty',title:'Empty',items:[]}]});

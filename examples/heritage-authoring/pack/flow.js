@@ -19,7 +19,7 @@ function catalog(output,bundled) {
   }
   const settings=output.files.find(file=>file.path==='data/kingdomsheritage/heritage/selection.json');
   const selection=settings?(settings.document??JSON.parse(settings.content)):bundled.selection;
-  const result={...Object.fromEntries(Object.entries(entries).map(([kind,values])=>[kind,[...values.values()].sort(compare)])),guiScale:selection?.gui_scale??0,kitPreview:selection?.kit_preview??'inventory'};
+  const result={...Object.fromEntries(Object.entries(entries).map(([kind,values])=>[kind,[...values.values()].sort(compare)])),guiScale:selection?.gui_scale??0,cardBorders:selection?.card_borders!==false,kitPreview:selection?.kit_preview??'inventory'};
   for(const spawn of result.spawns){const selectors=spawn.kits;spawn.kits=result.kits.filter(kit=>!selectors?.length||selectors.some(selector=>selector.startsWith('#')?(kit.tags??[]).some(tag=>K.normalize(tag)===K.normalize(selector.slice(1))):K.normalize(selector)===kit.id)).map(kit=>kit.id);}
   return result;
 }
@@ -167,9 +167,24 @@ function purchaseSlot(items,stack){
 }
 class Session {
   constructor(choices,{shopOnly=false}={}){
-    this.choices=structuredClone(choices);this.shopOnly=shopOnly;this.restart();
+    this.choices=structuredClone(choices);this.shopOnly=shopOnly;
+    this.locations=this.choices.spawns;
+    this.used=new Map();
+    this.restart();
+  }
+  setPartySize(size){
+    this.partySize=size;
+    const regularFits=this.locations.some(spawn=>!spawn.fallback_only&&this.fits(spawn));
+    this.choices.spawns=this.locations.filter(spawn=>!spawn.fallback_only||!regularFits);
+  }
+  remaining(spawn){
+    return spawn.max_uses===undefined?undefined:Math.max(0,spawn.max_uses-(this.used.get(spawn.id)??0));
+  }
+  fits(spawn){
+    return spawn.max_uses===undefined||this.remaining(spawn)>=this.partySize;
   }
   restart(){
+    this.setPartySize(1);
     this.phase=this.shopOnly?'kit-shop':'location';this.kit=this.shopOnly?this.choices.kits[0]:null;
     this.spawn=null;this.arrival=null;this.kitIndex=0;this.poolIndex=null;this.purchases=[];
   }
@@ -179,7 +194,7 @@ class Session {
     return result;
   }
   resume(value){
-    this.restart();if(!value||!this.choices.spawns.some(entry=>entry.id===value.spawnId))return false;
+    this.restart();if(!value||!this.choices.spawns.some(entry=>entry.id===value.spawnId&&this.fits(entry)))return false;
     this.choose(value.spawnId);const allowed=this.allowed();if(!allowed.length){this.restart();return false;}
     this.kitIndex=Math.max(0,allowed.findIndex(entry=>entry.id===value.kitId));this.kit=allowed[this.kitIndex];
     const phases=['location-confirm','kit','kit-confirm','kit-shop','loading','review','intro'];this.phase=phases.includes(value.phase)?value.phase:'location-confirm';
@@ -200,7 +215,7 @@ class Session {
   choose(id){
     if(this.phase!=='location')return;
     const spawn=this.choices.spawns.find(entry=>entry.id===id);
-    if(!spawn)throw new Error('Choose an available location.');
+    if(!spawn||!this.fits(spawn))throw new Error('Choose an available location.');
     this.spawn=spawn;this.phase='location-confirm';this.kitIndex=0;this.kit=this.allowed()[0];this.purchases=[];
   }
   select(index){
@@ -277,7 +292,10 @@ class Session {
     }else if(this.phase==='kit')this.phase=this.kit.shop?'kit-shop':'kit-confirm';
     else if(['kit-confirm','kit-shop'].includes(this.phase))this.prepareArrival(poolIndex);
     else if(this.phase==='loading')this.phase='review';
-    else if(this.phase==='review')this.phase=this.arrival.intro?'intro':'complete';
+    else if(this.phase==='review'){
+      if(this.spawn.max_uses!==undefined)this.used.set(this.spawn.id,(this.used.get(this.spawn.id)??0)+this.partySize);
+      this.phase=this.arrival.intro?'intro':'complete';
+    }
     else if(this.phase==='intro')this.phase='complete';
   }
   prepareArrival(index){

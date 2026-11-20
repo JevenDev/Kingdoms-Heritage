@@ -10,6 +10,11 @@
       "maximum": 4,
       "description": "0 or omitted uses the player GUI scale up to 4. A positive value overrides the GUI scale for selection screens and the entire arrival intro, including bars. Minecraft window and font limits apply. The saved player option stays unchanged."
     },
+    "card_borders": {
+      "type": "boolean",
+      "default": true,
+      "description": "Draw the decorative frames around location cards."
+    },
     "kit_preview": {
       "type": "string",
       "enum": ["inventory", "model"],

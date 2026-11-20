@@ -55,6 +55,17 @@
         "type": "string",
         "maxLength": 256
       },
+      "max_uses": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 2147483647,
+        "description": "Number of players who can finish selection at this card across the world save. Omit for unlimited uses."
+      },
+      "fallback_only": {
+        "type": "boolean",
+        "default": false,
+        "description": "Show this unlimited card only when no regular card fits the selecting player or party."
+      },
       "outline": {
         "type": "boolean",
         "default": true,
@@ -138,6 +149,7 @@
       }
     },
     "allOf": [
+      { "not": { "required": ["fallback_only", "max_uses"], "properties": { "fallback_only": { "const": true } } } },
       {
         "anyOf": [
           {
