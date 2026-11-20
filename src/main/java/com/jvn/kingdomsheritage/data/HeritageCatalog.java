@@ -30,6 +30,7 @@ public final class HeritageCatalog {
     public static long revision() { return revision; }
     public static int guiScale() { return current.selection.guiScale(); }
     public static SelectionSettings.KitPreview kitPreview() { return current.selection.kitPreview(); }
+    public static com.google.gson.JsonArray spawnChoices() { return current.payload.getAsJsonArray("spawns").deepCopy(); }
     public static JsonObject payload() { return current.payload.deepCopy(); }
 
     public static void register(AddReloadListenerEvent event) {
@@ -73,6 +74,9 @@ public final class HeritageCatalog {
         });
         if (spawns.isEmpty() || spawns.size() > 50) {
             throw new IllegalArgumentException("Heritage requires between 1 and 50 enabled spawn locations");
+        }
+        if (spawns.values().stream().noneMatch(spawn -> spawn.maxUses() == 0)) {
+            throw new IllegalArgumentException("All spawn locations have limited uses. Make one location unlimited or add a fallback-only card.");
         }
         if (kits.isEmpty() || kits.size() > 128) {
             throw new IllegalArgumentException("Heritage requires between 1 and 128 enabled kits");

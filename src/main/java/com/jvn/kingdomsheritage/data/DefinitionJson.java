@@ -11,6 +11,15 @@ import net.minecraft.util.GsonHelper;
 public final class DefinitionJson {
     private DefinitionJson() {}
 
+    static boolean flag(JsonObject json, String key, boolean fallback) {
+        if (!json.has(key)) return fallback;
+        var value = json.get(key);
+        if (!value.isJsonPrimitive() || !value.getAsJsonPrimitive().isBoolean()) {
+            throw new IllegalArgumentException(key + " must be true or false");
+        }
+        return value.getAsBoolean();
+    }
+
     static int integer(JsonObject json, String key, int fallback) {
         return json.has(key) ? integer(json, key) : fallback;
     }

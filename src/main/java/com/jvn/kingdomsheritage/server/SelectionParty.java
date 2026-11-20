@@ -121,6 +121,17 @@ public final class SelectionParty {
         return party == null ? Set.of() : Set.copyOf(party.members);
     }
 
+    static int size(ServerPlayer player) {
+        var party = PARTIES.get(player.getUUID());
+        return party == null ? 1 : party.members.size();
+    }
+
+    private static void clearUnavailableSpawn(Party party, ServerPlayer player) {
+        if (party == null || party.spawn.isEmpty()) return;
+        var spawn = HeritageCatalog.spawns().get(net.minecraft.resources.ResourceLocation.parse(party.spawn));
+        if (!SpawnUsage.of(player).available(spawn, party.members.size())) party.spawn = "";
+    }
+
     static boolean grouped(ServerPlayer player) { return PARTIES.containsKey(player.getUUID()); }
 
     static boolean allows(ServerPlayer player, String spawn) {
@@ -184,6 +195,11 @@ public final class SelectionParty {
         }
     }
 
+    static void capacityLost(ServerPlayer player) {
+        refresh(player, com.jvn.kingdomsheritage.api.ScreenStep.Placement.AFTER_SPAWN,
+                Component.translatable("error.kingdomsheritage.spawn_capacity"));
+    }
+
     static void refresh(ServerPlayer player) {
         refresh(player, Component.empty());
     }
@@ -196,6 +212,7 @@ public final class SelectionParty {
         var party = PARTIES.get(player.getUUID());
         var members = members(player);
         if (party != null) {
+            clearUnavailableSpawn(party, player);
             party.generation++;
             for (var member : members) {
                 if (from.compareTo(com.jvn.kingdomsheritage.api.ScreenStep.Placement.BEFORE_KIT) <= 0) PLAYERS.get(member.getUUID()).kit = "";
@@ -248,7 +265,7 @@ public final class SelectionParty {
         var party = PARTIES.get(player.getUUID());
         if (action == HeritageNetwork.PartyAction.SELECT || action == HeritageNetwork.PartyAction.SUGGEST) {
             var id = net.minecraft.resources.ResourceLocation.tryParse(request.spawn());
-            if (id == null || !HeritageCatalog.spawns().containsKey(id) || SelectionManager.busy(player)) return;
+            if (id == null || SelectionManager.busy(player) || !SpawnUsage.of(player).available(HeritageCatalog.spawns().get(id), size(player))) return;
             if (action == HeritageNetwork.PartyAction.SUGGEST) {
                 if (party == null || party.leader.equals(player.getUUID()) || !party.spawn.isEmpty()) return;
                 boolean added = suggest(party.suggestions, player.getUUID(), request.spawn());
@@ -361,6 +378,7 @@ public final class SelectionParty {
         party.generation++;
         PARTIES.remove(player.getUUID());
         party.members.remove(player.getUUID());
+        clearUnavailableSpawn(party, player);
         if (party.leader.equals(player.getUUID()) || party.members.size() == 1) {
             for (var id : party.members) PARTIES.remove(id);
         }

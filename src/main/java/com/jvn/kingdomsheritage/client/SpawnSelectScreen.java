@@ -30,8 +30,8 @@ public final class SpawnSelectScreen extends Screen {
     private static final ResourceLocation EXPANDED = texture("campaign_select_screen_card_expanded");
     private static final ResourceLocation FALLBACK = texture("campaign_select_screen_card_fallback");
     private final JsonObject catalog;
-    private final List<JsonObject> choices;
-    private final LocationNavigation navigation;
+    private List<JsonObject> choices;
+    private LocationNavigation navigation;
     private JsonObject automaticKit;
     private JsonObject selected;
     private JsonObject expanded;
@@ -163,8 +163,38 @@ public final class SpawnSelectScreen extends Screen {
 
     String selectedId() { return selected == null ? null : selected.get("id").getAsString(); }
 
+    boolean canSelect(String id) {
+        return choices.stream().anyMatch(choice -> choice.get("id").getAsString().equals(id) && !choice.has("requires_slots"));
+    }
+
+    void updateCards(com.google.gson.JsonArray updates) {
+        var byId = new LinkedHashMap<String, JsonObject>();
+        for (var choice : choices) byId.put(choice.get("id").getAsString(), choice);
+        var visible = new ArrayList<JsonObject>();
+        for (var element : updates) {
+            var update = element.getAsJsonObject();
+            var choice = byId.getOrDefault(update.get("id").getAsString(), update);
+            for (String key : List.of("remaining", "requires_slots")) {
+                if (update.has(key)) choice.add(key, update.get(key));
+                else choice.remove(key);
+            }
+            visible.add(choice);
+        }
+        var spawns = new com.google.gson.JsonArray();
+        visible.forEach(spawns::add);
+        catalog.add("spawns", spawns);
+        if (!choices.equals(visible)) {
+            choices = visible;
+            navigation = new LocationNavigation(choices.size(), PAGE_SIZE);
+            navigation.focus(choices.indexOf(preview));
+            if (minecraft != null) rebuildWidgets();
+        }
+        for (var card : cards) card.updateTooltip();
+        if (next != null) updateNext();
+    }
+
     void restoreSelection(String id) {
-        selected = choices.stream().filter(choice -> choice.get("id").getAsString().equals(id)).findFirst().orElse(null);
+        selected = choices.stream().filter(choice -> !choice.has("requires_slots") && choice.get("id").getAsString().equals(id)).findFirst().orElse(null);
         if (selected != null) {
             navigation.focus(choices.indexOf(selected));
             confirming = true;
@@ -371,7 +401,8 @@ public final class SpawnSelectScreen extends Screen {
         if (button == 0 && overSuggestion(mouseX, mouseY) && jumpToSuggestion()) return true;
         if (description.mouseClicked(mouseX, mouseY, button)) return true;
         Card card = cardAt(mouseX, mouseY);
-        if (card != null && card.active && button == 0) {
+        if (card != null && button == 0) {
+            if (!card.active) return true;
             card.playDownSound(minecraft.getSoundManager());
             setFocused(card);
             card.onPress();
@@ -406,7 +437,7 @@ public final class SpawnSelectScreen extends Screen {
     }
 
     private void choose(JsonObject choice) {
-        if (confirming || submitted || SelectionTransition.active()) return;
+        if (confirming || submitted || choice.has("requires_slots") || SelectionTransition.active()) return;
         if (ClientParty.follower()) {
             ClientParty.select(choice.get("id").getAsString());
             return;
@@ -460,9 +491,9 @@ public final class SpawnSelectScreen extends Screen {
         automaticKit = kits.size() == 1 && (preserve || !kits.getFirst().has("shop")) ? kits.getFirst() : null;
         boolean valid = automaticKit == null || automaticKit.get("problem").getAsString().isEmpty();
         float progress = confirmationProgress(net.minecraft.Util.getMillis());
-        for (Card card : cards) card.active = !submitted && !confirming && progress == 0 && card.visible;
-        description.active = !submitted && !confirming && progress == 0;
-        next.active = confirming && progress == 1 && selected != null && !kits.isEmpty() && valid && !submitted;
+        for (Card card : cards) card.active = !submitted && !confirming && progress == 0 && card.visible && !card.choice.has("requires_slots");
+        description.active = !submitted && !confirming && progress == 0 && !preview.has("requires_slots");
+        next.active = confirming && progress == 1 && selected != null && !selected.has("requires_slots") && !kits.isEmpty() && valid && !submitted;
         next.setTooltip(valid ? null : Tooltip.create(DefinitionJson.message(automaticKit, "problem", minecraft.player.registryAccess())));
         next.visible = confirming || progress > 0;
         back.active = confirming && !submitted && progress > 0.65F;
@@ -704,7 +735,14 @@ public final class SpawnSelectScreen extends Screen {
             this.choice = choice;
             ResourceLocation requested = ResourceLocation.parse(choice.get("image").getAsString());
             cover = minecraft.getResourceManager().getResource(requested).isPresent() ? requested : FALLBACK;
-            setTooltip(Tooltip.create(getMessage()));
+            updateTooltip();
+        }
+
+        private void updateTooltip() {
+            var hint = choice.has("requires_slots")
+                    ? Component.translatable("screen.kingdomsheritage.spawn_too_small", choice.get("remaining").getAsInt(), choice.get("requires_slots").getAsInt())
+                    : getMessage();
+            setTooltip(Tooltip.create(hint));
         }
 
         private void moveTo(Layout target, long now, boolean animate, int delay) {
@@ -781,10 +819,13 @@ public final class SpawnSelectScreen extends Screen {
             graphics.pose().pushPose();
             applyPose(graphics);
             graphics.setColor(1, 1, 1, layout.opacity);
-            if (cover.equals(FALLBACK)) blit(graphics, cover, 0, 0, CARD_WIDTH, CARD_HEIGHT);
+            boolean borders = net.minecraft.util.GsonHelper.getAsBoolean(catalog, "card_borders", true);
+            if (!borders || cover.equals(FALLBACK)) blit(graphics, cover, 0, 0, CARD_WIDTH, CARD_HEIGHT);
             else blit(graphics, cover, 4, 4, CARD_WIDTH - 8, CARD_HEIGHT - 8);
             int frameWidth = Math.round(layout.width);
-            if (frameWidth == CARD_WIDTH) blit(graphics, CARD, 0, 0, CARD_WIDTH, CARD_HEIGHT);
+            if (!borders) {
+                if (frameWidth > CARD_WIDTH) graphics.fill(CARD_WIDTH, 0, frameWidth, CARD_HEIGHT, 0x99000000);
+            } else if (frameWidth == CARD_WIDTH) blit(graphics, CARD, 0, 0, CARD_WIDTH, CARD_HEIGHT);
             else {
                 RenderSystem.enableBlend();
                 RenderSystem.defaultBlendFunc();
@@ -821,6 +862,14 @@ public final class SpawnSelectScreen extends Screen {
                             descriptionAlpha << 24 | 0xffffff, outline);
                 }
                 graphics.disableScissor();
+            }
+            if (choice.has("requires_slots")) {
+                graphics.fill(0, 0, frameWidth, CARD_HEIGHT, Math.round(150 * layout.opacity) << 24);
+            }
+            if (choice.has("remaining")) {
+                var count = Component.translatable("screen.kingdomsheritage.spawn_remaining", choice.get("remaining").getAsInt());
+                int x = CARD_WIDTH - 7 - font.width(count);
+                SelectionText.draw(graphics, font, count, x, 7, textAlpha | 0xffffff);
             }
             graphics.pose().popPose();
         }

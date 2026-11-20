@@ -18,6 +18,7 @@ public final class CatalogPayload {
                                   Map<ResourceLocation, KitDefinition> equipment, SelectionSettings selection) {
         var json = new JsonObject();
         if (selection.guiScale() > 0) json.addProperty("gui_scale", selection.guiScale());
+        json.addProperty("card_borders", selection.cardBorders());
         json.addProperty("kit_preview", selection.kitPreview().name().toLowerCase(Locale.ROOT));
         JsonArray spawns = new JsonArray();
         for (var spawn : definitions.values()) {

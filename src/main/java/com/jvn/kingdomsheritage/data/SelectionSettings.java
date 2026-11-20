@@ -2,19 +2,23 @@ package com.jvn.kingdomsheritage.data;
 
 import com.google.gson.JsonObject;
 
-public record SelectionSettings(int guiScale, KitPreview kitPreview) {
+public record SelectionSettings(int guiScale, KitPreview kitPreview, boolean cardBorders) {
     public enum KitPreview { INVENTORY, MODEL }
 
     public static final int MAX_GUI_SCALE = 4;
     private static final int LEGACY_MAX_GUI_SCALE = 16;
     public static final SelectionSettings DEFAULT = new SelectionSettings(0, KitPreview.INVENTORY);
 
+    public SelectionSettings(int guiScale, KitPreview kitPreview) {
+        this(guiScale, kitPreview, true);
+    }
+
     public SelectionSettings {
         if (guiScale < 0 || guiScale > MAX_GUI_SCALE) throw new IllegalArgumentException("gui_scale must be a whole number from 0 to 4");
     }
 
     public static SelectionSettings parse(JsonObject json) {
-        return new SelectionSettings(parseGuiScale(json), parseKitPreview(json));
+        return new SelectionSettings(parseGuiScale(json), parseKitPreview(json), DefinitionJson.flag(json, "card_borders", true));
     }
 
     public static KitPreview parseKitPreview(JsonObject json) {

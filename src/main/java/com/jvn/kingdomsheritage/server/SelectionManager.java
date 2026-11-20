@@ -150,6 +150,8 @@ public final class SelectionManager {
             cancelPreparation(player);
             sendChoices(player, session.sentRevision != -1
                     ? Component.translatable("error.kingdomsheritage.reloaded") : Component.empty());
+        } else if (session.sentRevision == HeritageCatalog.revision() && session.sentUsage != SpawnUsage.of(player).revision()) {
+            updateCapacity(player, session);
         } else if (session.expired(player.server.overworld().getGameTime())) {
             var expired = Component.translatableWithFallback("error.kingdomsheritage.review_expired",
                     "The review expired. Review your choices again.");
@@ -159,6 +161,23 @@ public final class SelectionManager {
                 sendChoices(player, expired);
             }
         }
+    }
+
+    private static void updateCapacity(ServerPlayer player, SelectionSession session) {
+        var usage = SpawnUsage.of(player);
+        int size = SelectionParty.size(player);
+        var chosen = SelectionLifecycle.state(player).spawnId().map(HeritageCatalog.spawns()::get);
+        if (chosen.isPresent() && !usage.available(chosen.get(), size)) {
+            SelectionParty.capacityLost(player);
+            return;
+        }
+        var cards = HeritageCatalog.spawnChoices();
+        usage.updateCards(cards, size, true);
+        var update = new JsonObject();
+        update.add("spawn_cards", cards);
+        update.addProperty("revision", HeritageCatalog.revision());
+        PacketDistributor.sendToPlayer(player, new HeritageNetwork.Catalog(update.toString()));
+        session.sentUsage = usage.revision();
     }
 
     public static void reviewDecision(ServerPlayer player, HeritageNetwork.ReviewDecision decision) {
@@ -229,6 +248,10 @@ public final class SelectionManager {
         var kitId = ResourceLocation.tryParse(request.kit());
         var spawn = spawnId == null ? null : HeritageCatalog.spawns().get(spawnId);
         var kit = kitId == null ? null : HeritageCatalog.kits().get(kitId);
+        if (spawn != null && !SpawnUsage.of(player).available(spawn, SelectionParty.size(player))) {
+            SelectionParty.capacityLost(player);
+            return;
+        }
         if (spawn == null || kit == null || !spawn.allows(kit)) {
             sendChoices(player, Component.translatable("error.kingdomsheritage.choice"));
             return;
@@ -454,7 +477,9 @@ public final class SelectionManager {
         SelectionParty.stage(player, 2);
         JsonObject json = new JsonObject();
         var lifecycle = SelectionLifecycle.state(player);
-        var selectedSpawn = lifecycle.spawnId().map(HeritageCatalog.spawns()::get).orElse(null);
+        var usage = SpawnUsage.of(player);
+        int size = SelectionParty.size(player);
+        var selectedSpawn = lifecycle.spawnId().map(HeritageCatalog.spawns()::get).filter(spawn -> usage.available(spawn, size)).orElse(null);
         var selectedKit = lifecycle.kitId().map(HeritageCatalog.kits()::get).filter(value -> selectedSpawn != null && selectedSpawn.allows(value)).orElse(null);
         SelectionLifecycle.choices(player, selectedSpawn == null ? null : selectedSpawn.id(), selectedKit == null ? null : selectedKit.id());
         json.add("flow", SelectionSteps.manifest(player));
@@ -465,6 +490,7 @@ public final class SelectionManager {
         json.addProperty("error_component", Component.Serializer.toJson(error, player.registryAccess()));
         json.addProperty("inventory_policy", inventoryPolicy(player).name());
         HeritageCatalog.payload().entrySet().forEach(entry -> json.add(entry.getKey(), entry.getValue()));
+        usage.updateCards(json.getAsJsonArray("spawns"), size, false);
         var kits = json.getAsJsonArray("kits");
         var policy = inventoryPolicy(player);
         for (var element : kits) {
@@ -501,7 +527,9 @@ public final class SelectionManager {
             return;
         }
         PacketDistributor.sendToPlayer(player, new HeritageNetwork.Catalog(payload));
-        SelectionSession.of(player).sentRevision = HeritageCatalog.revision();
+        var session = SelectionSession.of(player);
+        session.sentRevision = HeritageCatalog.revision();
+        session.sentUsage = usage.revision();
     }
 
     @SubscribeEvent

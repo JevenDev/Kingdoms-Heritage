@@ -79,6 +79,7 @@ public final class ClientSelection {
             SelectionTransition.endArrival();
         } else if (next.has("flow_update")) ClientSteps.receive(next.getAsJsonObject("flow_update"));
         else if (next.has("flow_reset")) ClientSteps.reset(next.getAsJsonObject("flow_reset"));
+        else if (next.has("spawn_cards")) updateSpawnCards(next);
         else if (next.has("roster")) ClientParty.receiveRoster(next.getAsJsonObject("roster"));
         else if (next.has("party")) ClientParty.receive(next.getAsJsonObject("party"));
         else if (next.has("suggestion")) {
@@ -87,6 +88,24 @@ public final class ClientSelection {
         } else if (next.has("progress")) receiveProgress(next.get("progress").getAsString());
         else if (next.has("review")) receiveReview(next.getAsJsonObject("review"));
         else receiveCatalog(next);
+    }
+
+    private static void updateSpawnCards(JsonObject update) {
+        if (catalog == null || revision() != update.get("revision").getAsLong()) return;
+        var cards = update.getAsJsonArray("spawn_cards");
+        selection.updateCards(cards);
+        String chosen = selection.selectedId();
+        if (chosen != null && !selection.canSelect(chosen)) {
+            var message = Component.translatable("error.kingdomsheritage.spawn_capacity");
+            catalog.addProperty("error", message.getString());
+            catalog.addProperty("error_component", Component.Serializer.toJson(message, Minecraft.getInstance().player.registryAccess()));
+            SelectionTransition.clear();
+            HeritageScreens.cancel();
+            receiveCatalog(catalog);
+            choicesChanged(null, null);
+            return;
+        }
+        ClientSelectionEvents.catalog(catalog);
     }
 
     private static void receiveProgress(String value) {
@@ -226,6 +245,7 @@ public final class ClientSelection {
 
     static void followPartySpawn(String spawn) {
         if (catalog == null || Minecraft.getInstance().player == null) return;
+        if (!selection.canSelect(spawn)) return;
         closeKits();
         finalReview = null;
         progress = "";

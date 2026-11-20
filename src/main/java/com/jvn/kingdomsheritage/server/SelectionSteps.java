@@ -95,10 +95,11 @@ public final class SelectionSteps {
         return step.partyPolicy().leaderDecides() || state.ready.contains(player.getUUID());
     }
 
-    private static void validateChoices(String spawn, String kit) {
+    private static void validateChoices(ServerPlayer player, String spawn, String kit) {
         var spawnId = SelectionLifecycle.parseChoice(spawn);
         var definition = spawnId == null ? null : HeritageCatalog.spawns().get(spawnId);
         if (!spawn.isEmpty() && definition == null) throw new IllegalArgumentException("The chosen homeland is unavailable");
+        if (definition != null) SpawnUsage.of(player).requireAvailable(definition, SelectionParty.size(player));
         var kitId = SelectionLifecycle.parseChoice(kit);
         var equipment = kitId == null ? null : HeritageCatalog.kits().get(kitId);
         if (!kit.isEmpty() && (definition == null || equipment == null || !definition.allows(equipment))) {
@@ -128,7 +129,7 @@ public final class SelectionSteps {
             return;
         }
         try {
-            validateChoices(request.spawn(), request.kit());
+            validateChoices(player, request.spawn(), request.kit());
             if (request.action() == HeritageNetwork.FlowAction.NAVIGATE) {
                 if (Objects.equals(session.spawn, request.spawn()) && Objects.equals(session.kit, request.kit())) return;
                 var from = session.spawn.equals(request.spawn()) ? ScreenStep.Placement.AFTER_KIT : ScreenStep.Placement.AFTER_SPAWN;

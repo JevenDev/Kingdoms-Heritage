@@ -40,6 +40,7 @@ final class SelectionSession {
     Map<ResourceLocation, JsonObject> decisions;
     long lastRequest = -100;
     long sentRevision = -1;
+    long sentUsage;
     private ServerPlayer player;
     private Phase phase;
     private Search search;

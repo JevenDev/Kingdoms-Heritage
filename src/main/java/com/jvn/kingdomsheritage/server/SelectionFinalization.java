@@ -41,6 +41,9 @@ final class SelectionFinalization {
     }
 
     static void apply(List<Member> members, SpawnResolver.Destination destination) {
+        var first = members.getFirst();
+        var usage = SpawnUsage.of(first.player());
+        usage.requireAvailable(first.spawn(), SelectionParty.size(first.player()));
         run(rollback -> {
             for (var member : members) {
                 var player = member.player();
@@ -94,6 +97,7 @@ final class SelectionFinalization {
                 }
                 restorePlayer(player, state);
             }
+            usage.consume(first.spawn(), members.size());
         });
         for (var member : members) SelectionSteps.complete(member.player(), member.decisions());
     }
