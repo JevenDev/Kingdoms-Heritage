@@ -237,7 +237,7 @@ function locationDocument(entry,namespace,{strict=true,resolveIntro,kits}) {
   document.kits=copy(kits);
   return document;
 }
-function previewFiles(state,catalog,exporting=true) {
+function previewFiles(state,catalog,exporting,dataMetadata) {
   const files=[],kitIds=new Map(),namespace=state.namespace??'',ranks=new Map(orderedKitIds(state,catalog).map((id,index)=>[id,index]));
   const add=(path,document,source)=>files.push(exporting?{path,content:source??JSON.stringify(document,null,2)+'\n'}:{path,document});
   for(const selected of state.kits.filter(entry=>entry.included)) {
@@ -257,7 +257,7 @@ function previewFiles(state,catalog,exporting=true) {
     add('data/'+namespace+'/heritage/spawns/'+entry.path+'.json',document);
   }
   add(selectionPath,selectionDocument(state));
-  add('pack.mcmeta',{pack:{pack_format:48,description:state.description}});
+  add('pack.mcmeta',dataMetadata);
   return files;
 }
 function importedFiles(files) {
@@ -364,7 +364,8 @@ function inspect(state,catalog,{exporting=false,resources=exporting}={}) {
   const originalDescription=state.packMetadata?.pack?.description;
   const descriptionChanged=state.description!==(typeof originalDescription==='string'?originalDescription:JSON.stringify(originalDescription));
   const metadata=(saved,format)=>{const result=copy(saved??{});result.pack={...result.pack,pack_format:format};if(!saved||descriptionChanged)result.pack.description=state.description;return result;};
-  add('pack.mcmeta',metadata(state.packMetadata,48));
+  const dataMetadata=metadata(state.packMetadata,48);
+  add('pack.mcmeta',dataMetadata);
   report('Imported datapack files',()=>{for(const file of importedFiles(state.importedFiles?.data))if(!paths.has(file.path)){
     const stockKit=stockKits.some(entry=>bundledKitPath(entry.resource)===file.path);
     const stockLocation=/^data\/kingdomsheritage\/heritage\/spawns\/(?:default|random|plains|village)\.json$/.test(file.path);
@@ -383,7 +384,7 @@ function inspect(state,catalog,{exporting=false,resources=exporting}={}) {
   const pictureCount=resourceFiles.length;
   report('Imported resource files',()=>{const paths=new Set(resourceFiles.map(file=>file.path));for(const file of resources?importedFiles(state.importedFiles?.resources):state.importedFiles?.resources??[])if(!paths.has(file.path)&&file.path!=='pack.mcmeta'){paths.add(file.path);resourceFiles.push(file);}});
   if(resourceFiles.length)resourceFiles.unshift({path:'pack.mcmeta',...(resources?{content:JSON.stringify(metadata(state.resourceMetadata,34),null,2)+'\n'}:{})});
-  return {files:errors.length?[]:files,resourceFiles:errors.length?[]:resourceFiles,pictureCount,previewFiles:errors.length?previewFiles(state,catalog,exporting):files.filter(file=>file.document||typeof file.content==='string'),errors,issues,warnings:[...new Set(warnings)],kitCount:count,locationCount:spawnIds.size};
+  return {files:errors.length?[]:files,resourceFiles:errors.length?[]:resourceFiles,pictureCount,previewFiles:errors.length?previewFiles(state,catalog,exporting,dataMetadata):files.filter(file=>file.document||typeof file.content==='string'),errors,issues,warnings:[...new Set(warnings)],kitCount:count,locationCount:spawnIds.size};
 }
 function build(state,catalog){return inspect(state,catalog,{exporting:true});}
 const api={copy,setBundledKits,bundledKits,bundledLocationIds,orderedKitIds,slug,fileId,resource,drafts,location,importSpawn,dimensionSuggestion,knownResource,validateSpawn,build,inspect,emptyKit,types,fields,destinationFields,usesPicture,pictureId,pictureBytes,selectionPath,kitPreview};

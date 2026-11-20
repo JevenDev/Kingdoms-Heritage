@@ -30,7 +30,7 @@ function create(config){
     status.textContent=pending.size?pending.size+' file'+(pending.size===1?' has':'s have')+' unapplied edits.':'';feedback();
   });
   function errorMessage(error){const location=code.setError(error);field.setAttribute('aria-invalid','true');status.textContent=(location?'Line '+location.line+', column '+location.column+': ':'')+error.message;}
-  $('format-pack-json').addEventListener('click',()=>{try{field.value=JSON.stringify(JSON.parse(field.value),null,2)+'\n';field.dispatchEvent(new Event('input'));}catch(error){errorMessage(error);}});
+  $('format-pack-json').addEventListener('click',()=>{try{field.value=HeritagePackJson.format(field.value);field.dispatchEvent(new Event('input'));}catch(error){errorMessage(error);}});
   cancel.addEventListener('click',()=>{if(!busy)dialog.close();});
   dialog.addEventListener('cancel',event=>{if(busy)event.preventDefault();});
   apply.addEventListener('click',async()=>{

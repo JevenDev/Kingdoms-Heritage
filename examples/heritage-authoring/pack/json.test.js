@@ -16,6 +16,63 @@ const read=(value,path,group='data')=>JSON.parse(J.files(value).find(file=>file.
 const apply=(value,path,document,group='data')=>J.apply(value,group,path,JSON.stringify(document),()=>'new-intro');
 const base64=value=>Buffer.from(value).toString('base64');
 
+test('a fresh pack can edit its location while keeping the built-in empty kit',()=>{
+  const value=workspace(),location=value.pack.locations[0];
+  value.libraries.kits.kits=[];
+  value.pack.kits=[{id:P.emptyKit.id,path:'empty_handed',included:true}];
+  location.kitMode='selected';location.kits=[P.emptyKit.id];
+  const next=apply(value,spawnPath,{...read(value,spawnPath),title:'Camp'});
+  assert.equal(read(next,spawnPath).title,'Camp');
+  assert.deepEqual(read(next,spawnPath).kits,['story:empty_handed']);
+  const file=J.files(next).find(file=>file.path.endsWith('/kits/empty_handed.json'));
+  assert.deepEqual(JSON.parse(file.content),P.emptyKit.document);
+  assert.ok(file.reason);
+  assert.throws(()=>J.apply(next,'data',file.path,file.content),/built-in/i);
+});
+
+test('title edits preserve all-kit assignments when new kits are included',()=>{
+  const value=workspace(),next=apply(value,spawnPath,{...read(value,spawnPath),title:'Camp'});
+  const extra=P.copy(next.libraries.kits.kits[0]);extra.id='second';
+  next.libraries.kits.kits.push(extra);next.pack.kits.push({id:'second',path:'second',included:true});
+  assert.equal(next.pack.locations[0].kitMode,'all');
+  assert.deepEqual(read(next,spawnPath).kits,['story:traveler','story:second']);
+  const limited=apply(next,spawnPath,{...read(next,spawnPath),kits:['story:second']});
+  assert.deepEqual(read(limited,spawnPath).kits,['story:second']);
+});
+
+test('metadata edits during an unrelated error preserve pack filters and text components',()=>{
+  const value=workspace(),filter={block:[{namespace:'hidden'}]},description={text:'Original',color:'gold'};
+  value.pack.packMetadata={pack:{pack_format:48,description},filter};
+  value.pack.description=JSON.stringify(description);value.pack.guiScale=9;
+  const shown=read(value,'pack.mcmeta');
+  assert.deepEqual(shown,value.pack.packMetadata);
+  shown.pack.description='Revised';
+  const edited=apply(value,'pack.mcmeta',shown);
+  const repaired=apply(edited,P.selectionPath,{gui_scale:2});
+  assert.deepEqual(read(repaired,'pack.mcmeta'),{pack:{pack_format:48,description:'Revised'},filter});
+});
+
+test('formatting and applying kit JSON keeps the exact 64-bit purse amount',()=>{
+  const value=workspace();
+  const source='{"title":"Coin purse","items":[],"starting_resources":{"numismaticoverhaul:purse":9007199254740993}}';
+  const nodes=new Map(),document={getElementById(id){
+    if(!nodes.has(id))nodes.set(id,{addEventListener(event,handler){this[event]=handler;},dispatchEvent(){}});
+    return nodes.get(id);
+  }};
+  const context={document,HeritageJsonEditor:class{},HeritagePackJson:J,Event};
+  require('node:vm').runInNewContext(require('node:fs').readFileSync(require.resolve('./json-editor.js'),'utf8'),context);
+  context.HeritagePackJsonEditor.create({});
+  const field=document.getElementById('pack-json-source');
+  field.value=source;document.getElementById('format-pack-json').click();
+  const formatted=field.value;
+  assert.match(formatted,/\n  "title": "Coin purse",\n/);
+  const next=J.apply(value,'data',kitPath,formatted);
+  const purse={'gold':900719925474,'silver':9,'bronze':93};
+  assert.deepEqual(read(next,kitPath).starting_resources['numismaticoverhaul:purse'],purse);
+  assert.deepEqual(next.libraries.kits.kits[0].state.validDocument.starting_resources['numismaticoverhaul:purse'],purse);
+  assert.throws(()=>J.format('{'),SyntaxError);
+});
+
 test('pack JSON edits update kit drafts and undo as one workspace change',()=>{
   const value=workspace(),before=JSON.stringify(value),history=new E.History(value.pack,value.libraries);
   const next=apply(value,kitPath,{...kit,title:'Sorcerer',items:[{index:7,ignore_stack_limit:true,item:{id:'minecraft:mushroom_stew',count:3}}]});

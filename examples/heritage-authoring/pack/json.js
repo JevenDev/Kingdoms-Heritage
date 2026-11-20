@@ -11,7 +11,14 @@ const decode=value=>new TextDecoder('utf-8',{fatal:true}).decode(Uint8Array.from
 function encode(value){const bytes=new TextEncoder().encode(value);let text='';for(let at=0;at<bytes.length;at+=32768)text+=String.fromCharCode(...bytes.subarray(at,at+32768));return btoa(text);}
 function catalog(libraries){
   const validators={kit:source=>K.read(source),intro:source=>I.readJson(source)};
-  return Object.fromEntries(['kits','intros'].map(kind=>{const result=P.drafts(libraries[kind],kind,validators);if(result.error)throw new Error(result.error);return [kind,result.entries];}));
+  const result={};
+  for(const kind of ['kits','intros']){
+    const drafts=P.drafts(libraries[kind],kind,validators);
+    if(drafts.error)throw new Error(drafts.error);
+    result[kind]=drafts.entries;
+  }
+  result.kits.unshift(P.copy(P.emptyKit));
+  return result;
 }
 function files(value){
   const output=P.build(value.pack,catalog(value.libraries)),result=[];
@@ -23,6 +30,9 @@ function files(value){
   return result.map(file=>{
     const match=/^data\/([^/]+)\/heritage\/(kits|spawns)\/(.+)\.json$/.exec(file.path),pack=value.pack;
     const custom=match?.[1]===pack.namespace&&(match[2]==='kits'?pack.kits.some(entry=>entry.path===match[3]):pack.locations.some(entry=>entry.path===match[3]));
+    if(file.group==='data'&&custom&&match[2]==='kits'&&pack.kits.some(entry=>entry.id===P.emptyKit.id&&entry.path===match[3])){
+      return {...file,reason:'The built-in Empty-handed kit is read-only. Duplicate it to edit its contents.'};
+    }
     const reason=file.group==='data'&&match&&!custom&&JSON.parse(file.content)?.enabled===false?'This file disables bundled content. Change the bundled content settings in Pack settings.':'';
     return {...file,reason};
   });
@@ -60,25 +70,28 @@ function apply(value,group,path,source,createId=()=>crypto.randomUUID()){
     const location=custom&&match[2]==='spawns'?pack.locations.find(entry=>entry.path===match[3]):null;
     const bundledKit=match&&match[2]==='kits'&&P.bundledKits(pack).some(entry=>entry.resource===resource);
     if(kit||bundledKit){
-      K.read(source);if(document.enabled===false)throw new Error('Remove this kit from the pack using the content controls.');
+      const parsed=K.read(source).document;if(parsed.enabled===false)throw new Error('Remove this kit from the pack using the content controls.');
       if(pack.kitOrder&&!equal(document.order,original?.order))throw new Error('This pack uses a custom kit order. Reorder its kits in the content list.');
       if(kit){
         const draft=next.libraries.kits.kits.find(entry=>entry.id===kit.id);
         if(!draft)throw new Error('This kit draft is missing.');
         if(draft.state.cursor||draft.state.drafts?.length)throw new Error('Place any held item and apply or revert pending item edits in the kit editor first.');
-        Object.assign(draft.state,{source,document:P.copy(document),validDocument:P.copy(document),error:null,loreSources:[]});changed('kits',kit.id);
-      }else{(pack.bundledKits??={})[resource]=document;}
+        Object.assign(draft.state,{source,document:parsed,validDocument:P.copy(parsed),error:null,loreSources:[]});changed('kits',kit.id);
+      }else{(pack.bundledKits??={})[resource]=parsed;}
     }else if(location){
       P.validateSpawn(document,pack.allowCustomTargets===true);
       const selectors=document.kits??[];
       if(!Array.isArray(selectors)||selectors.some(selector=>typeof selector!=='string'))throw new Error('kits must be a list of kit IDs or #tags.');
-      const kits=[...pack.kits.filter(entry=>entry.included).map(entry=>({id:entry.id,resource:pack.namespace+':'+entry.path,document:before.kits.find(draft=>draft.id===entry.id)?.document})),...P.bundledKits(pack)];
-      const selected=[];
-      for(const selector of selectors){
-        P.resource(selector,'Kit',true);
-        const matches=kits.filter(kit=>selector.startsWith('#')?(kit.document?.tags??[]).some(tag=>K.normalize(tag)===K.normalize(selector.slice(1))):kit.resource===K.normalize(selector));
-        if(!matches.length)throw new Error('Include the referenced kit or tag first: '+selector);
-        for(const kit of matches)if(!selected.includes(kit.id))selected.push(kit.id);
+      if(!equal(selectors,original?.kits??[])){
+        const kits=[...pack.kits.filter(entry=>entry.included).map(entry=>({id:entry.id,resource:pack.namespace+':'+entry.path,document:before.kits.find(draft=>draft.id===entry.id)?.document})),...P.bundledKits(pack)];
+        const selected=[];
+        for(const selector of selectors){
+          P.resource(selector,'Kit',true);
+          const matches=kits.filter(kit=>selector.startsWith('#')?(kit.document?.tags??[]).some(tag=>K.normalize(tag)===K.normalize(selector.slice(1))):kit.resource===K.normalize(selector));
+          if(!matches.length)throw new Error('Include the referenced kit or tag first: '+selector);
+          for(const kit of matches)if(!selected.includes(kit.id))selected.push(kit.id);
+        }
+        location.kitMode=selectors.length?'selected':'all';location.kits=selected;location.importedKitSelectors=P.copy(selectors);
       }
       location.intro=intro(document.intro,location.intro,(document.title??location.path)+' intro');
       location.destinations=(document.pool??[]).map((destination,index)=>{
@@ -88,7 +101,6 @@ function apply(value,group,path,source,createId=()=>crypto.randomUUID()){
       });
       if(!equal(document.image,original?.image))location.imageMode='manual';
       location.document=P.copy(document);location.fields=Object.fromEntries(P.fields.filter(key=>Object.hasOwn(document,key)).map(key=>[key,document[key]]));location.fields.type=document.type.toLowerCase();
-      location.kitMode=selectors.length?'selected':'all';location.kits=selected;location.importedKitSelectors=P.copy(selectors);
     }else if(match&&match[2]==='spawns'&&Object.hasOwn(pack.bundledLocations??{},resource)){
       P.validateSpawn(document,pack.allowCustomTargets===true);
       pack.bundledLocations[resource]=document;
@@ -104,5 +116,21 @@ function apply(value,group,path,source,createId=()=>crypto.randomUUID()){
   if(issue||introduced.length)throw Object.assign(new Error(issue?.message??introduced.join(' ')),issue?{path:issue.path}:{});
   return {...next,drafts};
 }
-const api={files,apply,catalog};if(typeof module!=='undefined')module.exports=api;else globalThis.HeritagePackJson=api;
+function format(source){
+  JSON.parse(source);
+  const tokens=source.match(/"(?:\\.|[^"\\])*"|[{}\[\],:]|[^\s{}\[\],:"]+/g);
+  let result='',depth=0,previous='';
+  const newline=()=>'\n'+'  '.repeat(depth);
+  for(const token of tokens){
+    if(token==='}'||token===']'){
+      depth--;
+      if(previous!=='{'&&previous!=='[')result+=newline();
+    }else if(previous==='{'||previous==='['||previous===',')result+=newline();
+    result+=token===':'?': ':token;
+    if(token==='{'||token==='[')depth++;
+    previous=token;
+  }
+  return result+'\n';
+}
+const api={files,apply,catalog,format};if(typeof module!=='undefined')module.exports=api;else globalThis.HeritagePackJson=api;
 })();
