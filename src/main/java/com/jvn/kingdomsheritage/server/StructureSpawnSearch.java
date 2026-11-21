@@ -5,6 +5,8 @@ import com.jvn.kingdomsheritage.data.HeritageException;
 import com.jvn.kingdomsheritage.data.SpawnDefinition;
 import com.jvn.kingdomsheritage.server.StructureSearchCursor.Candidate;
 import com.jvn.kingdomsheritage.server.StructureSearchCursor.Group;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
@@ -19,6 +21,9 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.LevelHeightAccessor;
 import net.minecraft.world.level.chunk.ChunkGeneratorStructureState;
 import net.minecraft.world.level.chunk.status.ChunkStatus;
+import net.minecraft.world.level.chunk.storage.ChunkScanAccess;
+import net.minecraft.world.level.chunk.storage.IOWorker;
+import net.minecraft.world.level.dimension.DimensionType;
 import net.minecraft.world.level.levelgen.structure.Structure;
 import net.minecraft.world.level.levelgen.structure.StructureCheck;
 import net.minecraft.world.level.levelgen.structure.StructureCheckResult;
@@ -26,6 +31,7 @@ import net.minecraft.world.level.levelgen.structure.StructureStart;
 import net.minecraft.world.level.levelgen.structure.placement.ConcentricRingsStructurePlacement;
 import net.minecraft.world.level.levelgen.structure.placement.RandomSpreadStructurePlacement;
 import net.minecraft.world.level.levelgen.structure.placement.StructurePlacement;
+import net.minecraft.world.level.storage.LevelResource;
 
 final class StructureSpawnSearch implements AutoCloseable {
     private record Probe(Candidate candidate, boolean loaded, boolean present) {}
@@ -43,6 +49,9 @@ final class StructureSpawnSearch implements AutoCloseable {
     private Iterator<Probe> candidateBatch = java.util.Collections.emptyIterator();
     private CompletableFuture<Candidate> probing;
     private Candidate pending;
+    private final int candidateLimit = HeritageConfig.STRUCTURE_SEARCH_CANDIDATES.get();
+    private int candidatesQueued;
+    private boolean limited;
     private boolean exhausted;
     private boolean rejected;
     private volatile boolean closed;
@@ -58,7 +67,10 @@ final class StructureSpawnSearch implements AutoCloseable {
         int initialRadius = Math.min(radius, HeritageConfig.SEARCH_RADIUS.get());
         var source = level.getChunkSource();
         var generator = source.getGenerator();
-        presenceChecks = () -> new StructureCheck(source.chunkScanner(), level.registryAccess(), level.getStructureManager(),
+        var directory = DimensionType.getStorageFolder(level.dimension(), level.getServer().getWorldPath(LevelResource.ROOT));
+        var scanner = source.chunkScanner();
+        var storage = scanner instanceof IOWorker ? existingRegions(directory.resolve("region"), scanner) : scanner;
+        presenceChecks = () -> new StructureCheck(storage, level.registryAccess(), level.getStructureManager(),
                 level.dimension(), generator, source.randomState(), LevelHeightAccessor.create(level.getMinBuildHeight(), level.getHeight()),
                 generator.getBiomeSource(), level.getSeed(), level.getServer().getFixerUpper());
         state = source.getGeneratorState();
@@ -95,6 +107,15 @@ final class StructureSpawnSearch implements AutoCloseable {
         }, WORKERS);
     }
 
+    private static ChunkScanAccess existingRegions(Path directory, ChunkScanAccess storage) {
+        return (pos, visitor) -> {
+            // opening a missing anvil region for a speculative read can create an empty file
+            var region = directory.resolve("r." + pos.getRegionX() + "." + pos.getRegionZ() + ".mca");
+            if (Files.notExists(region)) return CompletableFuture.completedFuture(null);
+            return storage.scanChunk(pos, visitor);
+        };
+    }
+
     StructureStart result() { return result; }
 
     void next() {
@@ -113,6 +134,7 @@ final class StructureSpawnSearch implements AutoCloseable {
             if (pending == null) {
                 if (probing == null) {
                     if (!candidateBatch.hasNext()) {
+                        if (limited) throw new HeritageException("structure_search_limit", "Checked %s candidate placements without finding a safe structure destination. Choose another location", candidateLimit);
                         if (exhausted) {
                             if (rejected) throw new HeritageException("structure_room", "No safe standing room found inside this structure within the search limit");
                             throw new HeritageException("not_found", "No matching location found within the configured search radius");
@@ -166,6 +188,11 @@ final class StructureSpawnSearch implements AutoCloseable {
             var pos = candidate.chunk();
             var location = candidate.group().placement().getLocatePos(pos);
             if (cursor.includes(candidate) && level.getWorldBorder().isWithinBounds(location)) {
+                if (candidatesQueued == candidateLimit) {
+                    limited = true;
+                    break;
+                }
+                candidatesQueued++;
                 var holder = level.getChunkSource().chunkMap.getVisibleChunkIfPresent(pos.toLong());
                 var loaded = holder == null ? null : holder.getChunkIfPresent(ChunkStatus.STRUCTURE_STARTS);
                 boolean present = loaded != null && candidate.group().structures().stream().anyMatch(target -> {

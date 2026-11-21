@@ -8,6 +8,7 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.Registries;
@@ -45,6 +46,7 @@ public final class SpawnResolver {
         private final BlockPos origin;
         private final CacheKey cacheKey;
         private final SpawnChunks chunks;
+        private final long structureDeadline;
         private Iterator<BlockPos> columns;
         private BlockPos pendingColumn;
         private Located cached;
@@ -63,6 +65,8 @@ public final class SpawnResolver {
             level = player.server.getLevel(ResourceKey.create(Registries.DIMENSION, this.definition.dimension()));
             if (level == null) throw new HeritageException("dimension", "Dimension is unavailable: %s", this.definition.dimension().toString());
             chunks = new SpawnChunks(level);
+            structureDeadline = this.definition.kind() == SpawnDefinition.Kind.STRUCTURE
+                    ? System.nanoTime() + TimeUnit.SECONDS.toNanos(HeritageConfig.STRUCTURE_SEARCH_TIMEOUT.get()) : 0;
             origin = level.getSharedSpawnPos();
             cacheKey = new CacheKey(level, this.definition.kind(), this.definition.target(), this.definition.targetTag(),
                     this.definition.piece(), origin, searchRadius(this.definition));
@@ -96,6 +100,10 @@ public final class SpawnResolver {
             if (destination != null) return true;
             long start = System.nanoTime();
             try {
+                if (definition.kind() == SpawnDefinition.Kind.STRUCTURE && start - structureDeadline >= 0) {
+                    close();
+                    throw new HeritageException("structure_search_timeout", "The structure search timed out before a safe destination was ready. Try again or choose another location");
+                }
                 if (!located) {
                     if (!locate(start + 4000000)) return false;
                     located = true;
