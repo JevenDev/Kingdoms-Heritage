@@ -1,11 +1,16 @@
 package com.jvn.kingdomsheritage.client;
 
 import com.google.gson.JsonObject;
+import com.google.gson.JsonParseException;
+import com.jvn.kingdomsheritage.KingdomsHeritage;
 import com.jvn.kingdomsheritage.data.IntroDefinition;
 import com.jvn.kingdomsheritage.data.DialoguePacing;
 import com.jvn.toucanlib.client.ToucanTextRenderer;
 import com.jvn.kingdomsheritage.network.HeritageNetwork;
 import com.jvn.toucanlib.client.ToucanGlyphLayout;
+import com.mojang.blaze3d.platform.InputConstants;
+import com.mojang.blaze3d.vertex.PoseStack;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -15,20 +20,29 @@ import net.minecraft.client.gui.screens.DeathScreen;
 import net.minecraft.client.gui.screens.DisconnectedScreen;
 import net.minecraft.client.gui.screens.PauseScreen;
 import net.minecraft.client.gui.screens.ReceivingLevelScreen;
+import net.minecraft.client.model.PlayerModel;
+import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.resources.sounds.SimpleSoundInstance;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.util.Mth;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.client.event.InputEvent;
 import net.neoforged.neoforge.client.event.ScreenEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.network.PacketDistributor;
+import org.lwjgl.glfw.GLFW;
 
 public final class SpawnIntroOverlay {
     private static final SoundEvent BLIP = SoundEvent.createVariableRangeEvent(
             ResourceLocation.fromNamespaceAndPath("kingdomsheritage", "dialogue"));
     private static IntroDefinition intro;
     private static UUID token;
+    private static CinematicScene scene;
+    private static InputConstants.Key pressedContinueKey;
     private static ResourceLocation dimension;
     private static List<ToucanGlyphLayout.Glyph> text = List.of();
     private static List<ToucanGlyphLayout.Glyph> subtitle = List.of();
@@ -52,6 +66,8 @@ public final class SpawnIntroOverlay {
         NeoForge.EVENT_BUS.addListener(SpawnIntroOverlay::screen);
         NeoForge.EVENT_BUS.addListener(SpawnIntroOverlay::interaction);
         NeoForge.EVENT_BUS.addListener(SpawnIntroOverlay::scroll);
+        NeoForge.EVENT_BUS.addListener(SpawnIntroOverlay::sceneKey);
+        NeoForge.EVENT_BUS.addListener(SpawnIntroOverlay::sceneMouse);
         NeoForge.EVENT_BUS.addListener(SpawnIntroOverlay::fov);
     }
 
@@ -59,6 +75,13 @@ public final class SpawnIntroOverlay {
         clear();
         standalone = message.has("cinematic");
         intro = IntroDefinition.parse(message.getAsJsonObject("intro"));
+        if (intro.scene() != null) {
+            try {
+                scene = new CinematicScene(intro.scene(), SceneClip.load(Minecraft.getInstance().getResourceManager(), intro.scene()));
+            } catch (IOException | JsonParseException | IllegalArgumentException error) {
+                KingdomsHeritage.LOGGER.warn("Could not load Heritage scene {}: {}", intro.scene().asset(), error.getMessage());
+            }
+        }
         token = UUID.fromString(message.get("token").getAsString());
         barSlant = IntroCinematicBars.sampleSlant(token, intro.barStyle());
         JsonObject locations = message.getAsJsonObject("locations");
@@ -89,6 +112,7 @@ public final class SpawnIntroOverlay {
 
     public static boolean active() { return intro != null; }
     static boolean hidesHud() {
+        if (sceneActive()) return true;
         if (!active() || !intro.cinematicBars() || !intro.hideHudDuringBars()) return false;
         var timing = intro.timeline();
         return timing == null || age >= timing.barStartTicks()
@@ -104,32 +128,42 @@ public final class SpawnIntroOverlay {
             return;
         }
         if (!minecraft.level.dimension().location().equals(dimension)) {
-            if (ready || standalone) finish();
+            if (ready || standalone) finish(false);
             return;
         }
         if (minecraft.isPaused() || minecraft.screen instanceof ReceivingLevelScreen
                 || !ready && !standalone && !SelectionTransition.terrainReady()) return;
-        if (!ready) PacketDistributor.sendToServer(new HeritageNetwork.IntroReady(token, intro.durationTicks(revealTicks)));
-        ready = true;
+        int duration = scene == null ? intro.overlayDurationTicks(revealTicks) : intro.durationTicks(revealTicks);
+        if (!ready) {
+            if (scene != null) scene.start(minecraft);
+            PacketDistributor.sendToServer(new HeritageNetwork.IntroReady(token, duration));
+            ready = true;
+        }
         SelectionTransition.introReady();
-        if (++age >= intro.durationTicks(revealTicks)) {
-            finish();
+        if (scene != null && scene.waiting()) return;
+        if (++age >= duration) {
+            finish(true);
             return;
         }
+        if (scene != null && scene.reachWait(age)) PacketDistributor.sendToServer(new HeritageNetwork.IntroWait(token, true));
         if (age >= intro.textStartTicks()) blip(minecraft, visible(age - intro.textStartTicks()));
     }
 
     static void cancelArrival() {
-        if (active() && !standalone) finish();
+        if (active() && !standalone) finish(false);
     }
 
-    private static void finish() {
+    private static void finish(boolean completed) {
         UUID finished = token;
-        clear();
+        clear(completed);
         if (Minecraft.getInstance().getConnection() != null) PacketDistributor.sendToServer(new HeritageNetwork.FinishIntro(finished));
     }
 
-    static void clear() {
+    static void clear() { clear(false); }
+
+    private static void clear(boolean completed) {
+        if (scene != null) scene.clear(Minecraft.getInstance(), completed);
+        scene = null;
         intro = null;
         token = null;
         dimension = null;
@@ -165,7 +199,37 @@ public final class SpawnIntroOverlay {
     }
 
     private static float elapsed(float partialTick) {
-        return ready ? age + (Minecraft.getInstance().isPaused() ? 0 : partialTick) : 0;
+        if (!ready) return 0;
+        float partial = Minecraft.getInstance().isPaused() ? 0 : partialTick;
+        return scene == null ? age + partial : scene.elapsed(age, partial);
+    }
+
+    public record CameraPose(Vec3 position, float yaw, float pitch, float roll) {}
+
+    public static CameraPose sceneCamera(Entity entity, Vec3 eye, float yaw, float pitch, float roll, float partialTick) {
+        if (!sceneActive() || entity != Minecraft.getInstance().player) return null;
+        return scene.camera((LocalPlayer) entity, eye, yaw, pitch, roll, elapsed(partialTick));
+    }
+
+    public static boolean renderSceneArms(float partialTick, PoseStack poses, MultiBufferSource.BufferSource buffer,
+                                          LocalPlayer player, int light) {
+        if (!sceneActive() || !scene.firstPerson() || Minecraft.getInstance().getCameraEntity() != player) return false;
+        scene.renderArms(elapsed(partialTick), poses, buffer, player, light);
+        return true;
+    }
+
+    public static boolean animatesPlayerModel(Entity entity) {
+        return sceneActive() && !scene.firstPerson() && Minecraft.getInstance().player == entity;
+    }
+
+    public static void poseScenePlayer(PlayerModel<?> model, float partialTick, List<Runnable> restore) {
+        scene.posePlayer(model, elapsed(partialTick), restore);
+    }
+
+    private static boolean sceneActive() {
+        var level = Minecraft.getInstance().level;
+        return ready && scene != null && age < intro.scene().durationTicks() && level != null
+                && level.dimension().location().equals(dimension);
     }
 
     static float worldReveal(float ticks) {
@@ -195,6 +259,12 @@ public final class SpawnIntroOverlay {
                     ? IntroCinematicBars.visibility(elapsed - intro.blackHoldTicks(), intro.presentationTicks(revealTicks), intro.barTransitionTicks())
                     : IntroCinematicBars.visibility(elapsed - timing.barStartTicks(), timing.barEnterTicks(), timing.barHoldTicks(), timing.barExitTicks());
             IntroCinematicBars.render(graphics, width, height, visibility, barSlant, intro.barHeight());
+        }
+        if (scene != null && scene.waiting()) {
+            var binding = minecraft.options.keyInventory;
+            var key = binding.isUnbound() ? Component.literal("E") : binding.getTranslatedKeyMessage();
+            graphics.drawCenteredString(minecraft.font, Component.translatable("screen.kingdomsheritage.scene_continue", key),
+                    width / 2, Math.round(height * 0.79F), 0xFFFFFF);
         }
         float ticks = elapsed - intro.textStartTicks();
         if (ticks < 0) return;
@@ -227,7 +297,7 @@ public final class SpawnIntroOverlay {
     private static void screen(ScreenEvent.Opening event) {
         if (!active()) return;
         if (event.getNewScreen() instanceof DeathScreen || event.getNewScreen() instanceof DisconnectedScreen) {
-            finish();
+            finish(false);
         } else if (Minecraft.getInstance().screen == null && event.getNewScreen() != null
                 && !(event.getNewScreen() instanceof PauseScreen) && !(event.getNewScreen() instanceof ReceivingLevelScreen)
                 && !(event.getNewScreen() instanceof SelectionTransition.ArrivalScreen)) {
@@ -242,6 +312,42 @@ public final class SpawnIntroOverlay {
             event.setCanceled(true);
             event.setSwingHand(false);
         }
+    }
+
+    private static void sceneKey(InputEvent.Key event) {
+        var key = InputConstants.getKey(event.getKey(), event.getScanCode());
+        var binding = Minecraft.getInstance().options.keyInventory;
+        if (key.equals(pressedContinueKey)) {
+            if (event.getAction() == GLFW.GLFW_REPEAT) {
+                binding.consumeClick();
+                return;
+            }
+            pressedContinueKey = null;
+        }
+        if (awaitingSceneInput() && event.getAction() == GLFW.GLFW_PRESS
+                && (binding.matches(event.getKey(), event.getScanCode()) || binding.isUnbound() && event.getKey() == GLFW.GLFW_KEY_E)) {
+            pressedContinueKey = key;
+            binding.consumeClick();
+            resumeScene();
+        }
+    }
+
+    private static void sceneMouse(InputEvent.MouseButton.Pre event) {
+        if (awaitingSceneInput() && event.getAction() == GLFW.GLFW_PRESS
+                && Minecraft.getInstance().options.keyInventory.matchesMouse(event.getButton())) {
+            resumeScene();
+            event.setCanceled(true);
+        }
+    }
+
+    private static boolean awaitingSceneInput() {
+        Minecraft minecraft = Minecraft.getInstance();
+        return sceneActive() && scene.waiting() && minecraft.screen == null && minecraft.getOverlay() == null;
+    }
+
+    private static void resumeScene() {
+        scene.resume();
+        PacketDistributor.sendToServer(new HeritageNetwork.IntroWait(token, false));
     }
 
     private static void scroll(InputEvent.MouseScrollingEvent event) {

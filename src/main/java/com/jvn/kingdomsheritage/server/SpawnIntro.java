@@ -21,7 +21,25 @@ import net.neoforged.neoforge.network.PacketDistributor;
 
 public final class SpawnIntro {
     private record Hold(UUID token, Vec3 position, ResourceLocation dimension, float yaw, float pitch,
-                        boolean noGravity, long deadline, int maximumDuration, boolean ready, boolean locked, boolean standalone) {}
+                        boolean noGravity, Playback playback, boolean locked, boolean standalone) {}
+
+    private static final class Playback {
+        private final int maximumDuration;
+        private int waitsRemaining;
+        private long deadline;
+        private long pausedAt = -1;
+        private boolean ready;
+
+        private Playback(IntroDefinition intro, long now) {
+            maximumDuration = intro.maximumDurationTicks();
+            deadline = now + intro.durationTicks() + 600;
+            waitsRemaining = intro.scene() == null ? 0 : intro.scene().waitAtTicks().size();
+        }
+
+        private boolean expired(long now) {
+            return pausedAt < 0 && now >= deadline;
+        }
+    }
     private static final String GRAVITY_KEY = "kingdomsheritage_intro_no_gravity";
     private static final Map<UUID, Hold> HOLDS = new HashMap<>();
 
@@ -112,8 +130,7 @@ public final class SpawnIntro {
             boolean locked = intro.control() == IntroDefinition.Control.AFTER_TITLE;
             HOLDS.put(player.getUUID(), new Hold(UUID.fromString(message.get("token").getAsString()),
                     player.position(), player.level().dimension().location(), player.getYRot(), player.getXRot(),
-                    player.isNoGravity(), player.server.overworld().getGameTime() + intro.durationTicks() + 600,
-                    intro.maximumDurationTicks(), false, locked, message.has("cinematic")));
+                    player.isNoGravity(), new Playback(intro, player.server.overworld().getGameTime()), locked, message.has("cinematic")));
             if (locked) {
                 player.getPersistentData().putBoolean(GRAVITY_KEY, player.isNoGravity());
                 player.setNoGravity(true);
@@ -125,9 +142,25 @@ public final class SpawnIntro {
 
     public static void ready(ServerPlayer player, UUID token, int durationTicks) {
         var hold = HOLDS.get(player.getUUID());
-        if (hold == null || hold.ready || !hold.token.equals(token) || durationTicks < 0 || durationTicks > hold.maximumDuration) return;
-        HOLDS.put(player.getUUID(), new Hold(hold.token, hold.position, hold.dimension, hold.yaw, hold.pitch, hold.noGravity,
-                player.server.overworld().getGameTime() + durationTicks + 600, hold.maximumDuration, true, hold.locked, hold.standalone));
+        if (hold == null || !hold.token.equals(token)) return;
+        Playback playback = hold.playback;
+        if (playback.ready || durationTicks < 0 || durationTicks > playback.maximumDuration) return;
+        playback.ready = true;
+        playback.deadline = player.server.overworld().getGameTime() + durationTicks + 600;
+    }
+
+    public static void waiting(ServerPlayer player, UUID token, boolean waiting) {
+        Hold hold = HOLDS.get(player.getUUID());
+        if (hold == null || !hold.token.equals(token) || !hold.playback.ready) return;
+        Playback playback = hold.playback;
+        long now = player.server.overworld().getGameTime();
+        if (waiting && playback.pausedAt < 0 && playback.waitsRemaining > 0 && !playback.expired(now)) {
+            playback.pausedAt = now;
+            playback.waitsRemaining--;
+        } else if (!waiting && playback.pausedAt >= 0) {
+            playback.deadline += now - playback.pausedAt;
+            playback.pausedAt = -1;
+        }
     }
 
     public static boolean locked(Player player) {
@@ -139,7 +172,7 @@ public final class SpawnIntro {
         Hold hold = HOLDS.get(player.getUUID());
         if (hold == null) return;
         if (!player.isAlive() || !hold.dimension.equals(player.level().dimension().location())
-                || player.server.overworld().getGameTime() >= hold.deadline) {
+                || hold.playback.expired(player.server.overworld().getGameTime())) {
             release(player);
             PacketDistributor.sendToPlayer(player, new HeritageNetwork.Catalog(hold.standalone ? "{\"cinematic\":true}" : "{\"end_arrival\":true}"));
             return;
