@@ -189,7 +189,10 @@ public final class ClientSelection {
     }
 
     private static void hideHud(net.neoforged.neoforge.client.event.RenderGuiEvent.Pre event) {
-        if (catalog != null || SelectionTransition.joining() || SpawnIntroOverlay.hidesHud()) {
+        boolean introHidden = SpawnIntroOverlay.hidesHud();
+        boolean hidden = introHidden || catalog != null || SelectionTransition.joining();
+        IntroHud.visibility(introHidden, hidden);
+        if (hidden) {
             event.setCanceled(true);
             renderIntro(event.getGuiGraphics(), event.getPartialTick().getGameTimeDeltaPartialTick(false));
         }
@@ -460,6 +463,7 @@ public final class ClientSelection {
         // starting an integrated server also fires a logout without a connection
         if (event.getConnection() != null || !SelectionTransition.joining()) SelectionTransition.clear();
         SpawnIntroOverlay.clear();
+        IntroHud.clear();
         clearSelection();
         SelectionGuiScale.clear();
     }
@@ -469,6 +473,7 @@ public final class ClientSelection {
         SelectionMusic.stop();
         SelectionTransition.clear();
         SpawnIntroOverlay.clear();
+        IntroHud.clear();
         Minecraft minecraft = Minecraft.getInstance();
         clearSelection();
         SelectionGuiScale.clear();

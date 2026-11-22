@@ -18,6 +18,7 @@
     "KitPreviewOwoLayers",
     "IntroArms",
     "IntroCamera",
+    "IntroHudFade",
     "IntroPlayerPose",
     "IntroMouseGuard",
     "IntroKeyGuard",

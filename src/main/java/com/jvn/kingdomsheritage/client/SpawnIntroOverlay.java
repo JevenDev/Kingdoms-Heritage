@@ -113,7 +113,7 @@ public final class SpawnIntroOverlay {
 
     public static boolean active() { return intro != null; }
     static boolean hidesHud() {
-        if (sceneActive()) return true;
+        if (sceneReady()) return true;
         if (!active() || !intro.cinematicBars() || !intro.hideHudDuringBars()) return false;
         var timing = intro.timeline();
         return timing == null || age >= timing.barStartTicks()
