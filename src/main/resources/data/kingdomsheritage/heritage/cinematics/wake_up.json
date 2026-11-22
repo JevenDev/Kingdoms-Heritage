@@ -10,6 +10,7 @@
     "animation_file": "kingdomsheritage:wake_up",
     "clip": "animation.heritage.wake_up",
     "duration_ticks": 100,
+    "smooth_camera_return": true,
     "wait_at_ticks": [48]
   }
 }

@@ -11,7 +11,8 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.GsonHelper;
 
 public record IntroScene(ResourceLocation animationFile, String clip, int durationTicks, List<Integer> waitAtTicks,
-                         Perspective perspective, Perspective exitPerspective) {
+                         Perspective perspective, Perspective exitPerspective, boolean smoothCameraReturn) {
+    private static final int CAMERA_RETURN_TICKS = 12;
     private static final int MAX_WAITS = 16;
 
     public enum Perspective {
@@ -27,6 +28,11 @@ public record IntroScene(ResourceLocation animationFile, String clip, int durati
                 throw new IllegalArgumentException("Unknown scene " + field + " " + value, error);
             }
         }
+    }
+
+    public IntroScene(ResourceLocation animationFile, String clip, int durationTicks, List<Integer> waitAtTicks,
+                      Perspective perspective, Perspective exitPerspective) {
+        this(animationFile, clip, durationTicks, waitAtTicks, perspective, exitPerspective, false);
     }
 
     public IntroScene {
@@ -57,7 +63,8 @@ public record IntroScene(ResourceLocation animationFile, String clip, int durati
         }
         return new IntroScene(ResourceLocation.parse(GsonHelper.getAsString(json, "animation_file")),
                 GsonHelper.getAsString(json, "clip"), ticks(json.get("duration_ticks"), "duration_ticks"), waits,
-                Perspective.parse(json, "perspective"), Perspective.parse(json, "exit_perspective"));
+                Perspective.parse(json, "perspective"), Perspective.parse(json, "exit_perspective"),
+                GsonHelper.getAsBoolean(json, "smooth_camera_return", false));
     }
 
     private static int ticks(JsonElement value, String field) {
@@ -78,12 +85,17 @@ public record IntroScene(ResourceLocation animationFile, String clip, int durati
         json.addProperty("duration_ticks", durationTicks);
         if (perspective != Perspective.FIRST_PERSON) json.addProperty("perspective", perspective.id());
         if (exitPerspective != Perspective.FIRST_PERSON) json.addProperty("exit_perspective", exitPerspective.id());
+        if (smoothCameraReturn) json.addProperty("smooth_camera_return", true);
         if (!waitAtTicks.isEmpty()) {
             var waits = new JsonArray();
             waitAtTicks.forEach(waits::add);
             json.add("wait_at_ticks", waits);
         }
         return json;
+    }
+
+    public int playbackTicks() {
+        return durationTicks + (smoothCameraReturn ? CAMERA_RETURN_TICKS : 0);
     }
 
     public ResourceLocation asset() {

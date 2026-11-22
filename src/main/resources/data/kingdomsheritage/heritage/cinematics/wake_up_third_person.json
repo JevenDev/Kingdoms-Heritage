@@ -12,6 +12,7 @@
     "duration_ticks": 100,
     "perspective": "third_person_front",
     "exit_perspective": "third_person_back",
+    "smooth_camera_return": true,
     "wait_at_ticks": [48]
   }
 }

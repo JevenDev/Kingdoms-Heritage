@@ -7,6 +7,7 @@ import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.phys.Vec3;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
@@ -21,6 +22,17 @@ public abstract class IntroCamera {
                                     float partialTick, CallbackInfo callback) {
         Camera camera = (Camera) (Object) this;
         var pose = SpawnIntroOverlay.sceneCamera(entity, camera.getPosition(), camera.getYRot(), camera.getXRot(), camera.getRoll(), partialTick);
+        applyScenePose(pose);
+    }
+
+    @Inject(method = "setup", at = @At("TAIL"))
+    private void returnIntroCamera(BlockGetter level, Entity entity, boolean detached, boolean reversed,
+                                   float partialTick, CallbackInfo callback) {
+        applyScenePose(SpawnIntroOverlay.returnSceneCamera(entity, (Camera) (Object) this, partialTick));
+    }
+
+    @Unique
+    private void applyScenePose(SpawnIntroOverlay.CameraPose pose) {
         if (pose != null) {
             setPosition(pose.position());
             setRotation(pose.yaw(), pose.pitch(), pose.roll());

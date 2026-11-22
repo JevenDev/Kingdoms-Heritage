@@ -228,7 +228,7 @@ public record IntroDefinition(Component text, Component subtitle, boolean title,
 
     public int durationTicks(int reveal) {
         int overlay = overlayDurationTicks(reveal);
-        return scene == null ? overlay : Math.max(overlay, scene.durationTicks());
+        return scene == null ? overlay : Math.max(overlay, scene.playbackTicks());
     }
 
     public int overlayDurationTicks(int reveal) {

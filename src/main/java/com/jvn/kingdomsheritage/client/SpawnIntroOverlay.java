@@ -14,6 +14,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.DeathScreen;
@@ -145,7 +146,10 @@ public final class SpawnIntroOverlay {
             finish(true);
             return;
         }
-        if (scene != null && scene.reachWait(age)) PacketDistributor.sendToServer(new HeritageNetwork.IntroWait(token, true));
+        if (scene != null) {
+            if (age == intro.scene().durationTicks()) scene.startReturn(minecraft);
+            if (scene.reachWait(age)) PacketDistributor.sendToServer(new HeritageNetwork.IntroWait(token, true));
+        }
         if (age >= intro.textStartTicks()) blip(minecraft, visible(age - intro.textStartTicks()));
     }
 
@@ -211,6 +215,12 @@ public final class SpawnIntroOverlay {
         return scene.camera((LocalPlayer) entity, eye, yaw, pitch, roll, elapsed(partialTick));
     }
 
+    public static CameraPose returnSceneCamera(Entity entity, Camera camera, float partialTick) {
+        Minecraft minecraft = Minecraft.getInstance();
+        if (!sceneReady() || entity != minecraft.player) return null;
+        return scene.returnCamera(minecraft.player, camera, age, partialTick, minecraft.isPaused());
+    }
+
     public static boolean renderSceneArms(float partialTick, PoseStack poses, MultiBufferSource.BufferSource buffer,
                                           LocalPlayer player, int light) {
         if (!sceneActive() || !scene.firstPerson() || Minecraft.getInstance().getCameraEntity() != player) return false;
@@ -227,9 +237,12 @@ public final class SpawnIntroOverlay {
     }
 
     private static boolean sceneActive() {
+        return sceneReady() && age < intro.scene().durationTicks();
+    }
+
+    private static boolean sceneReady() {
         var level = Minecraft.getInstance().level;
-        return ready && scene != null && age < intro.scene().durationTicks() && level != null
-                && level.dimension().location().equals(dimension);
+        return ready && scene != null && level != null && level.dimension().location().equals(dimension);
     }
 
     static float worldReveal(float ticks) {

@@ -1,9 +1,11 @@
 package com.jvn.kingdomsheritage.client;
 
+import com.jvn.kingdomsheritage.client.SpawnIntroOverlay.CameraPose;
 import com.jvn.kingdomsheritage.data.IntroScene;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
 import java.util.List;
+import net.minecraft.client.Camera;
 import net.minecraft.client.CameraType;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.model.PlayerModel;
@@ -43,6 +45,8 @@ final class CinematicScene {
     private boolean waiting;
     private CameraType previousCameraType;
     private CameraType sceneCameraType;
+    private CameraType exitCameraType;
+    private CameraPose returnFrom;
     private Vec3 cameraOffset = Vec3.ZERO;
     private final Quaternionf viewFromRig = new Quaternionf();
 
@@ -54,13 +58,18 @@ final class CinematicScene {
     void start(Minecraft minecraft) {
         previousCameraType = minecraft.options.getCameraType();
         sceneCameraType = cameraType(scene.perspective());
+        exitCameraType = cameraType(scene.exitPerspective());
         minecraft.options.setCameraType(sceneCameraType);
     }
 
     void clear(Minecraft minecraft, boolean completed) {
         if (previousCameraType != null) {
-            minecraft.options.setCameraType(completed ? cameraType(scene.exitPerspective()) : previousCameraType);
+            minecraft.options.setCameraType(completed ? exitCameraType : previousCameraType);
         }
+    }
+
+    void startReturn(Minecraft minecraft) {
+        if (scene.smoothCameraReturn()) minecraft.options.setCameraType(exitCameraType);
     }
 
     private CameraType cameraType(IntroScene.Perspective perspective) {
@@ -93,18 +102,13 @@ final class CinematicScene {
         return Math.min(age + partialTick, Math.max(age, next));
     }
 
-    SpawnIntroOverlay.CameraPose camera(LocalPlayer player, Vec3 eye, float yaw, float pitch, float roll, float ticks) {
+    CameraPose camera(LocalPlayer player, Vec3 eye, float yaw, float pitch, float roll, float ticks) {
         var camera = clip.camera().sample(ticks);
         float transition = Math.min(6F, scene.durationTicks());
-        float handoff = Mth.clamp((ticks - scene.durationTicks() + transition) / transition, 0F, 1F);
+        float handoff = scene.smoothCameraReturn() ? 0F : Mth.clamp((ticks - scene.durationTicks() + transition) / transition, 0F, 1F);
         var rigToWorld = new Quaternionf().rotationY(Mth.PI - yaw * Mth.DEG_TO_RAD);
         var offset = rigPosition(camera.position()).scale(1 - handoff);
-        Vec3 target = eye.add(new Vec3(offset.toVector3f().rotate(rigToWorld)));
-        var hit = player.level().clip(new ClipContext(eye, target, ClipContext.Block.VISUAL, ClipContext.Fluid.NONE, player));
-        if (hit.getType() != HitResult.Type.MISS) {
-            Vec3 direction = target.subtract(eye).normalize();
-            target = eye.add(direction.scale(Math.max(0, eye.distanceTo(hit.getLocation()) - 0.08)));
-        }
+        Vec3 target = clipCamera(player, eye, eye.add(new Vec3(offset.toVector3f().rotate(rigToWorld))));
         cameraOffset = new Vec3(target.subtract(eye).toVector3f().rotate(rigToWorld.conjugate()));
 
         var rotation = camera.rotation();
@@ -112,7 +116,60 @@ final class CinematicScene {
         float scenePitch = clip.camera().rotates() ? Mth.lerp(handoff, (float) rotation.x, pitch) : pitch;
         float sceneRoll = clip.camera().rotates() ? Mth.lerp(handoff, (float) -rotation.z, roll) : roll;
         viewFromRig.rotationYXZ(-yawOffset * Mth.DEG_TO_RAD, -scenePitch * Mth.DEG_TO_RAD, -sceneRoll * Mth.DEG_TO_RAD).conjugate();
-        return new SpawnIntroOverlay.CameraPose(target, yaw + yawOffset, scenePitch, sceneRoll);
+        return new CameraPose(target, yaw + yawOffset, scenePitch, sceneRoll);
+    }
+
+    CameraPose returnCamera(LocalPlayer player, Camera camera, int age, float partialTick, boolean paused) {
+        if (!scene.smoothCameraReturn()) return null;
+        if (age < scene.durationTicks()) {
+            returnFrom = cameraPose(camera);
+            return null;
+        }
+        if (returnFrom == null || age >= scene.playbackTicks()) return null;
+        float fraction = (age - scene.durationTicks() + (paused ? 0 : partialTick))
+                / (scene.playbackTicks() - scene.durationTicks());
+        if (fraction <= 0) return returnFrom;
+        if (fraction >= 1) return null;
+
+        float progress = (float) Mth.smoothstep(fraction);
+        Vec3 eye = player.getEyePosition(partialTick);
+        CameraPose target = cameraPose(camera);
+        boolean detached = !sceneCameraType.isFirstPerson() && !exitCameraType.isFirstPerson();
+        CameraPose pose = interpolate(returnFrom, target, eye, detached, progress);
+        return new CameraPose(clipCamera(player, eye, pose.position()), pose.yaw(), pose.pitch(), pose.roll());
+    }
+
+    private static CameraPose cameraPose(Camera camera) {
+        return new CameraPose(camera.getPosition(), camera.getYRot(), camera.getXRot(), camera.getRoll());
+    }
+
+    private static CameraPose interpolate(CameraPose start, CameraPose end, Vec3 eye, boolean detached, float progress) {
+        Vec3 position = start.position().lerp(end.position(), progress);
+        float yaw = Mth.rotLerp(progress, start.yaw(), end.yaw());
+        Vec3 from = start.position().subtract(eye);
+        Vec3 to = end.position().subtract(eye);
+        double fromRadius = from.horizontalDistance();
+        double toRadius = to.horizontalDistance();
+        if (detached && fromRadius >= 1e-4 && toRadius >= 1e-4) {
+            // keep the turn in the same direction as the orbit, even across a half turn
+            double fromAngle = Math.toDegrees(Math.atan2(from.x, -from.z));
+            double toAngle = Math.toDegrees(Math.atan2(to.x, -to.z));
+            double angle = Mth.rotLerp(progress, fromAngle, toAngle);
+            double radius = Mth.lerp(progress, fromRadius, toRadius);
+            double radians = Math.toRadians(angle);
+            position = new Vec3(eye.x + Math.sin(radians) * radius, position.y, eye.z - Math.cos(radians) * radius);
+            yaw = (float) (angle + Mth.rotLerp(progress,
+                    Mth.wrapDegrees(start.yaw() - fromAngle), Mth.wrapDegrees(end.yaw() - toAngle)));
+        }
+        return new CameraPose(position, yaw, Mth.lerp(progress, start.pitch(), end.pitch()),
+                Mth.rotLerp(progress, start.roll(), end.roll()));
+    }
+
+    private static Vec3 clipCamera(LocalPlayer player, Vec3 eye, Vec3 target) {
+        var hit = player.level().clip(new ClipContext(eye, target, ClipContext.Block.VISUAL, ClipContext.Fluid.NONE, player));
+        if (hit.getType() == HitResult.Type.MISS) return target;
+        Vec3 direction = target.subtract(eye).normalize();
+        return eye.add(direction.scale(Math.max(0, eye.distanceTo(hit.getLocation()) - 0.08)));
     }
 
     void renderArms(float ticks, PoseStack poses, MultiBufferSource.BufferSource buffer, LocalPlayer player, int light) {
