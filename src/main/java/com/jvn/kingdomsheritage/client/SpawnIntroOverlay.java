@@ -32,6 +32,7 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.client.event.InputEvent;
+import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 import net.neoforged.neoforge.client.event.ScreenEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.network.PacketDistributor;
@@ -70,6 +71,7 @@ public final class SpawnIntroOverlay {
         NeoForge.EVENT_BUS.addListener(SpawnIntroOverlay::sceneKey);
         NeoForge.EVENT_BUS.addListener(SpawnIntroOverlay::sceneMouse);
         NeoForge.EVENT_BUS.addListener(SpawnIntroOverlay::fov);
+        NeoForge.EVENT_BUS.addListener(SpawnIntroOverlay::renderSceneBody);
     }
 
     static void start(JsonObject message) {
@@ -212,7 +214,7 @@ public final class SpawnIntroOverlay {
 
     public static CameraPose sceneCamera(Entity entity, Vec3 eye, float yaw, float pitch, float roll, float partialTick) {
         if (!sceneActive() || entity != Minecraft.getInstance().player) return null;
-        return scene.camera((LocalPlayer) entity, eye, yaw, pitch, roll, elapsed(partialTick));
+        return scene.camera((LocalPlayer) entity, eye, yaw, pitch, roll, elapsed(partialTick), partialTick);
     }
 
     public static CameraPose returnSceneCamera(Entity entity, Camera camera, float partialTick) {
@@ -224,8 +226,21 @@ public final class SpawnIntroOverlay {
     public static boolean renderSceneArms(float partialTick, PoseStack poses, MultiBufferSource.BufferSource buffer,
                                           LocalPlayer player, int light) {
         if (!sceneActive() || !scene.firstPerson() || Minecraft.getInstance().getCameraEntity() != player) return false;
-        scene.renderArms(elapsed(partialTick), poses, buffer, player, light);
+        if (!scene.hasFullBody()) scene.renderFirstPersonArms(elapsed(partialTick), poses, buffer, player, light);
         return true;
+    }
+
+    private static void renderSceneBody(RenderLevelStageEvent event) {
+        if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_ENTITIES
+                || !sceneActive() || !scene.firstPerson() || !scene.hasFullBody()) return;
+        var minecraft = Minecraft.getInstance();
+        var player = minecraft.player;
+        var camera = event.getCamera();
+        if (player == null || camera.getEntity() != player || camera.isDetached()
+                || player.isSpectator() || player.isSleeping() || minecraft.options.hideGui) return;
+        int light = minecraft.getEntityRenderDispatcher().getPackedLightCoords(player, camera.getPartialTickTime());
+        scene.renderFirstPersonBody(elapsed(camera.getPartialTickTime()), event.getPoseStack(),
+                minecraft.renderBuffers().bufferSource(), player, camera, light);
     }
 
     public static boolean animatesPlayerModel(Entity entity) {

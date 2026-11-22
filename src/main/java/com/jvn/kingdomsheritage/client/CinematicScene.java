@@ -4,6 +4,7 @@ import com.jvn.kingdomsheritage.client.SpawnIntroOverlay.CameraPose;
 import com.jvn.kingdomsheritage.data.IntroScene;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
+import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.client.Camera;
 import net.minecraft.client.CameraType;
@@ -25,19 +26,8 @@ import net.minecraft.world.phys.Vec3;
 import org.joml.Quaternionf;
 
 final class CinematicScene {
-    private record Arms(ModelPart leftArm, ModelPart leftSleeve, ModelPart rightArm, ModelPart rightSleeve) {
-        private Arms(boolean slim) {
-            this(LayerDefinition.create(PlayerModel.createMesh(CubeDeformation.NONE, slim), 64, 64).bakeRoot());
-        }
-
-        private Arms(ModelPart model) {
-            this(model.getChild("left_arm"), model.getChild("left_sleeve"), model.getChild("right_arm"), model.getChild("right_sleeve"));
-            for (ModelPart part : new ModelPart[]{leftArm, leftSleeve, rightArm, rightSleeve}) part.setPos(0, 0, 0);
-        }
-    }
-
-    private static final Arms WIDE = new Arms(false);
-    private static final Arms SLIM = new Arms(true);
+    private static final PlayerModel<LocalPlayer> WIDE = playerModel(false);
+    private static final PlayerModel<LocalPlayer> SLIM = playerModel(true);
     private static final float PIXEL = 1F / 16;
     private final IntroScene scene;
     private final SceneClip clip;
@@ -49,6 +39,7 @@ final class CinematicScene {
     private CameraPose returnFrom;
     private Vec3 cameraOffset = Vec3.ZERO;
     private final Quaternionf viewFromRig = new Quaternionf();
+    private final Quaternionf rigToWorld = new Quaternionf();
 
     CinematicScene(IntroScene scene, SceneClip clip) {
         this.scene = scene;
@@ -102,14 +93,16 @@ final class CinematicScene {
         return Math.min(age + partialTick, Math.max(age, next));
     }
 
-    CameraPose camera(LocalPlayer player, Vec3 eye, float yaw, float pitch, float roll, float ticks) {
+    CameraPose camera(LocalPlayer player, Vec3 eye, float yaw, float pitch, float roll, float ticks, float partialTick) {
         var camera = clip.camera().sample(ticks);
         float transition = Math.min(6F, scene.durationTicks());
         float handoff = scene.smoothCameraReturn() ? 0F : Mth.clamp((ticks - scene.durationTicks() + transition) / transition, 0F, 1F);
-        var rigToWorld = new Quaternionf().rotationY(Mth.PI - yaw * Mth.DEG_TO_RAD);
+        rigToWorld.rotationY(Mth.PI - yaw * Mth.DEG_TO_RAD);
         var offset = rigPosition(camera.position()).scale(1 - handoff);
-        Vec3 target = clipCamera(player, eye, eye.add(new Vec3(offset.toVector3f().rotate(rigToWorld))));
-        cameraOffset = new Vec3(target.subtract(eye).toVector3f().rotate(rigToWorld.conjugate()));
+        Vec3 origin = firstPerson() && hasFullBody()
+                ? player.getPosition(partialTick).add(0, 26 * PIXEL, 0).lerp(eye, handoff) : eye;
+        Vec3 target = clipCamera(player, eye, origin.add(new Vec3(offset.toVector3f().rotate(rigToWorld))));
+        cameraOffset = new Vec3(rigToWorld.transformInverse(target.subtract(eye).toVector3f()));
 
         var rotation = camera.rotation();
         float yawOffset = (float) rotation.y * (1 - handoff);
@@ -172,19 +165,59 @@ final class CinematicScene {
         return eye.add(direction.scale(Math.max(0, eye.distanceTo(hit.getLocation()) - 0.08)));
     }
 
-    void renderArms(float ticks, PoseStack poses, MultiBufferSource.BufferSource buffer, LocalPlayer player, int light) {
+    private static PlayerModel<LocalPlayer> playerModel(boolean slim) {
+        return new PlayerModel<>(LayerDefinition.create(PlayerModel.createMesh(CubeDeformation.NONE, slim), 64, 64).bakeRoot(), slim);
+    }
+
+    boolean hasFullBody() {
+        return clip.body().animated() || clip.leftLeg().animated() || clip.rightLeg().animated();
+    }
+
+    void renderFirstPersonArms(float ticks, PoseStack poses, MultiBufferSource.BufferSource buffer, LocalPlayer player, int light) {
         if (ticks >= scene.durationTicks() || player.isInvisible()) return;
         PlayerSkin skin = player.getSkin();
-        Arms arms = skin.model() == PlayerSkin.Model.SLIM ? SLIM : WIDE;
+        PlayerModel<LocalPlayer> model = skin.model() == PlayerSkin.Model.SLIM ? SLIM : WIDE;
         poses.pushPose();
-        poses.mulPose(viewFromRig);
-        poses.translate(-cameraOffset.x, -cameraOffset.y, -cameraOffset.z);
-        renderArm(poses, buffer, skin, light, clip.leftArm().sample(ticks), -5, arms.leftArm,
-                player.isModelPartShown(PlayerModelPart.LEFT_SLEEVE) ? arms.leftSleeve : null);
-        renderArm(poses, buffer, skin, light, clip.rightArm().sample(ticks), 5, arms.rightArm,
-                player.isModelPartShown(PlayerModelPart.RIGHT_SLEEVE) ? arms.rightSleeve : null);
-        poses.popPose();
+        try {
+            poses.mulPose(viewFromRig);
+            poses.translate(-cameraOffset.x, -cameraOffset.y, -cameraOffset.z);
+            renderArm(poses, buffer, skin, light, clip.leftArm().sample(ticks), -5, model.leftArm,
+                    layer(player, PlayerModelPart.LEFT_SLEEVE, model.leftSleeve));
+            renderArm(poses, buffer, skin, light, clip.rightArm().sample(ticks), 5, model.rightArm,
+                    layer(player, PlayerModelPart.RIGHT_SLEEVE, model.rightSleeve));
+        } finally {
+            poses.popPose();
+        }
         buffer.endBatch();
+    }
+
+    void renderFirstPersonBody(float ticks, PoseStack poses, MultiBufferSource.BufferSource buffer, LocalPlayer player, Camera camera, int light) {
+        if (ticks >= scene.durationTicks() || player.isInvisible()) return;
+        PlayerSkin skin = player.getSkin();
+        PlayerModel<LocalPlayer> model = skin.model() == PlayerSkin.Model.SLIM ? SLIM : WIDE;
+        Vec3 origin = player.getPosition(camera.getPartialTickTime()).subtract(camera.getPosition());
+        var restore = new ArrayList<Runnable>();
+        poses.pushPose();
+        try {
+            poseBody(model, ticks, restore);
+            poses.translate(origin.x, origin.y + 24 * PIXEL, origin.z);
+            poses.mulPose(rigToWorld);
+            poses.mulPose(Axis.ZP.rotationDegrees(180));
+            renderPart(poses, buffer, skin, light, model.body, layer(player, PlayerModelPart.JACKET, model.jacket));
+            renderPart(poses, buffer, skin, light, model.leftArm, layer(player, PlayerModelPart.LEFT_SLEEVE, model.leftSleeve));
+            renderPart(poses, buffer, skin, light, model.rightArm, layer(player, PlayerModelPart.RIGHT_SLEEVE, model.rightSleeve));
+            renderPart(poses, buffer, skin, light, model.leftLeg, layer(player, PlayerModelPart.LEFT_PANTS_LEG, model.leftPants));
+            renderPart(poses, buffer, skin, light, model.rightLeg, layer(player, PlayerModelPart.RIGHT_PANTS_LEG, model.rightPants));
+        } finally {
+            poses.popPose();
+            restore.forEach(Runnable::run);
+        }
+        buffer.endBatch(RenderType.entitySolid(skin.texture()));
+        buffer.endBatch(RenderType.entityTranslucent(skin.texture()));
+    }
+
+    private static ModelPart layer(LocalPlayer player, PlayerModelPart visibility, ModelPart part) {
+        return player.isModelPartShown(visibility) ? part : null;
     }
 
     private static void renderArm(PoseStack poses, MultiBufferSource buffer, PlayerSkin skin, int light, SceneClip.Pose pose,
@@ -196,15 +229,24 @@ final class CinematicScene {
         poses.mulPose(new Quaternionf().rotationZYX((float) rotation.z * Mth.DEG_TO_RAD,
                 (float) -rotation.y * Mth.DEG_TO_RAD, (float) -rotation.x * Mth.DEG_TO_RAD));
         poses.mulPose(Axis.ZP.rotationDegrees(180));
-        arm.render(poses, buffer.getBuffer(RenderType.entitySolid(skin.texture())), light, OverlayTexture.NO_OVERLAY);
-        if (sleeve != null) {
-            sleeve.render(poses, buffer.getBuffer(RenderType.entityTranslucent(skin.texture())), light, OverlayTexture.NO_OVERLAY);
-        }
+        poses.translate(-arm.x * PIXEL, -arm.y * PIXEL, -arm.z * PIXEL);
+        renderPart(poses, buffer, skin, light, arm, sleeve);
         poses.popPose();
+    }
+
+    private static void renderPart(PoseStack poses, MultiBufferSource buffer, PlayerSkin skin, int light, ModelPart part, ModelPart outer) {
+        part.render(poses, buffer.getBuffer(RenderType.entitySolid(skin.texture())), light, OverlayTexture.NO_OVERLAY);
+        if (outer != null) {
+            outer.render(poses, buffer.getBuffer(RenderType.entityTranslucent(skin.texture())), light, OverlayTexture.NO_OVERLAY);
+        }
     }
 
     void posePlayer(PlayerModel<?> model, float ticks, List<Runnable> restore) {
         posePart(clip.head(), ticks, model.head, model.hat, restore);
+        poseBody(model, ticks, restore);
+    }
+
+    private void poseBody(PlayerModel<?> model, float ticks, List<Runnable> restore) {
         posePart(clip.body(), ticks, model.body, model.jacket, restore);
         posePart(clip.leftArm(), ticks, model.leftArm, model.leftSleeve, restore);
         posePart(clip.rightArm(), ticks, model.rightArm, model.rightSleeve, restore);
