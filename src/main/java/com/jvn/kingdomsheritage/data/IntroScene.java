@@ -11,7 +11,8 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.GsonHelper;
 
 public record IntroScene(ResourceLocation animationFile, String clip, int durationTicks, List<Integer> waitAtTicks,
-                         Perspective perspective, Perspective exitPerspective, boolean smoothCameraReturn) {
+                         Perspective perspective, Perspective exitPerspective, boolean smoothCameraReturn,
+                         Integer firstPersonHideTorsoAtTick, boolean firstPersonHideArmsWithTorso) {
     private static final int CAMERA_RETURN_TICKS = 12;
     private static final int MAX_WAITS = 16;
 
@@ -35,6 +36,17 @@ public record IntroScene(ResourceLocation animationFile, String clip, int durati
         this(animationFile, clip, durationTicks, waitAtTicks, perspective, exitPerspective, false);
     }
 
+    public IntroScene(ResourceLocation animationFile, String clip, int durationTicks, List<Integer> waitAtTicks,
+                      Perspective perspective, Perspective exitPerspective, boolean smoothCameraReturn) {
+        this(animationFile, clip, durationTicks, waitAtTicks, perspective, exitPerspective, smoothCameraReturn, null);
+    }
+
+    public IntroScene(ResourceLocation animationFile, String clip, int durationTicks, List<Integer> waitAtTicks,
+                      Perspective perspective, Perspective exitPerspective, boolean smoothCameraReturn, Integer firstPersonHideTorsoAtTick) {
+        this(animationFile, clip, durationTicks, waitAtTicks, perspective, exitPerspective,
+                smoothCameraReturn, firstPersonHideTorsoAtTick, false);
+    }
+
     public IntroScene {
         Objects.requireNonNull(animationFile, "animationFile");
         Objects.requireNonNull(perspective, "perspective");
@@ -44,6 +56,9 @@ public record IntroScene(ResourceLocation animationFile, String clip, int durati
         }
         if (durationTicks < 1 || durationTicks > 1200) {
             throw new IllegalArgumentException("scene duration_ticks must be between 1 and 1200");
+        }
+        if (firstPersonHideTorsoAtTick != null && (firstPersonHideTorsoAtTick < 1 || firstPersonHideTorsoAtTick >= durationTicks)) {
+            throw new IllegalArgumentException("scene first_person_hide_torso_at_tick must be within the clip");
         }
         waitAtTicks = List.copyOf(waitAtTicks);
         if (waitAtTicks.size() > MAX_WAITS) throw new IllegalArgumentException("scene supports at most " + MAX_WAITS + " waits");
@@ -64,7 +79,10 @@ public record IntroScene(ResourceLocation animationFile, String clip, int durati
         return new IntroScene(ResourceLocation.parse(GsonHelper.getAsString(json, "animation_file")),
                 GsonHelper.getAsString(json, "clip"), ticks(json.get("duration_ticks"), "duration_ticks"), waits,
                 Perspective.parse(json, "perspective"), Perspective.parse(json, "exit_perspective"),
-                GsonHelper.getAsBoolean(json, "smooth_camera_return", false));
+                GsonHelper.getAsBoolean(json, "smooth_camera_return", false),
+                json.has("first_person_hide_torso_at_tick")
+                        ? ticks(json.get("first_person_hide_torso_at_tick"), "first_person_hide_torso_at_tick") : null,
+                GsonHelper.getAsBoolean(json, "first_person_hide_arms_with_torso", false));
     }
 
     private static int ticks(JsonElement value, String field) {
@@ -86,6 +104,8 @@ public record IntroScene(ResourceLocation animationFile, String clip, int durati
         if (perspective != Perspective.FIRST_PERSON) json.addProperty("perspective", perspective.id());
         if (exitPerspective != Perspective.FIRST_PERSON) json.addProperty("exit_perspective", exitPerspective.id());
         if (smoothCameraReturn) json.addProperty("smooth_camera_return", true);
+        if (firstPersonHideTorsoAtTick != null) json.addProperty("first_person_hide_torso_at_tick", firstPersonHideTorsoAtTick);
+        if (firstPersonHideArmsWithTorso) json.addProperty("first_person_hide_arms_with_torso", true);
         if (!waitAtTicks.isEmpty()) {
             var waits = new JsonArray();
             waitAtTicks.forEach(waits::add);

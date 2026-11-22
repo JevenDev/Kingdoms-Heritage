@@ -203,9 +203,15 @@ final class CinematicScene {
             poses.translate(origin.x, origin.y + 24 * PIXEL, origin.z);
             poses.mulPose(rigToWorld);
             poses.mulPose(Axis.ZP.rotationDegrees(180));
-            renderPart(poses, buffer, skin, light, model.body, layer(player, PlayerModelPart.JACKET, model.jacket));
-            renderPart(poses, buffer, skin, light, model.leftArm, layer(player, PlayerModelPart.LEFT_SLEEVE, model.leftSleeve));
-            renderPart(poses, buffer, skin, light, model.rightArm, layer(player, PlayerModelPart.RIGHT_SLEEVE, model.rightSleeve));
+            Integer hideTorsoAtTick = scene.firstPersonHideTorsoAtTick();
+            boolean showTorso = hideTorsoAtTick == null || ticks < hideTorsoAtTick;
+            if (showTorso) {
+                renderPart(poses, buffer, skin, light, model.body, layer(player, PlayerModelPart.JACKET, model.jacket));
+            }
+            if (showTorso || !scene.firstPersonHideArmsWithTorso()) {
+                renderPart(poses, buffer, skin, light, model.leftArm, layer(player, PlayerModelPart.LEFT_SLEEVE, model.leftSleeve));
+                renderPart(poses, buffer, skin, light, model.rightArm, layer(player, PlayerModelPart.RIGHT_SLEEVE, model.rightSleeve));
+            }
             renderPart(poses, buffer, skin, light, model.leftLeg, layer(player, PlayerModelPart.LEFT_PANTS_LEG, model.leftPants));
             renderPart(poses, buffer, skin, light, model.rightLeg, layer(player, PlayerModelPart.RIGHT_PANTS_LEG, model.rightPants));
         } finally {
