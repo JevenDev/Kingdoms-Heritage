@@ -1,0 +1,15 @@
+{
+  "text": "Wake up",
+  "title": true,
+  "animation": "immediate",
+  "black_hold_ticks": 3,
+  "fade_from_black_ticks": 15,
+  "hold_ticks": 12,
+  "fade_out_ticks": 15,
+  "scene": {
+    "animation_file": "kingdomsheritage:wake_up",
+    "clip": "animation.heritage.wake_up",
+    "duration_ticks": 100,
+    "wait_at_ticks": [48]
+  }
+}
