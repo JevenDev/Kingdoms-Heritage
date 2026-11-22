@@ -2,17 +2,17 @@
   "text": "Wake up",
   "title": true,
   "animation": "immediate",
-  "black_hold_ticks": 3,
-  "fade_from_black_ticks": 15,
-  "hold_ticks": 12,
-  "fade_out_ticks": 15,
+  "black_hold_ticks": 2,
+  "fade_from_black_ticks": 10,
+  "hold_ticks": 8,
+  "fade_out_ticks": 11,
   "scene": {
     "animation_file": "kingdomsheritage:wake_up_third_person",
     "clip": "animation.heritage.wake_up_third_person",
-    "duration_ticks": 100,
+    "duration_ticks": 82,
     "perspective": "third_person_front",
     "exit_perspective": "third_person_back",
     "smooth_camera_return": true,
-    "wait_at_ticks": [48]
+    "wait_at_ticks": [41]
   }
 }
