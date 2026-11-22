@@ -20,6 +20,15 @@ public final class DefinitionJson {
         return value.getAsBoolean();
     }
 
+    static ResourceLocation optionalId(JsonObject json, String key) {
+        if (!json.has(key)) return null;
+        var value = json.get(key);
+        if (!value.isJsonPrimitive() || !value.getAsJsonPrimitive().isString() || value.getAsString().isBlank()) {
+            throw new IllegalArgumentException(key + " must be a resource ID string");
+        }
+        return ResourceLocation.parse(value.getAsString());
+    }
+
     static int integer(JsonObject json, String key, int fallback) {
         return json.has(key) ? integer(json, key) : fallback;
     }

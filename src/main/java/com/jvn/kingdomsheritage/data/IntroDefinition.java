@@ -224,6 +224,13 @@ public record IntroDefinition(Component text, Component subtitle, boolean title,
         return (int) number;
     }
 
+    IntroDefinition withSceneFrom(IntroDefinition cinematic) {
+        return new IntroDefinition(text, subtitle, title, animation, control, blip, revealTicks, holdTicks, fadeOutTicks,
+                cinematic.fadeFromBlackTicks, cinematicBars, barStyle, barTransitionTicks, titlePosition, subtitlePosition,
+                cinematic.blackHoldTicks, outline, hideHudDuringBars, titleCoordinates, subtitleCoordinates, largeSubtitle,
+                barHeight, timeline, dialogue, cinematic.scene);
+    }
+
     public int durationTicks() { return durationTicks(revealTicks); }
 
     public int durationTicks(int reveal) {

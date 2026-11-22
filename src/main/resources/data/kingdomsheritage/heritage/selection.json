@@ -1,4 +1,5 @@
 {
   "gui_scale": 3,
-  "kit_preview": "inventory"
+  "kit_preview": "inventory",
+  "intro_scene": "kingdomsheritage:wake_up"
 }

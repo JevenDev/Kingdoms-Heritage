@@ -363,7 +363,7 @@ public final class SelectionManager {
                 cancelPreparation(member);
                 SelectionParty.remove(member);
             }
-            for (var delivery : deliveries) SelectionFinalization.arrive(delivery, search.definition());
+            for (var delivery : deliveries) SelectionFinalization.arrive(delivery);
             for (var member : members) {
                 try {
                     SelectionLifecycle.complete(member);

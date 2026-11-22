@@ -1,8 +1,9 @@
 package com.jvn.kingdomsheritage.data;
 
 import com.google.gson.JsonObject;
+import net.minecraft.resources.ResourceLocation;
 
-public record SelectionSettings(int guiScale, KitPreview kitPreview, boolean cardBorders) {
+public record SelectionSettings(int guiScale, KitPreview kitPreview, boolean cardBorders, ResourceLocation introScene) {
     public enum KitPreview { INVENTORY, MODEL }
 
     public static final int MAX_GUI_SCALE = 4;
@@ -13,12 +14,17 @@ public record SelectionSettings(int guiScale, KitPreview kitPreview, boolean car
         this(guiScale, kitPreview, true);
     }
 
+    public SelectionSettings(int guiScale, KitPreview kitPreview, boolean cardBorders) {
+        this(guiScale, kitPreview, cardBorders, null);
+    }
+
     public SelectionSettings {
         if (guiScale < 0 || guiScale > MAX_GUI_SCALE) throw new IllegalArgumentException("gui_scale must be a whole number from 0 to 4");
     }
 
     public static SelectionSettings parse(JsonObject json) {
-        return new SelectionSettings(parseGuiScale(json), parseKitPreview(json), DefinitionJson.flag(json, "card_borders", true));
+        return new SelectionSettings(parseGuiScale(json), parseKitPreview(json), DefinitionJson.flag(json, "card_borders", true),
+                DefinitionJson.optionalId(json, "intro_scene"));
     }
 
     public static KitPreview parseKitPreview(JsonObject json) {

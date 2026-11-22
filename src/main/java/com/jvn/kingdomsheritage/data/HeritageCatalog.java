@@ -17,7 +17,17 @@ import net.neoforged.neoforge.event.AddReloadListenerEvent;
 public final class HeritageCatalog {
     record Snapshot(Map<ResourceLocation, SpawnDefinition> spawns,
                     Map<ResourceLocation, KitDefinition> kits, Map<ResourceLocation, IntroDefinition> cinematics,
-                    SelectionSettings selection, JsonObject payload) {}
+                    SelectionSettings selection, JsonObject payload) {
+        IntroDefinition arrivalIntro(SpawnDefinition spawn, KitDefinition kit) {
+            var intro = spawn.intro();
+            if (intro != null && (intro.scene() != null || intro.control() == IntroDefinition.Control.DURING_TITLE)) return intro;
+            var sceneId = kit.introScene();
+            if (sceneId == null && intro != null) sceneId = selection.introScene();
+            if (sceneId == null) return intro;
+            var cinematic = cinematics.get(sceneId);
+            return intro == null ? cinematic : intro.withSceneFrom(cinematic);
+        }
+    }
     private static final ResourceLocation SELECTION = ResourceLocation.fromNamespaceAndPath("kingdomsheritage", "selection");
     private static Snapshot current = new Snapshot(Map.of(), Map.of(), Map.of(), SelectionSettings.DEFAULT, new JsonObject());
     private static long revision;
@@ -27,6 +37,7 @@ public final class HeritageCatalog {
     public static Map<ResourceLocation, SpawnDefinition> spawns() { return current.spawns; }
     public static Map<ResourceLocation, KitDefinition> kits() { return current.kits; }
     public static Map<ResourceLocation, IntroDefinition> cinematics() { return current.cinematics; }
+    public static IntroDefinition arrivalIntro(SpawnDefinition spawn, KitDefinition kit) { return current.arrivalIntro(spawn, kit); }
     public static long revision() { return revision; }
     public static int guiScale() { return current.selection.guiScale(); }
     public static SelectionSettings.KitPreview kitPreview() { return current.selection.kitPreview(); }
@@ -81,6 +92,8 @@ public final class HeritageCatalog {
         if (kits.isEmpty() || kits.size() > 128) {
             throw new IllegalArgumentException("Heritage requires between 1 and 128 enabled kits");
         }
+        validateIntroScene(selection.introScene(), SELECTION, cinematics);
+        kits.values().forEach(kit -> validateIntroScene(kit.introScene(), kit.id(), cinematics));
         for (var spawn : spawns.values()) {
             for (String selector : spawn.kits()) {
                 boolean found = selector.startsWith("#") ? kits.values().stream().anyMatch(kit -> kit.tags().contains(selector.substring(1)))
@@ -99,6 +112,14 @@ public final class HeritageCatalog {
         CatalogPayload.validate(payload);
         return new Snapshot(java.util.Collections.unmodifiableMap(sortedSpawns), java.util.Collections.unmodifiableMap(sortedKits),
                 java.util.Collections.unmodifiableMap(cinematics), selection, payload);
+    }
+
+    private static void validateIntroScene(ResourceLocation id, ResourceLocation owner, Map<ResourceLocation, IntroDefinition> cinematics) {
+        if (id == null) return;
+        var cinematic = cinematics.get(id);
+        if (cinematic == null || cinematic.scene() == null) {
+            throw new IllegalArgumentException("intro_scene in " + owner + " must reference a cinematic with a scene: " + id);
+        }
     }
 
     private static final class Loader extends SimplePreparableReloadListener<Snapshot> {

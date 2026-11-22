@@ -4,7 +4,9 @@ import com.google.gson.JsonObject;
 import com.jvn.kingdomsheritage.HeritageConfig;
 import com.jvn.kingdomsheritage.KingdomsHeritage;
 import com.jvn.kingdomsheritage.compat.IronsSpellsCompat;
+import com.jvn.kingdomsheritage.data.HeritageCatalog;
 import com.jvn.kingdomsheritage.data.HeritageException;
+import com.jvn.kingdomsheritage.data.IntroDefinition;
 import com.jvn.kingdomsheritage.data.KitDefinition;
 import com.jvn.kingdomsheritage.data.KitLoadout;
 import com.jvn.kingdomsheritage.data.SpawnDefinition;
@@ -22,7 +24,7 @@ final class SelectionFinalization {
     record Member(ServerPlayer player, SpawnDefinition spawn, KitDefinition kit,
                   List<KitDefinition.StackEntry> entries, HeritageConfig.InventoryPolicy policy,
                   KitLoadout.Snapshot inventory, KitLoadout.Snapshot planned,
-                  Map<ResourceLocation, JsonObject> decisions, SpawnResolver.Destination arrival, JsonObject intro) {}
+                  Map<ResourceLocation, JsonObject> decisions, SpawnResolver.Destination arrival, IntroDefinition arrivalIntro, JsonObject intro) {}
 
     private SelectionFinalization() {}
 
@@ -32,12 +34,13 @@ final class SelectionFinalization {
         var inventory = policy == HeritageConfig.InventoryPolicy.PRESERVE ? null : KitLoadout.capture(player, true);
         var planned = inventory == null ? null : KitLoadout.plan(inventory, player.getInventory().items.size(), kit, entries, policy);
         if (planned != null) KitStatGrants.validate(player, kit.stats());
-        var intro = SpawnIntro.prepare(arrivalDefinition, arrival);
+        var arrivalIntro = HeritageCatalog.arrivalIntro(arrivalDefinition, kit);
+        var intro = SpawnIntro.prepare(arrivalDefinition, arrival, arrivalIntro);
         intro.add("dialogue_context", DialogueContexts.create(player, spawn, kit, policy, !entries.isEmpty()).json());
         intro.addProperty("outcome", "completed");
         intro.addProperty("session", SelectionLifecycle.state(player).sessionId().toString());
         return new Member(player, spawn, kit, entries, policy, inventory, planned,
-                SelectionSteps.decisions(player, spawn.id().toString(), kit.id().toString()), arrival, intro);
+                SelectionSteps.decisions(player, spawn.id().toString(), kit.id().toString()), arrival, arrivalIntro, intro);
     }
 
     static void apply(List<Member> members, SpawnResolver.Destination destination) {
@@ -151,13 +154,13 @@ final class SelectionFinalization {
         }
     }
 
-    static void arrive(Member member, SpawnDefinition arrival) {
+    static void arrive(Member member) {
         var player = member.player();
         try {
             player.closeContainer();
             player.fallDistance = 0;
             player.invulnerableTime = 100;
-            SpawnIntro.begin(player, arrival.intro(), member.intro());
+            SpawnIntro.begin(player, member.arrivalIntro(), member.intro());
             player.inventoryMenu.sendAllDataToRemote();
         } catch (RuntimeException error) {
             KingdomsHeritage.LOGGER.error("Could not send Heritage arrival to {}", player.getGameProfile().getName(), error);

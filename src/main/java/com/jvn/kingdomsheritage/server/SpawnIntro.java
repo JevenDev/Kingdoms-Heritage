@@ -45,7 +45,7 @@ public final class SpawnIntro {
 
     private SpawnIntro() {}
 
-    static JsonObject prepare(SpawnDefinition spawn, SpawnResolver.Destination destination) {
+    static JsonObject prepare(SpawnDefinition spawn, SpawnResolver.Destination destination, IntroDefinition intro) {
         JsonObject message = new JsonObject();
         if (HeritageCatalog.guiScale() > 0) message.addProperty("gui_scale", HeritageCatalog.guiScale());
         JsonObject arrival = new JsonObject();
@@ -54,8 +54,8 @@ public final class SpawnIntro {
         arrival.addProperty("y", destination.position().getY());
         arrival.addProperty("z", destination.position().getZ());
         message.add("arrival", arrival);
-        if (spawn.intro() == null) return message;
-        message.add("intro", spawn.intro().json(destination.level().registryAccess()));
+        if (intro == null) return message;
+        message.add("intro", intro.json(destination.level().registryAccess()));
         message.addProperty("token", UUID.randomUUID().toString());
         message.add("locations", locations(spawn, destination));
         return message;
