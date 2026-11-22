@@ -41,6 +41,7 @@ import org.lwjgl.glfw.GLFW;
 public final class SpawnIntroOverlay {
     private static final SoundEvent BLIP = SoundEvent.createVariableRangeEvent(
             ResourceLocation.fromNamespaceAndPath("kingdomsheritage", "dialogue"));
+    private static final int HAND_RETURN_TICKS = 12;
     private static IntroDefinition intro;
     private static UUID token;
     private static CinematicScene scene;
@@ -57,6 +58,7 @@ public final class SpawnIntroOverlay {
     private static int layoutHeight;
     private static float barSlant;
     private static int age;
+    private static int handReturnTicks;
     private static int lastAudible;
     private static int nextBlip;
     private static boolean ready;
@@ -124,8 +126,9 @@ public final class SpawnIntroOverlay {
     public static boolean blocked() { return SelectionTransition.active() || active() && (!ready || intro.control() == IntroDefinition.Control.AFTER_TITLE); }
 
     static void tick() {
-        if (!active()) return;
         Minecraft minecraft = Minecraft.getInstance();
+        if (handReturnTicks > 0 && !minecraft.isPaused()) handReturnTicks--;
+        if (!active()) return;
         if (minecraft.player == null || minecraft.level == null || !minecraft.player.isAlive()) {
             clear();
             return;
@@ -149,7 +152,10 @@ public final class SpawnIntroOverlay {
             return;
         }
         if (scene != null) {
-            if (age == intro.scene().durationTicks()) scene.startReturn(minecraft);
+            if (age == intro.scene().durationTicks()) {
+                scene.startReturn(minecraft);
+                if (minecraft.options.getCameraType().isFirstPerson()) handReturnTicks = HAND_RETURN_TICKS;
+            }
             if (scene.reachWait(age)) PacketDistributor.sendToServer(new HeritageNetwork.IntroWait(token, true));
         }
         if (age >= intro.textStartTicks()) blip(minecraft, visible(age - intro.textStartTicks()));
@@ -168,7 +174,15 @@ public final class SpawnIntroOverlay {
     static void clear() { clear(false); }
 
     private static void clear(boolean completed) {
-        if (scene != null) scene.clear(Minecraft.getInstance(), completed);
+        if (scene != null) {
+            var minecraft = Minecraft.getInstance();
+            boolean handWasHidden = ready && (age <= intro.scene().durationTicks() || !minecraft.options.getCameraType().isFirstPerson());
+            scene.clear(minecraft, completed);
+            if (completed && handWasHidden && minecraft.options.getCameraType().isFirstPerson()) {
+                handReturnTicks = HAND_RETURN_TICKS;
+            }
+        }
+        if (!completed) handReturnTicks = 0;
         scene = null;
         intro = null;
         token = null;
@@ -228,6 +242,13 @@ public final class SpawnIntroOverlay {
         if (!sceneActive() || !scene.firstPerson() || Minecraft.getInstance().getCameraEntity() != player) return false;
         if (!scene.hasFullBody()) scene.renderFirstPersonArms(elapsed(partialTick), poses, buffer, player, light);
         return true;
+    }
+
+    public static float gameplayHandReveal(float partialTick, LocalPlayer player) {
+        var minecraft = Minecraft.getInstance();
+        if (handReturnTicks == 0 || minecraft.getCameraEntity() != player) return 1F;
+        float partial = minecraft.isPaused() ? 0 : partialTick;
+        return (float) Mth.smoothstep(1F - (handReturnTicks - partial) / HAND_RETURN_TICKS);
     }
 
     private static void renderSceneBody(RenderLevelStageEvent event) {
