@@ -31,6 +31,7 @@ final class CinematicScene {
     private static final float PIXEL = 1F / 16;
     private final IntroScene scene;
     private final SceneClip clip;
+    private int age;
     private int nextWait;
     private boolean waiting;
     private CameraType previousCameraType;
@@ -75,8 +76,12 @@ final class CinematicScene {
     boolean firstPerson() { return sceneCameraType.isFirstPerson(); }
 
     boolean waiting() { return waiting; }
+    boolean animating() { return age < scene.durationTicks(); }
+    boolean finished() { return age >= scene.playbackTicks(); }
 
-    boolean reachWait(int age) {
+    boolean tick() {
+        if (waiting || finished()) return false;
+        age++;
         if (nextWait >= scene.waitAtTicks().size() || age != scene.waitAtTicks().get(nextWait)) return false;
         waiting = true;
         return true;
@@ -87,7 +92,7 @@ final class CinematicScene {
         nextWait++;
     }
 
-    float elapsed(int age, float partialTick) {
+    float elapsed(float partialTick) {
         if (waiting) return age;
         float next = nextWait < scene.waitAtTicks().size() ? scene.waitAtTicks().get(nextWait) : scene.durationTicks();
         return Math.min(age + partialTick, Math.max(age, next));
@@ -112,13 +117,13 @@ final class CinematicScene {
         return new CameraPose(target, yaw + yawOffset, scenePitch, sceneRoll);
     }
 
-    CameraPose returnCamera(LocalPlayer player, Camera camera, int age, float partialTick, boolean paused) {
+    CameraPose returnCamera(LocalPlayer player, Camera camera, float partialTick, boolean paused) {
         if (!scene.smoothCameraReturn()) return null;
-        if (age < scene.durationTicks()) {
+        if (animating()) {
             returnFrom = cameraPose(camera);
             return null;
         }
-        if (returnFrom == null || age >= scene.playbackTicks()) return null;
+        if (returnFrom == null || finished()) return null;
         float fraction = (age - scene.durationTicks() + (paused ? 0 : partialTick))
                 / (scene.playbackTicks() - scene.durationTicks());
         if (fraction <= 0) return returnFrom;

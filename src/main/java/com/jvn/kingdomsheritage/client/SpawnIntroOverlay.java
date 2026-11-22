@@ -14,6 +14,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import net.minecraft.ChatFormatting;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -42,6 +43,7 @@ public final class SpawnIntroOverlay {
     private static final SoundEvent BLIP = SoundEvent.createVariableRangeEvent(
             ResourceLocation.fromNamespaceAndPath("kingdomsheritage", "dialogue"));
     private static final int HAND_RETURN_TICKS = 12;
+    private static final int CONTINUE_PROMPT_FADE_TICKS = 10;
     private static IntroDefinition intro;
     private static UUID token;
     private static CinematicScene scene;
@@ -58,6 +60,7 @@ public final class SpawnIntroOverlay {
     private static int layoutHeight;
     private static float barSlant;
     private static int age;
+    private static int continuePromptTicks;
     private static int handReturnTicks;
     private static int lastAudible;
     private static int nextBlip;
@@ -139,26 +142,28 @@ public final class SpawnIntroOverlay {
         }
         if (minecraft.isPaused() || minecraft.screen instanceof ReceivingLevelScreen
                 || !ready && !standalone && !SelectionTransition.terrainReady()) return;
-        int duration = scene == null ? intro.overlayDurationTicks(revealTicks) : intro.durationTicks(revealTicks);
+        int overlayDuration = intro.overlayDurationTicks(revealTicks);
         if (!ready) {
             if (scene != null) scene.start(minecraft);
+            int duration = scene == null ? overlayDuration : intro.durationTicks(revealTicks);
             PacketDistributor.sendToServer(new HeritageNetwork.IntroReady(token, duration));
             ready = true;
         }
         SelectionTransition.introReady();
-        if (scene != null && scene.waiting()) return;
-        if (++age >= duration) {
-            finish(true);
-            return;
+        if (showContinuePrompt() && continuePromptTicks < CONTINUE_PROMPT_FADE_TICKS) continuePromptTicks++;
+        if (age < overlayDuration) {
+            age++;
+            if (age >= intro.textStartTicks()) blip(minecraft, visible(age - intro.textStartTicks()));
         }
         if (scene != null) {
-            if (age == intro.scene().durationTicks()) {
+            boolean animating = scene.animating();
+            if (scene.tick()) PacketDistributor.sendToServer(new HeritageNetwork.IntroWait(token, true));
+            if (animating && !scene.animating()) {
                 scene.startReturn(minecraft);
                 if (minecraft.options.getCameraType().isFirstPerson()) handReturnTicks = HAND_RETURN_TICKS;
             }
-            if (scene.reachWait(age)) PacketDistributor.sendToServer(new HeritageNetwork.IntroWait(token, true));
         }
-        if (age >= intro.textStartTicks()) blip(minecraft, visible(age - intro.textStartTicks()));
+        if (age >= overlayDuration && (scene == null || scene.finished())) finish(true);
     }
 
     static void cancelArrival() {
@@ -176,7 +181,7 @@ public final class SpawnIntroOverlay {
     private static void clear(boolean completed) {
         if (scene != null) {
             var minecraft = Minecraft.getInstance();
-            boolean handWasHidden = ready && (age <= intro.scene().durationTicks() || !minecraft.options.getCameraType().isFirstPerson());
+            boolean handWasHidden = ready && (scene.animating() || !minecraft.options.getCameraType().isFirstPerson());
             scene.clear(minecraft, completed);
             if (completed && handWasHidden && minecraft.options.getCameraType().isFirstPerson()) {
                 handReturnTicks = HAND_RETURN_TICKS;
@@ -195,6 +200,7 @@ public final class SpawnIntroOverlay {
         pacing = null;
         revealTicks = 0;
         age = layoutWidth = lastAudible = 0;
+        continuePromptTicks = 0;
         nextBlip = 3;
         ready = standalone = false;
     }
@@ -218,29 +224,35 @@ public final class SpawnIntroOverlay {
         nextBlip = visible + 3 + minecraft.player.getRandom().nextInt(3);
     }
 
-    private static float elapsed(float partialTick) {
-        if (!ready) return 0;
-        float partial = Minecraft.getInstance().isPaused() ? 0 : partialTick;
-        return scene == null ? age + partial : scene.elapsed(age, partial);
+    private static float partial(float partialTick) {
+        return Minecraft.getInstance().isPaused() ? 0 : partialTick;
+    }
+
+    private static float overlayElapsed(float partialTick) {
+        return ready ? age + partial(partialTick) : 0;
+    }
+
+    private static float sceneElapsed(float partialTick) {
+        return scene.elapsed(partial(partialTick));
     }
 
     public record CameraPose(Vec3 position, float yaw, float pitch, float roll) {}
 
     public static CameraPose sceneCamera(Entity entity, Vec3 eye, float yaw, float pitch, float roll, float partialTick) {
         if (!sceneActive() || entity != Minecraft.getInstance().player) return null;
-        return scene.camera((LocalPlayer) entity, eye, yaw, pitch, roll, elapsed(partialTick), partialTick);
+        return scene.camera((LocalPlayer) entity, eye, yaw, pitch, roll, sceneElapsed(partialTick), partialTick);
     }
 
     public static CameraPose returnSceneCamera(Entity entity, Camera camera, float partialTick) {
         Minecraft minecraft = Minecraft.getInstance();
         if (!sceneReady() || entity != minecraft.player) return null;
-        return scene.returnCamera(minecraft.player, camera, age, partialTick, minecraft.isPaused());
+        return scene.returnCamera(minecraft.player, camera, partialTick, minecraft.isPaused());
     }
 
     public static boolean renderSceneArms(float partialTick, PoseStack poses, MultiBufferSource.BufferSource buffer,
                                           LocalPlayer player, int light) {
         if (!sceneActive() || !scene.firstPerson() || Minecraft.getInstance().getCameraEntity() != player) return false;
-        if (!scene.hasFullBody()) scene.renderFirstPersonArms(elapsed(partialTick), poses, buffer, player, light);
+        if (!scene.hasFullBody()) scene.renderFirstPersonArms(sceneElapsed(partialTick), poses, buffer, player, light);
         return true;
     }
 
@@ -260,7 +272,7 @@ public final class SpawnIntroOverlay {
         if (player == null || camera.getEntity() != player || camera.isDetached()
                 || player.isSpectator() || player.isSleeping() || minecraft.options.hideGui) return;
         int light = minecraft.getEntityRenderDispatcher().getPackedLightCoords(player, camera.getPartialTickTime());
-        scene.renderFirstPersonBody(elapsed(camera.getPartialTickTime()), event.getPoseStack(),
+        scene.renderFirstPersonBody(sceneElapsed(camera.getPartialTickTime()), event.getPoseStack(),
                 minecraft.renderBuffers().bufferSource(), player, camera, light);
     }
 
@@ -269,11 +281,11 @@ public final class SpawnIntroOverlay {
     }
 
     public static void poseScenePlayer(PlayerModel<?> model, float partialTick, List<Runnable> restore) {
-        scene.posePlayer(model, elapsed(partialTick), restore);
+        scene.posePlayer(model, sceneElapsed(partialTick), restore);
     }
 
     private static boolean sceneActive() {
-        return sceneReady() && age < intro.scene().durationTicks();
+        return sceneReady() && scene.animating();
     }
 
     private static boolean sceneReady() {
@@ -289,7 +301,7 @@ public final class SpawnIntroOverlay {
 
     private static void fov(net.neoforged.neoforge.client.event.ViewportEvent.ComputeFov event) {
         if (active() && event.usedConfiguredFov()) {
-            event.setFOV(Math.max(1, event.getFOV() - 10 * (1 - worldReveal(elapsed((float) event.getPartialTick())))));
+            event.setFOV(Math.max(1, event.getFOV() - 10 * (1 - worldReveal(overlayElapsed((float) event.getPartialTick())))));
         }
     }
 
@@ -298,7 +310,7 @@ public final class SpawnIntroOverlay {
         Minecraft minecraft = Minecraft.getInstance();
         int width = graphics.guiWidth();
         int height = graphics.guiHeight();
-        float elapsed = elapsed(partialTick);
+        float elapsed = overlayElapsed(partialTick);
         int black = Math.round(255 * (1 - worldReveal(elapsed)));
         if (black > 0) graphics.fill(0, 0, width, height, black << 24);
         if (!ready) return;
@@ -309,11 +321,16 @@ public final class SpawnIntroOverlay {
                     : IntroCinematicBars.visibility(elapsed - timing.barStartTicks(), timing.barEnterTicks(), timing.barHoldTicks(), timing.barExitTicks());
             IntroCinematicBars.render(graphics, width, height, visibility, barSlant, intro.barHeight());
         }
-        if (scene != null && scene.waiting()) {
-            var binding = minecraft.options.keyInventory;
-            var key = binding.isUnbound() ? Component.literal("E") : binding.getTranslatedKeyMessage();
-            graphics.drawCenteredString(minecraft.font, Component.translatable("screen.kingdomsheritage.scene_continue", key),
-                    width / 2, Math.round(height * 0.79F), 0xFFFFFF);
+        if (showContinuePrompt()) {
+            float progress = Math.min(1F, (continuePromptTicks + partial(partialTick)) / CONTINUE_PROMPT_FADE_TICKS);
+            int opacity = Math.round(255 * (float) Mth.smoothstep(progress));
+            if (opacity > 3) {
+                var binding = minecraft.options.keyInventory;
+                var key = binding.isUnbound() ? Component.literal("E") : binding.getTranslatedKeyMessage();
+                var label = Component.literal("[").append(key).append("]").withStyle(ChatFormatting.YELLOW);
+                SelectionText.centered(graphics, minecraft.font, Component.translatable("screen.kingdomsheritage.scene_continue", label),
+                        width / 2, Math.round(height * 0.79F), (opacity << 24) | 0xFFFFFF);
+            }
         }
         float ticks = elapsed - intro.textStartTicks();
         if (ticks < 0) return;
@@ -389,13 +406,18 @@ public final class SpawnIntroOverlay {
         }
     }
 
+    private static boolean showContinuePrompt() {
+        return scene != null && scene.waiting() && age >= intro.overlayDurationTicks(revealTicks);
+    }
+
     private static boolean awaitingSceneInput() {
         Minecraft minecraft = Minecraft.getInstance();
-        return sceneActive() && scene.waiting() && minecraft.screen == null && minecraft.getOverlay() == null;
+        return sceneActive() && showContinuePrompt() && minecraft.screen == null && minecraft.getOverlay() == null;
     }
 
     private static void resumeScene() {
         scene.resume();
+        continuePromptTicks = 0;
         PacketDistributor.sendToServer(new HeritageNetwork.IntroWait(token, false));
     }
 
