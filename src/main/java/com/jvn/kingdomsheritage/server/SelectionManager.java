@@ -25,6 +25,8 @@ import net.minecraft.world.phys.Vec3;
 import net.neoforged.bus.api.ICancellableEvent;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.neoforge.event.entity.living.LivingIncomingDamageEvent;
+import net.neoforged.neoforge.event.entity.living.LivingKnockBackEvent;
+import net.neoforged.neoforge.event.level.ExplosionKnockbackEvent;
 import net.neoforged.neoforge.event.entity.player.AttackEntityEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
@@ -535,6 +537,16 @@ public final class SelectionManager {
     @SubscribeEvent
     public static void damage(LivingIncomingDamageEvent event) {
         if (event.getEntity() instanceof ServerPlayer player && blocked(player)) event.setCanceled(true);
+    }
+
+    @SubscribeEvent
+    public static void cinematicKnockback(LivingKnockBackEvent event) {
+        if (event.getEntity() instanceof ServerPlayer player && SpawnIntro.locked(player)) event.setCanceled(true);
+    }
+
+    @SubscribeEvent
+    public static void cinematicExplosion(ExplosionKnockbackEvent event) {
+        if (event.getAffectedEntity() instanceof ServerPlayer player && SpawnIntro.locked(player)) event.setKnockbackVelocity(Vec3.ZERO);
     }
 
     @SubscribeEvent

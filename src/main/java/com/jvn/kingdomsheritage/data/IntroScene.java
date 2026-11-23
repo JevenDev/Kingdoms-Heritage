@@ -10,11 +10,45 @@ import java.util.Objects;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.GsonHelper;
 
-public record IntroScene(ResourceLocation animationFile, String clip, int durationTicks, List<Integer> waitAtTicks,
+public record IntroScene(ResourceLocation animationFile, String clip, int durationTicks,
                          Perspective perspective, Perspective exitPerspective, boolean smoothCameraReturn,
-                         Integer firstPersonHideTorsoAtTick, boolean firstPersonHideArmsWithTorso) {
+                         Integer firstPersonHideTorsoAtTick, boolean firstPersonHideArmsWithTorso, List<Pause> pauses) {
     private static final int CAMERA_RETURN_TICKS = 12;
     private static final int MAX_WAITS = 16;
+
+    public record Pause(int tick, String key, String prompt) {
+        public static final String DEFAULT_KEY = "key.inventory";
+
+        public Pause {
+            if (key == null || !key.matches("[A-Za-z0-9_.:/-]{1,128}")) {
+                throw new IllegalArgumentException("scene pause key must be a key binding name");
+            }
+            if (prompt != null && (prompt.isBlank() || prompt.length() > 256 || prompt.chars().anyMatch(Character::isISOControl))) {
+                throw new IllegalArgumentException("scene pause prompt must be one line of 1 to 256 characters");
+            }
+        }
+
+        private static Pause parse(JsonObject json) {
+            return new Pause(ticks(json.get("tick"), "pause tick"), string(json, "key", DEFAULT_KEY), string(json, "prompt", null));
+        }
+
+        private static String string(JsonObject json, String field, String fallback) {
+            var value = json.get(field);
+            if (value == null) return fallback;
+            if (!value.isJsonPrimitive() || !value.getAsJsonPrimitive().isString()) {
+                throw new IllegalArgumentException("scene pause " + field + " must be a string");
+            }
+            return value.getAsString();
+        }
+
+        private JsonObject json() {
+            var json = new JsonObject();
+            json.addProperty("tick", tick);
+            if (!key.equals(DEFAULT_KEY)) json.addProperty("key", key);
+            if (prompt != null) json.addProperty("prompt", prompt);
+            return json;
+        }
+    }
 
     public enum Perspective {
         FIRST_PERSON, THIRD_PERSON_BACK, THIRD_PERSON_FRONT, PREVIOUS;
@@ -47,6 +81,16 @@ public record IntroScene(ResourceLocation animationFile, String clip, int durati
                 smoothCameraReturn, firstPersonHideTorsoAtTick, false);
     }
 
+    public IntroScene(ResourceLocation animationFile, String clip, int durationTicks, List<Integer> waitAtTicks,
+                      Perspective perspective, Perspective exitPerspective, boolean smoothCameraReturn,
+                      Integer firstPersonHideTorsoAtTick, boolean firstPersonHideArmsWithTorso) {
+        this(animationFile, clip, durationTicks, perspective, exitPerspective, smoothCameraReturn,
+                firstPersonHideTorsoAtTick, firstPersonHideArmsWithTorso,
+                waitAtTicks.stream().map(tick -> new Pause(tick, Pause.DEFAULT_KEY, null)).toList());
+    }
+
+    public List<Integer> waitAtTicks() { return pauses.stream().map(Pause::tick).toList(); }
+
     public IntroScene {
         Objects.requireNonNull(animationFile, "animationFile");
         Objects.requireNonNull(perspective, "perspective");
@@ -60,29 +104,38 @@ public record IntroScene(ResourceLocation animationFile, String clip, int durati
         if (firstPersonHideTorsoAtTick != null && (firstPersonHideTorsoAtTick < 1 || firstPersonHideTorsoAtTick >= durationTicks)) {
             throw new IllegalArgumentException("scene first_person_hide_torso_at_tick must be within the clip");
         }
-        waitAtTicks = List.copyOf(waitAtTicks);
-        if (waitAtTicks.size() > MAX_WAITS) throw new IllegalArgumentException("scene supports at most " + MAX_WAITS + " waits");
+        pauses = List.copyOf(pauses);
+        if (pauses.size() > MAX_WAITS) throw new IllegalArgumentException("scene supports at most " + MAX_WAITS + " pauses");
         int previous = 0;
-        for (int tick : waitAtTicks) {
-            if (tick <= previous || tick >= durationTicks) {
-                throw new IllegalArgumentException("scene wait_at_ticks must be increasing and within the clip");
+        for (var pause : pauses) {
+            if (pause.tick() <= previous || pause.tick() >= durationTicks) {
+                throw new IllegalArgumentException("scene pause ticks must be increasing and within the clip");
             }
-            previous = tick;
+            previous = pause.tick();
         }
     }
 
     static IntroScene parse(JsonObject json) {
-        var waits = new ArrayList<Integer>();
-        for (JsonElement tick : GsonHelper.getAsJsonArray(json, "wait_at_ticks", new JsonArray())) {
-            waits.add(ticks(tick, "wait_at_ticks"));
+        if (json.has("pauses") && json.has("wait_at_ticks")) {
+            throw new IllegalArgumentException("scene cannot specify both pauses and wait_at_ticks");
+        }
+        var pauses = new ArrayList<Pause>();
+        if (json.has("pauses")) {
+            for (var value : GsonHelper.getAsJsonArray(json, "pauses")) {
+                pauses.add(Pause.parse(GsonHelper.convertToJsonObject(value, "pause")));
+            }
+        } else {
+            for (var tick : GsonHelper.getAsJsonArray(json, "wait_at_ticks", new JsonArray())) {
+                pauses.add(new Pause(ticks(tick, "wait_at_ticks"), Pause.DEFAULT_KEY, null));
+            }
         }
         return new IntroScene(ResourceLocation.parse(GsonHelper.getAsString(json, "animation_file")),
-                GsonHelper.getAsString(json, "clip"), ticks(json.get("duration_ticks"), "duration_ticks"), waits,
+                GsonHelper.getAsString(json, "clip"), ticks(json.get("duration_ticks"), "duration_ticks"),
                 Perspective.parse(json, "perspective"), Perspective.parse(json, "exit_perspective"),
                 GsonHelper.getAsBoolean(json, "smooth_camera_return", false),
                 json.has("first_person_hide_torso_at_tick")
                         ? ticks(json.get("first_person_hide_torso_at_tick"), "first_person_hide_torso_at_tick") : null,
-                GsonHelper.getAsBoolean(json, "first_person_hide_arms_with_torso", false));
+                GsonHelper.getAsBoolean(json, "first_person_hide_arms_with_torso", false), pauses);
     }
 
     private static int ticks(JsonElement value, String field) {
@@ -106,10 +159,16 @@ public record IntroScene(ResourceLocation animationFile, String clip, int durati
         if (smoothCameraReturn) json.addProperty("smooth_camera_return", true);
         if (firstPersonHideTorsoAtTick != null) json.addProperty("first_person_hide_torso_at_tick", firstPersonHideTorsoAtTick);
         if (firstPersonHideArmsWithTorso) json.addProperty("first_person_hide_arms_with_torso", true);
-        if (!waitAtTicks.isEmpty()) {
-            var waits = new JsonArray();
-            waitAtTicks.forEach(waits::add);
-            json.add("wait_at_ticks", waits);
+        if (!pauses.isEmpty()) {
+            var serialized = new JsonArray();
+            boolean legacy = pauses.stream().allMatch(pause -> pause.key().equals(Pause.DEFAULT_KEY) && pause.prompt() == null);
+            if (legacy) {
+                for (var pause : pauses) serialized.add(pause.tick());
+                json.add("wait_at_ticks", serialized);
+            } else {
+                for (var pause : pauses) serialized.add(pause.json());
+                json.add("pauses", serialized);
+            }
         }
         return json;
     }

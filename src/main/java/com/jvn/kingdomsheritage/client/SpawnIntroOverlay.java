@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.UUID;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Camera;
+import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.DeathScreen;
@@ -47,7 +48,8 @@ public final class SpawnIntroOverlay {
     private static IntroDefinition intro;
     private static UUID token;
     private static CinematicScene scene;
-    private static InputConstants.Key pressedContinueKey;
+    private record ContinueKey(InputConstants.Key key, KeyMapping binding) {}
+    private static ContinueKey pressedContinueKey;
     private static ResourceLocation dimension;
     private static List<ToucanGlyphLayout.Glyph> text = List.of();
     private static List<ToucanGlyphLayout.Glyph> subtitle = List.of();
@@ -325,10 +327,7 @@ public final class SpawnIntroOverlay {
             float progress = Math.min(1F, (continuePromptTicks + partial(partialTick)) / CONTINUE_PROMPT_FADE_TICKS);
             int opacity = Math.round(255 * (float) Mth.smoothstep(progress));
             if (opacity > 3) {
-                var binding = minecraft.options.keyInventory;
-                var key = binding.isUnbound() ? Component.literal("E") : binding.getTranslatedKeyMessage();
-                var label = Component.literal("[").append(key).append("]").withStyle(ChatFormatting.YELLOW);
-                SelectionText.centered(graphics, minecraft.font, Component.translatable("screen.kingdomsheritage.scene_continue", label),
+                SelectionText.centered(graphics, minecraft.font, continuePrompt(minecraft),
                         width / 2, Math.round(height * 0.79F), (opacity << 24) | 0xFFFFFF);
             }
         }
@@ -382,17 +381,17 @@ public final class SpawnIntroOverlay {
 
     private static void sceneKey(InputEvent.Key event) {
         var key = InputConstants.getKey(event.getKey(), event.getScanCode());
-        var binding = Minecraft.getInstance().options.keyInventory;
-        if (key.equals(pressedContinueKey)) {
+        if (pressedContinueKey != null && key.equals(pressedContinueKey.key())) {
             if (event.getAction() == GLFW.GLFW_REPEAT) {
-                binding.consumeClick();
+                pressedContinueKey.binding().consumeClick();
                 return;
             }
             pressedContinueKey = null;
         }
-        if (awaitingSceneInput() && event.getAction() == GLFW.GLFW_PRESS
-                && (binding.matches(event.getKey(), event.getScanCode()) || binding.isUnbound() && event.getKey() == GLFW.GLFW_KEY_E)) {
-            pressedContinueKey = key;
+        if (event.getAction() != GLFW.GLFW_PRESS || !awaitingSceneInput()) return;
+        var binding = continueBinding(Minecraft.getInstance());
+        if (binding.isActiveAndMatches(key) || binding.isUnbound() && event.getKey() == GLFW.GLFW_KEY_E) {
+            pressedContinueKey = new ContinueKey(key, binding);
             binding.consumeClick();
             resumeScene();
         }
@@ -400,10 +399,30 @@ public final class SpawnIntroOverlay {
 
     private static void sceneMouse(InputEvent.MouseButton.Pre event) {
         if (awaitingSceneInput() && event.getAction() == GLFW.GLFW_PRESS
-                && Minecraft.getInstance().options.keyInventory.matchesMouse(event.getButton())) {
+                && continueBinding(Minecraft.getInstance()).isActiveAndMatches(InputConstants.Type.MOUSE.getOrCreate(event.getButton()))) {
             resumeScene();
             event.setCanceled(true);
         }
+    }
+
+    private static KeyMapping continueBinding(Minecraft minecraft) {
+        String name = scene.currentPause().key();
+        for (var binding : minecraft.options.keyMappings) {
+            if (binding.getName().equals(name) && !binding.isUnbound() && binding.getKeyConflictContext().isActive()) return binding;
+        }
+        return minecraft.options.keyInventory;
+    }
+
+    private static Component continuePrompt(Minecraft minecraft) {
+        var binding = continueBinding(minecraft);
+        var key = binding.isUnbound() ? Component.literal("E") : binding.getTranslatedKeyMessage();
+        var label = Component.literal("[").append(key).append("]").withStyle(ChatFormatting.YELLOW);
+        String prompt = scene.currentPause().prompt();
+        if (prompt == null) return Component.translatable("screen.kingdomsheritage.scene_continue", label);
+        String[] parts = prompt.split("\\{key\\}", -1);
+        var text = Component.literal(parts[0]);
+        for (int i = 1; i < parts.length; i++) text.append(label).append(parts[i]);
+        return text;
     }
 
     private static boolean showContinuePrompt() {

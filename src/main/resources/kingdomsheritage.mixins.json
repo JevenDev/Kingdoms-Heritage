@@ -4,6 +4,7 @@
   "compatibilityLevel": "JAVA_21",
   "mixins": [
     "SelectionPacketGuard",
+    "CinematicMovementGuard",
     "KitEquipmentUpdates"
   ],
   "client": [
@@ -21,6 +22,7 @@
     "IntroHudFade",
     "IntroPlayerPose",
     "IntroMouseGuard",
+    "IntroMovementGuard",
     "IntroKeyGuard",
     "IntroToastGuard",
     "IntroSavingIndicatorGuard"

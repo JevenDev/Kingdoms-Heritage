@@ -76,13 +76,14 @@ final class CinematicScene {
     boolean firstPerson() { return sceneCameraType.isFirstPerson(); }
 
     boolean waiting() { return waiting; }
+    IntroScene.Pause currentPause() { return waiting ? scene.pauses().get(nextWait) : null; }
     boolean animating() { return age < scene.durationTicks(); }
     boolean finished() { return age >= scene.playbackTicks(); }
 
     boolean tick() {
         if (waiting || finished()) return false;
         age++;
-        if (nextWait >= scene.waitAtTicks().size() || age != scene.waitAtTicks().get(nextWait)) return false;
+        if (nextWait >= scene.pauses().size() || age != scene.pauses().get(nextWait).tick()) return false;
         waiting = true;
         return true;
     }
@@ -94,7 +95,7 @@ final class CinematicScene {
 
     float elapsed(float partialTick) {
         if (waiting) return age;
-        float next = nextWait < scene.waitAtTicks().size() ? scene.waitAtTicks().get(nextWait) : scene.durationTicks();
+        float next = nextWait < scene.pauses().size() ? scene.pauses().get(nextWait).tick() : scene.durationTicks();
         return Math.min(age + partialTick, Math.max(age, next));
     }
 

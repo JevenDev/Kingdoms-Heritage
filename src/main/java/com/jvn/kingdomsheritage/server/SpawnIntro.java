@@ -33,7 +33,7 @@ public final class SpawnIntro {
         private Playback(IntroDefinition intro, long now) {
             maximumDuration = intro.maximumDurationTicks();
             deadline = now + intro.durationTicks() + 600;
-            waitsRemaining = intro.scene() == null ? 0 : intro.scene().waitAtTicks().size();
+            waitsRemaining = intro.scene() == null ? 0 : intro.scene().pauses().size();
         }
 
         private boolean expired(long now) {
