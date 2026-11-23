@@ -70,9 +70,6 @@ public record KitDefinition(ResourceLocation id, String title, String descriptio
             if (index < 0 || index > 255 || (inventory.equals("player") && (index > 40 || cosmetic || !slot.isEmpty()))) {
                 throw new IllegalArgumentException("Invalid slot in " + inventory + ": " + index);
             }
-            if (cosmeticArmor && shop != null) {
-                throw new IllegalArgumentException("Cosmetic Armor Reworked slots require a premade kit");
-            }
             if (cosmeticArmor && (index >= EquipmentCompat.ARMOR_SLOTS.size() || cosmetic || !slot.isEmpty())) {
                 throw new IllegalArgumentException("Invalid Cosmetic Armor Reworked slot: " + index);
             }

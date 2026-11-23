@@ -10,6 +10,7 @@ import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
+import net.neoforged.fml.ModList;
 
 final class KitPreview {
     private static KitPreview rendering;
@@ -66,13 +67,25 @@ final class KitPreview {
         return expected == null ? -1 : expected.purchaseIndex(slot);
     }
 
+    private KitLoadout.Snapshot loadout() {
+        return expected == null ? original : expected;
+    }
+
+    boolean showsCosmeticArmor() {
+        return kit != null && kit.shop() == null && ModList.get().isLoaded(EquipmentCompat.COSMETIC_ARMOR);
+    }
+
+    static KitLoadout.Snapshot cosmeticArmor() {
+        return rendering != null && rendering.showsCosmeticArmor() ? rendering.loadout() : null;
+    }
+
     static Entity renderEntity(Entity entity) {
         if (rendering == null || entity != rendering.player) return entity;
-        var loadout = rendering.expected == null ? rendering.original : rendering.expected;
+        var loadout = rendering.loadout();
         if (rendering.renderPlayer == null) {
             rendering.renderPlayer = new KitPreviewPlayer((AbstractClientPlayer) entity, loadout);
         }
-        if (rendering.kit != null && rendering.kit.shop() == null && !rendering.renderingCosmeticArmor) {
+        if (!rendering.renderingCosmeticArmor && rendering.showsCosmeticArmor()) {
             rendering.renderingCosmeticArmor = true;
             EquipmentCompat.previewCosmeticArmor(rendering.renderPlayer, loadout::cosmeticArmor);
         }

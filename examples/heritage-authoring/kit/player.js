@@ -8,7 +8,7 @@ function matrix(p,m){return [m[0]*p[0]+m[4]*p[1]+m[8]*p[2]+m[12],m[1]*p[0]+m[5]*
 function equipment(kit) {
   const entries=Array.isArray(kit.items)?kit.items:[];
   const slots=new Map(entries.filter(entry=>(entry.inventory??'player')==='player').map(entry=>[entry.index,entry.item]));
-  if(!kit.shop)for(const entry of entries)if(entry.inventory===K.cosmeticArmorInventory)slots.set(36+entry.index,entry.item);
+  for(const entry of entries)if(entry.inventory===K.cosmeticArmorInventory)slots.set(36+entry.index,entry.item);
   const armor=new Map();
   for(const [index,type] of [[36,'feet'],[37,'legs'],[38,'chest'],[39,'head']]){
     const stack=slots.get(index),data=stack&&K.items.get(K.normalize(stack.id));

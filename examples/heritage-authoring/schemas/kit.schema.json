@@ -23,16 +23,6 @@
       { "required": ["items"] },
       { "required": ["shop"] }
     ],
-    "if": { "required": ["shop"] },
-    "then": {
-      "properties": {
-        "items": {
-          "items": {
-            "properties": { "inventory": { "not": { "const": "cosmeticarmorreworked" } } }
-          }
-        }
-      }
-    },
     "properties": {
       "title": {
         "type": "string",
@@ -321,7 +311,7 @@
       "else": {
         "if": { "properties": { "inventory": { "const": "cosmeticarmorreworked" } } },
         "then": {
-          "description": "Cosmetic Armor Reworked for premade kits. Index 0 is boots, 1 leggings, 2 chestplate, and 3 helmet.",
+          "description": "Cosmetic Armor Reworked slots for included kit equipment. Index 0 is boots, 1 leggings, 2 chestplate, and 3 helmet.",
           "properties": {
             "index": { "maximum": 3 },
             "slot": { "const": "" },

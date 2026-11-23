@@ -1,6 +1,6 @@
 (() => {
 'use strict';
-const E=HeritageEquipment,K=HeritageKit,$=id=>document.getElementById(id),modes=E.inventoryNames,cosmeticArmor=K.cosmeticArmorInventory;
+const E=HeritageEquipment,K=HeritageKit,$=id=>document.getElementById(id),modes=E.inventoryNames;
 class EquipmentEditor {
   constructor({getDocument,getSelection,onSelect,onUpdate,notice,canSwitch}) {
     this.getDocument=getDocument;this.getSelection=getSelection;this.onSelect=onSelect;this.onUpdate=onUpdate;this.notice=notice;this.canSwitch=canSwitch;
@@ -56,7 +56,6 @@ class EquipmentEditor {
   }
   sync() {
     const document=this.getDocument(),entries=document.enabled===false?[]:document.items||[],first=entries.find(E.isEquipment);
-    if(document.shop&&this.state.mode===cosmeticArmor)this.state.mode='player';
     if(first&&!this.hadEquipment&&this.state.mode==='player'){
       this.state.mode=first.inventory;
       if(E.configurable.includes(first.inventory)){
@@ -77,7 +76,7 @@ class EquipmentEditor {
   }
   reflect() {
     for(const mode of modes){$('mode-'+mode).setAttribute('aria-selected',String(mode===this.state.mode));$('mode-'+mode).tabIndex=mode===this.state.mode?0:-1;}
-    const mode=this.state.mode;$('mode-'+cosmeticArmor).hidden=!!this.getDocument().shop;
+    const mode=this.state.mode;
     $('inventory').setAttribute('aria-labelledby','mode-'+mode);$('inventory').setAttribute('aria-label',$('mode-'+mode).textContent+' inventory preview');
     $('equipment-view-controls').hidden=!E.configurable.includes(mode);$('show-cosmetics').checked=this.state.cosmetics[mode]??false;
   }

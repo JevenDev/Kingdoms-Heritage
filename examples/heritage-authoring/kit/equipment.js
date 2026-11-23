@@ -183,11 +183,11 @@ function layout(document,{mode='player',profiles,cosmetics=false,offset=0,purse}
       groupStart+=groupSize;groupY+=17;
     }
   }
-  if(mode===cosmeticArmorInventory&&!document.shop){
+  if(mode===cosmeticArmorInventory){
     const icons=['boots','leggings','chestplate','helmet'];
     for(let index=3;index>=0;index--){
       const slot={inventory:mode,slot:'',index,cosmetic:false};
-      result.slots.push({...slot,id:id(slot),x:135,y:8+(3-index)*18,icon:'empty_armor_slot_'+icons[index]+'.png'});
+      result.slots.push({...slot,id:id(slot),x:98+(3-index)*18,y:62,icon:'empty_armor_slot_'+icons[index]+'.png'});
     }
     result.total=result.shown=icons.length;
   }

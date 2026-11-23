@@ -112,15 +112,22 @@ test('changing workspace views reuses parsed preview data until the output chang
   data.catalog.kits[1].document.title='Changed';const updated=await view.render(data.state,data.catalog);assert.equal(updated.kit.title,'Changed');assert.equal(calls,2);
 });
 
-test('the Cosmetic Armor layout is available only for premade kits',async()=>{
+test('site previews show included cosmetic armor in shop kits before and after a purchase',async()=>{
   const view=workspace(),{state,catalog}=fixture(),inventory=Kit.cosmeticArmorInventory;
+  const helmet={inventory,index:3,item:{id:'minecraft:golden_helmet'}};
+  catalog.kits[1].document.items=[helmet];
   catalog.kits[1].document.shop={budget:1,offers:[{cost:1,item:{id:'minecraft:stick'}}]};
   await view.render(state,catalog);
-  const mode=view.controls()[1].children[4].children[0],option=mode.children.find(option=>option.value===inventory);
-  assert.equal(option.disabled,false);
-  mode.value=inventory;mode.events.change();
-  assert.equal((await view.render(state,catalog)).inventoryMode,inventory);
-  view.selectKit('two');
-  assert.equal((await view.render(state,catalog)).inventoryMode,'player');
-  assert.equal(option.disabled,true);
+  const controls=view.controls()[1],mode=controls.children[4].children[0];
+  assert.ok(mode.children.some(option=>option.value===inventory));
+  mode.value=inventory;mode.events.change();view.selectKit('two');
+  let draw=await view.render(state,catalog);
+  assert.equal(draw.inventoryMode,inventory);
+  assert.equal(draw.kit.items[0].item.id,helmet.item.id);
+  controls.children[3].events.click();await view.render(state,catalog);
+  view.find('preview-shop')[1].children[1].children[0].events.click();
+  draw=await view.render(state,catalog);
+  assert.equal(draw.inventoryMode,inventory);
+  assert.equal(draw.kit.items.find(entry=>entry.inventory===inventory).item.id,helmet.item.id);
+  assert.equal(draw.kit.items.find(entry=>entry.inventory!==inventory).item.id,'minecraft:stick');
 });

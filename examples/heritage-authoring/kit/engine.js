@@ -57,7 +57,6 @@ function read(source) {
     if(entry.ignore_stack_limit!==undefined&&typeof entry.ignore_stack_limit!=='boolean')throw issue(label+': ignore_stack_limit must be true or false.',[...path,'ignore_stack_limit']);
     if(!inventoryNames.includes(inventory))throw issue(label+': unknown inventory.',[...path,'inventory']);
     const cosmeticArmor=inventory===cosmeticArmorInventory,indexed=inventory==='player'||cosmeticArmor;
-    if(cosmeticArmor&&document.shop!==undefined)throw issue('Cosmetic Armor Reworked slots require a premade kit.',[...path,'inventory']);
     integer(entry.index,0,cosmeticArmor?3:indexed?40:255,label+' slot index',[...path,'index']);
     if(typeof slot!=='string'||(indexed?slot!=='':!slot.trim()||slot.length>128))throw issue(label+': invalid equipment slot.',[...path,'slot']);
     if(typeof cosmetic!=='boolean'||indexed&&cosmetic)throw issue(label+': invalid cosmetic setting.',[...path,'cosmetic']);
@@ -130,7 +129,7 @@ function canPreview(document) {
         ||entry.item.components!==undefined&&!object(entry.item.components))return false;
     const inventory=entry.inventory??'player';
     if(inventory==='player')return entry.index<=40;
-    if(inventory===cosmeticArmorInventory)return document.shop===undefined&&entry.index<=3&&(entry.slot??'')===''&&(entry.cosmetic??false)===false;
+    if(inventory===cosmeticArmorInventory)return entry.index<=3&&(entry.slot??'')===''&&(entry.cosmetic??false)===false;
     return inventoryNames.includes(inventory)&&entry.index<=255&&typeof entry.slot==='string'
       &&entry.slot.trim().length>0&&entry.slot.length<=128&&typeof(entry.cosmetic??false)==='boolean';
   });

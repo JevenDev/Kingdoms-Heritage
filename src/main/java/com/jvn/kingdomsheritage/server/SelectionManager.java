@@ -264,8 +264,10 @@ public final class SelectionManager {
             var stacks = kit.loadout(player, policy, request.offers());
             if (policy != HeritageConfig.InventoryPolicy.PRESERVE) {
                 KitStatGrants.validate(player, kit.stats());
-                if (request.offers().isEmpty()) EquipmentCompat.validate(player, stacks);
-                else KitLoadout.plan(KitLoadout.capture(player, false), player.getInventory().items.size(), kit, stacks, policy);
+                EquipmentCompat.validate(player, stacks);
+                if (!request.offers().isEmpty()) {
+                    KitLoadout.plan(KitLoadout.capture(player, false), player.getInventory().items.size(), kit, stacks, policy);
+                }
             }
             SelectionLifecycle.choices(player, spawnId, kitId);
             session.begin(player, request, SelectionParty.search(player, spawn));

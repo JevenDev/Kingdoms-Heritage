@@ -251,6 +251,7 @@ public final class KitSelection {
     List<JsonObject> choices() { return choices; }
     int index() { return index; }
     boolean modelPreview() { return modelPreview; }
+    boolean showsCosmeticArmor() { return inventoryPreview.showsCosmeticArmor(); }
     boolean submitted() { return submitted; }
     Component problem() { return problem; }
     Player player() { return player; }

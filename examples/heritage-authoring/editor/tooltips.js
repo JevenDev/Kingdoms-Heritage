@@ -50,7 +50,7 @@ globalThis.HeritageTooltips={setup({font,sprite,screen='intro'}) {
     'import-mods':['Import mod JARs','Read item names and textures into this browser. Players still need the mods installed in game.'],
     'mode-curios':['Curios slots','Preview Curios equipment. Slot names and counts must match your modpack.'],
     'mode-accessories':['Accessories slots','Preview Accessories equipment. Slot names and counts must match your modpack.'],
-    'mode-cosmeticarmorreworked':['Cosmetic Armor Reworked','Equip display armor for a premade kit. This kit requires Cosmetic Armor Reworked in Minecraft.'],
+    'mode-cosmeticarmorreworked':['Cosmetic Armor Reworked','Equip cosmetic armor included with the kit. These slots require Cosmetic Armor Reworked in Minecraft.'],
     'kit-stat-gold':['Gold purse grant','Adds to the player’s Numismatic purse. One gold equals 100 silver or 10,000 bronze. Requires Numismatic Overhaul.'],
     'kit-stat-silver':['Silver purse grant','Adds to the player’s Numismatic purse. One silver equals 100 bronze. Requires Numismatic Overhaul.'],
     'kit-stat-bronze':['Bronze purse grant','Adds to the player’s Numismatic purse, separately from inventory coin stacks. Requires Numismatic Overhaul.'],

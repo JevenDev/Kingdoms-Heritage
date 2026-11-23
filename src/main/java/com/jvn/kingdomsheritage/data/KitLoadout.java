@@ -124,10 +124,7 @@ public final class KitLoadout {
         var items = new ArrayList<ItemStack>(original.items.size());
         original.items.forEach(stack -> items.add(replace ? ItemStack.EMPTY : stack.copy()));
         var equipment = new LinkedHashMap<EquipmentSlot, ItemStack>();
-        original.equipment.forEach((slot, stack) -> {
-            boolean keepCosmeticArmor = kit.shop() != null && EquipmentCompat.COSMETIC_ARMOR.equals(slot.inventory());
-            equipment.put(slot, replace && !keepCosmeticArmor ? ItemStack.EMPTY : stack.copy());
-        });
+        original.equipment.forEach((slot, stack) -> equipment.put(slot, replace ? ItemStack.EMPTY : stack.copy()));
         int[] purchaseIndices = new int[items.size()];
         Arrays.fill(purchaseIndices, -1);
         int purchases = 0;

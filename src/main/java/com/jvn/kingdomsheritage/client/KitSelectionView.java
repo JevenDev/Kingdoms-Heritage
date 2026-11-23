@@ -1,6 +1,7 @@
 package com.jvn.kingdomsheritage.client;
 
 import com.google.gson.JsonObject;
+import com.jvn.kingdomsheritage.compat.EquipmentCompat;
 import com.jvn.kingdomsheritage.data.DefinitionJson;
 import com.jvn.kingdomsheritage.data.KitStats;
 import com.jvn.kingdomsheritage.mixin.InventoryButtonAction;
@@ -47,6 +48,9 @@ final class KitSelectionView {
     private Button confirm;
     private Button back;
     private Button disconnect;
+    private Button cosmeticSwitch;
+    private AbstractContainerScreen<?> cosmeticInventory;
+    private boolean cosmeticLayout = true;
     private Rect2i bounds;
     private Rect2i purseBounds;
     private int descriptionY;
@@ -127,6 +131,12 @@ final class KitSelectionView {
                 : model.hasShop() ? "screen.kingdomsheritage.shop.open" : "screen.kingdomsheritage.next";
         confirm.setMessage(model.submitted() ? ClientSelection.progress() : Component.translatable(confirmKey));
         confirm.setTooltip(Tooltip.create(model.policyHint()));
+        if (cosmeticSwitch != null) {
+            cosmeticSwitch.visible = model.showsCosmeticArmor() && !reviewing;
+            cosmeticSwitch.active = cosmeticSwitch.visible && !model.submitted() && !carousel.moving(net.minecraft.Util.getMillis());
+            var screen = Minecraft.getInstance().screen;
+            if (!cosmeticSwitch.visible && screen != null && screen.getFocused() == cosmeticSwitch) screen.setFocused(null);
+        }
     }
 
     private void confirm() {
@@ -164,6 +174,8 @@ final class KitSelectionView {
         if (!KitSelection.isPreviewInventory(screen)) return;
         KitSelectionView view = current();
         view.carousel.close();
+        view.cosmeticInventory = null;
+        view.cosmeticSwitch = null;
         boolean equipment = !view.model.modelPreview();
         boolean accessories = equipment && ModList.get().isLoaded("accessories");
         for (var child : List.copyOf(screen.children())) {
@@ -188,6 +200,14 @@ final class KitSelectionView {
         event.addListener(view.next);
         event.addListener(view.back);
         event.addListener(view.confirm);
+        if (equipment && screen instanceof InventoryScreen inventory && ModList.get().isLoaded(EquipmentCompat.COSMETIC_ARMOR)) {
+            view.cosmeticSwitch = CosmeticArmorKitPreview.switchButton(inventory, view.cosmeticLayout, button -> {
+                view.cosmeticLayout = !view.cosmeticLayout;
+                button.setMessage(CosmeticArmorKitPreview.switchLabel(view.cosmeticLayout));
+                view.carousel.close();
+            });
+            if (view.cosmeticSwitch != null) event.addListener(view.cosmeticSwitch);
+        }
         view.updateButtons();
         view.stats = view.model.previewStats();
         view.positionControls(screen, view.confirmationProgress());
@@ -252,7 +272,7 @@ final class KitSelectionView {
                                 bounds.getX() + bounds.getWidth(), bounds.getY() + bounds.getHeight(),
                                 modelSize(), 0.0625F, 0, 0, model.player());
                     } else {
-                        renderInventory(screen, graphics, mouseX, mouseY, partialTick, tooltips);
+                        renderInventory(screen, graphics, mouseX, mouseY, partialTick, tooltips, index == model.index());
                     }
                 } finally {
                     graphics.flush();
@@ -264,12 +284,20 @@ final class KitSelectionView {
         }
     }
 
-    private void renderInventory(Screen screen, GuiGraphics graphics, int mouseX, int mouseY, float partialTick, boolean tooltips) {
+    private void renderInventory(Screen screen, GuiGraphics graphics, int mouseX, int mouseY, float partialTick,
+                                 boolean tooltips, boolean selected) {
         List<Button> buttons = List.of(previous, next, back, confirm, disconnect);
         var visible = buttons.stream().map(button -> button.visible).toList();
+        boolean showSwitch = cosmeticSwitch != null && cosmeticSwitch.visible;
         try {
             for (Button button : buttons) button.visible = false;
-            if (tooltips) screen.renderWithTooltip(graphics, mouseX, mouseY, partialTick);
+            if (cosmeticSwitch != null) cosmeticSwitch.visible = showSwitch && selected;
+            var cosmeticArmor = KitPreview.cosmeticArmor();
+            if (cosmeticLayout && cosmeticArmor != null && screen instanceof InventoryScreen inventory) {
+                if (cosmeticInventory == null) cosmeticInventory = CosmeticArmorKitPreview.create(inventory, model.player());
+                CosmeticArmorKitPreview.render(cosmeticInventory, graphics, cosmeticArmor, mouseX, mouseY, partialTick);
+                for (var widget : screen.renderables) widget.render(graphics, mouseX, mouseY, partialTick);
+            } else if (tooltips) screen.renderWithTooltip(graphics, mouseX, mouseY, partialTick);
             else screen.render(graphics, mouseX, mouseY, partialTick);
             if (net.neoforged.fml.ModList.get().isLoaded("accessories")) {
                 AccessoriesControls.renderLayers(screen, graphics, tooltips ? mouseX : -10000, tooltips ? mouseY : -10000, partialTick);
@@ -280,6 +308,7 @@ final class KitSelectionView {
             }
         } finally {
             for (int i = 0; i < buttons.size(); i++) buttons.get(i).visible = visible.get(i);
+            if (cosmeticSwitch != null) cosmeticSwitch.visible = showSwitch;
         }
     }
 

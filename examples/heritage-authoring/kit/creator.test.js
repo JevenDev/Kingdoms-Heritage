@@ -85,7 +85,7 @@ test('inventory modes share a width budget including custom and cosmetic slots',
 test('premade kits round-trip cosmetic armor and preview it over equipped armor',()=>{
   const inventory=K.cosmeticArmorInventory,kit={title:'Scout',items:[{index:39,item:{id:'minecraft:iron_helmet'}}]};
   const layout=E.layout(kit,{mode:inventory}),slots=layout.slots.filter(slot=>slot.inventory===inventory);
-  assert.deepEqual(slots.map(slot=>slot.index),[3,2,1,0]);
+  assert.deepEqual(slots.map(({index,x,y})=>[index,x,y]),[[3,98,62],[2,116,62],[1,134,62],[0,152,62]]);
   const helmet=slots[0].id,stack={id:'minecraft:golden_helmet',count:1};
   const withCosmetic=M.click(kit,{origin:0,entry:{index:0,item:stack}},helmet).document;
   const exported=K.read(JSON.stringify(withCosmetic)).document;
@@ -95,12 +95,16 @@ test('premade kits round-trip cosmetic armor and preview it over equipped armor'
   assert.deepEqual(E.removeSlot(exported,helmet),kit);
 });
 
-test('cosmetic armor accepts four single-item slots and is unavailable to shop kits',()=>{
+test('shop kits round-trip included cosmetic armor through the four single-item slots',()=>{
   const inventory=K.cosmeticArmorInventory,shop={budget:1,offers:[{cost:1,item:{id:'minecraft:stick'}}]};
-  const entry={inventory,index:3,item:{id:'minecraft:golden_helmet'}},kit={title:'Scout',items:[entry]};
-  assert.throws(()=>K.read(JSON.stringify({...kit,shop})),/require a premade kit/);
+  const kit={title:'Scout',items:[],shop},stack={id:'minecraft:golden_helmet'};
+  const slots=E.layout(kit,{mode:inventory}).slots.filter(slot=>slot.inventory===inventory);
+  assert.equal(slots.length,4);
+  const edited=E.setSlot(kit,slots[0].id,stack),exported=K.read(JSON.stringify(edited)).document;
+  const entry={inventory,index:3,item:stack};
+  assert.deepEqual(E.entryAt(exported,slots[0].id),entry);
+  assert.deepEqual(exported.shop,shop);
+  assert.equal(P.equipment(exported).armor.get(39).id,stack.id);
   assert.throws(()=>K.read(JSON.stringify({...kit,items:[{...entry,index:4}]})),/0 to 3/);
   assert.throws(()=>K.read(JSON.stringify({...kit,items:[{...entry,item:{id:'minecraft:carved_pumpkin',count:2}}]})),/only one item/);
-  assert.equal(E.layout({shop},{mode:inventory}).slots.some(slot=>slot.inventory===inventory),false);
-  assert.equal(P.equipment({...kit,shop}).armor.has(39),false);
 });
