@@ -1,13 +1,14 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const Pack=require('./engine.js'),Flow=require('./flow.js'),Preview=require('../editor/engine.js'),bundled=require('./assets/defaults.json');
+const Kit=require('../kit/engine.js');
 function workspace(){
   const nodes=new Map(),listeners=new Map(),frames=new Map(),draws=[],monitorOptions=[];let frameId=0;
   const node=id=>{if(!nodes.has(id))nodes.set(id,{value:String(id).includes('resolution')?'1920x1080':id==='flow-scale'?'0':'',checked:false,hidden:false,dataset:{},style:{setProperty(){}},parentElement:{style:{setProperty(){}},after(){}},classList:{toggle(){}},events:{},children:[],addEventListener(type,listener){this.events[type]=listener;},setAttribute(){},replaceChildren(...children){this.children=children;},append(...children){this.children.push(...children);}});return nodes.get(id);};
   const document={hidden:false,getElementById:node,querySelectorAll:()=>[],createElement:()=>node(Symbol()),addEventListener(type,listener){listeners.set(type,listener);}};
   const monitor={defaults:bundled,textFit:()=>({}),pictures:async()=>{},needsResourcePack:()=>false,draw(value){draws.push(value);return Preview.guiViewport(value.width,value.height,value.guiScale);}};
   const tools={connect(){},update(){},preview:spawns=>spawns,page:()=>null};
-  const context=vm.createContext({document,structuredClone,performance:{now:()=>1000},Option:class {constructor(text,value){this.text=text;this.value=value;}},HeritagePreview:Preview,HeritageFlow:Flow,HeritagePack:Pack,
+  const context=vm.createContext({document,structuredClone,performance:{now:()=>1000},Option:class {constructor(text,value){this.text=text;this.value=value;}},HeritagePreview:Preview,HeritageFlow:Flow,HeritagePack:Pack,HeritageKit:Kit,
     HeritageDialogueAudio:{create:()=>({stop(){},syncMute(){}})},HeritageCardTools:{create:()=>tools},HeritageFlowPreview:{monitorPreview:async(node,options)=>{monitorOptions.push(options);return monitor;}},HeritageItemText:{name:item=>Flow.place(item.id),tooltip:item=>[item.id],parse:text=>text,colors:{gray:'gray'}},HeritageInventory:{setupTooltips(){},bindTooltip(node,content){node.tooltip=content;},icon:()=>node(Symbol())},HeritageIcons:{action(){}},
     requestAnimationFrame(callback){frames.set(++frameId,callback);return frameId;},cancelAnimationFrame(id){frames.delete(id);}});
   vm.runInContext(fs.readFileSync(require.resolve('./workspace-visuals.js'),'utf8'),context);
@@ -109,4 +110,17 @@ test('changing workspace views reuses parsed preview data until the output chang
   await view.render(data.state,data.catalog,'kits',false,output);await view.render(data.state,data.catalog,'intro',false,output);assert.equal(calls,1);
   view.monitorOptions[1].selectKit('preview:two');const draw=await view.render(data.state,data.catalog,'kits',false,output);assert.equal(draw.kit.id,'preview:two');assert.equal(calls,1);
   data.catalog.kits[1].document.title='Changed';const updated=await view.render(data.state,data.catalog);assert.equal(updated.kit.title,'Changed');assert.equal(calls,2);
+});
+
+test('the Cosmetic Armor layout is available only for premade kits',async()=>{
+  const view=workspace(),{state,catalog}=fixture(),inventory=Kit.cosmeticArmorInventory;
+  catalog.kits[1].document.shop={budget:1,offers:[{cost:1,item:{id:'minecraft:stick'}}]};
+  await view.render(state,catalog);
+  const mode=view.controls()[1].children[4].children[0],option=mode.children.find(option=>option.value===inventory);
+  assert.equal(option.disabled,false);
+  mode.value=inventory;mode.events.change();
+  assert.equal((await view.render(state,catalog)).inventoryMode,inventory);
+  view.selectKit('two');
+  assert.equal((await view.render(state,catalog)).inventoryMode,'player');
+  assert.equal(option.disabled,true);
 });

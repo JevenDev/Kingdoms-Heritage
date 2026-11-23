@@ -4,6 +4,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.jvn.kingdomsheritage.HeritageConfig.InventoryPolicy;
+import com.jvn.kingdomsheritage.compat.EquipmentCompat;
 import com.mojang.serialization.JsonOps;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -59,7 +60,8 @@ public record KitDefinition(ResourceLocation id, String title, String descriptio
         for (var element : array) {
             JsonObject entry = element.getAsJsonObject();
             String inventory = GsonHelper.getAsString(entry, "inventory", "player");
-            if (!List.of("player", "curios", "accessories").contains(inventory)) {
+            boolean cosmeticArmor = inventory.equals(EquipmentCompat.COSMETIC_ARMOR);
+            if (!cosmeticArmor && !List.of("player", "curios", "accessories").contains(inventory)) {
                 throw new IllegalArgumentException("Unknown inventory: " + inventory);
             }
             String slot = GsonHelper.getAsString(entry, "slot", "");
@@ -68,7 +70,13 @@ public record KitDefinition(ResourceLocation id, String title, String descriptio
             if (index < 0 || index > 255 || (inventory.equals("player") && (index > 40 || cosmetic || !slot.isEmpty()))) {
                 throw new IllegalArgumentException("Invalid slot in " + inventory + ": " + index);
             }
-            if (!inventory.equals("player") && (slot.isBlank() || slot.length() > 128)) {
+            if (cosmeticArmor && shop != null) {
+                throw new IllegalArgumentException("Cosmetic Armor Reworked slots require a premade kit");
+            }
+            if (cosmeticArmor && (index >= EquipmentCompat.ARMOR_SLOTS.size() || cosmetic || !slot.isEmpty())) {
+                throw new IllegalArgumentException("Invalid Cosmetic Armor Reworked slot: " + index);
+            }
+            if (!inventory.equals("player") && !cosmeticArmor && (slot.isBlank() || slot.length() > 128)) {
                 throw new IllegalArgumentException("Equipment entries require a slot name");
             }
             if (!occupied.add(inventory + "/" + slot + "/" + index + "/" + cosmetic)) {
@@ -85,8 +93,13 @@ public record KitDefinition(ResourceLocation id, String title, String descriptio
 
     public List<StackEntry> decode(HolderLookup.Provider registries) {
         var ops = RegistryOps.create(JsonOps.INSTANCE, registries);
-        return entries.stream().map(entry -> new StackEntry(entry.inventory(), entry.slot(), entry.index(), entry.cosmetic(),
-                decodeItem(ops, entry.item()))).toList();
+        return entries.stream().map(entry -> {
+            ItemStack stack = decodeItem(ops, entry.item());
+            if (EquipmentCompat.COSMETIC_ARMOR.equals(entry.inventory()) && stack.getCount() != 1) {
+                throw new HeritageException("item_count", "A cosmetic armor slot can hold only one item");
+            }
+            return new StackEntry(entry.inventory(), entry.slot(), entry.index(), entry.cosmetic(), stack);
+        }).toList();
     }
 
     public List<ItemStack> decodeOffers(HolderLookup.Provider registries) {

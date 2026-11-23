@@ -70,13 +70,17 @@ public final class KitLoadout {
         }
 
         public void write(Player player, boolean copy) {
+            write(player, copy, true);
+        }
+
+        public void write(Player player, boolean copy, boolean includeCosmeticArmor) {
             var inventory = player.getInventory();
             for (int slot = 0; slot < items.size(); slot++) {
                 var stack = items.get(slot);
                 if (changed(inventory.getItem(slot), stack, copy)) inventory.setItem(slot, copy ? stack.copy() : stack);
             }
             RuntimeException failure = null;
-            for (var slot : EquipmentCompat.slots(player)) {
+            for (var slot : EquipmentCompat.slots(player, includeCosmeticArmor)) {
                 var stack = equipment.getOrDefault(EquipmentSlot.of(slot), ItemStack.EMPTY);
                 try {
                     if (changed(slot.get().get(), stack, copy)) slot.set().accept(copy ? stack.copy() : stack);
@@ -87,6 +91,10 @@ public final class KitLoadout {
             }
             inventory.selected = selected;
             if (failure != null) throw failure;
+        }
+
+        public ItemStack cosmeticArmor(int index) {
+            return equipment.getOrDefault(new EquipmentSlot(EquipmentCompat.COSMETIC_ARMOR, "", index, false), ItemStack.EMPTY).copy();
         }
 
         private static boolean changed(ItemStack current, ItemStack next, boolean copy) {
@@ -116,7 +124,10 @@ public final class KitLoadout {
         var items = new ArrayList<ItemStack>(original.items.size());
         original.items.forEach(stack -> items.add(replace ? ItemStack.EMPTY : stack.copy()));
         var equipment = new LinkedHashMap<EquipmentSlot, ItemStack>();
-        original.equipment.forEach((slot, stack) -> equipment.put(slot, replace ? ItemStack.EMPTY : stack.copy()));
+        original.equipment.forEach((slot, stack) -> {
+            boolean keepCosmeticArmor = kit.shop() != null && EquipmentCompat.COSMETIC_ARMOR.equals(slot.inventory());
+            equipment.put(slot, replace && !keepCosmeticArmor ? ItemStack.EMPTY : stack.copy());
+        });
         int[] purchaseIndices = new int[items.size()];
         Arrays.fill(purchaseIndices, -1);
         int purchases = 0;

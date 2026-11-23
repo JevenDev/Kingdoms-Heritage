@@ -23,7 +23,7 @@ final class KitPreviewPlayer extends RemotePlayer {
         var entityData = source.getEntityData().getNonDefaultValues();
         if (entityData != null) getEntityData().assignValues(entityData);
         getAttributes().assignAllValues(source.getAttributes());
-        loadout.write(this, true);
+        loadout.write(this, true, false);
     }
 
     void prepare() {

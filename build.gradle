@@ -14,6 +14,10 @@ repositories {
         forRepository { mavenLocal() }
         filter { includeGroup 'com.jvn.toucanlib' }
     }
+    exclusiveContent {
+        forRepository { maven { url = 'https://www.cursemaven.com/' } }
+        filter { includeModule 'curse.maven', 'cosmetic-armor-reworked-237307' }
+    }
     maven { url = 'https://maven.architectury.dev/' }
     maven { url = 'https://maven.theillusivec4.top/' }
     maven { url = 'https://maven.wispforest.io/releases/' }
@@ -22,6 +26,11 @@ repositories {
 
 dependencies {
     api 'com.jvn.toucanlib:toucanlib-neoforge-1.21.1:0.7.1'
+    def cosmeticArmor = 'curse.maven:cosmetic-armor-reworked-237307:5610814'
+    compileOnly cosmeticArmor
+    if (project.findProperty('compat') == 'cosmeticarmorreworked') {
+        runtimeOnly cosmeticArmor
+    }
     compileOnly('top.theillusivec4.curios:curios-neoforge:9.5.1+1.21.1') {
         transitive = false
     }

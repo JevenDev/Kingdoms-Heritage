@@ -607,7 +607,10 @@ function enter(focus=true){
   if(session.phase==='location-confirm'){poolOptions();if(!planApplied&&plannedRoute?.spawnId===session.spawn.id){const index=session.allowed().findIndex(kit=>kit.id===plannedRoute.kitId);if(index>=0){session.kitIndex=index;session.kit=session.allowed()[index];}if(Number.isInteger(plannedRoute.poolIndex)&&session.spawn.pool?.[plannedRoute.poolIndex])$('flow-pool').value=String(plannedRoute.poolIndex);planApplied=true;}}
   updateEditChoices();
   $('flow-inventory').hidden=true;if(statPanel)statPanel.element.hidden=true;
-  $('flow-inventory-mode').closest('label').hidden=session.choices.kitPreview==='model'||phase==='kit-shop';
+  const inventoryMode=$('flow-inventory-mode'),cosmeticArmor=$('flow-cosmetic-armor');
+  inventoryMode.closest('label').hidden=session.choices.kitPreview==='model'||phase==='kit-shop';
+  cosmeticArmor.hidden=cosmeticArmor.disabled=!!session.kit?.shop;
+  if(cosmeticArmor.hidden&&inventoryMode.value===cosmeticArmor.value)inventoryMode.value='player';
   if(phase.startsWith('kit')){
     statPanel??=new HeritageInventory.StatPanel($('flow-stage'));kitFrames.clear();
     if(!inventory)inventory=new HeritageInventory.Inventory($('flow-inventory'),{fillHost:true,onControl:control=>{
@@ -622,7 +625,7 @@ function enter(focus=true){
       $('flow-narration').textContent=shopBudget();
     }else{
       inventoryOptions.modelOnly=session.choices.kitPreview==='model';
-      inventoryOptions.mode=inventoryOptions.modelOnly?'player':$('flow-inventory-mode').value;
+      inventoryOptions.mode=inventoryOptions.modelOnly?'player':inventoryMode.value;
       inventoryOptions.hideCrafting=true;inventoryOptions.controlledAim=true;inventoryOptions.passiveWheel=true;inventory.set(session.kit,inventoryOptions);
     }
   }

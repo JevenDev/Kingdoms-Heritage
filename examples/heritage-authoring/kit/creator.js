@@ -137,7 +137,7 @@ function activateKit(id) {
 }
 function openKit(raw=JSON.stringify({title:'My kit',items:[]},null,2)) {
   const parsed=K.inspect(raw),kit=parsed.previewable||!parsed.error?parsed.document:{title:'My kit',items:[]},error=parsed.error?sourceError(parsed.error,raw):null;
-  const first=(Array.isArray(kit.items)?kit.items:[]).find(entry=>['curios','accessories'].includes(entry.inventory));
+  const first=(Array.isArray(kit.items)?kit.items:[]).find(E.isEquipment);
   const state={source:raw,document:kit,validDocument:parsed.error?{title:'My kit',items:[]}:K.copy(kit),cursor:null,selected:first?E.id(first):0,selection:[],selectionMode:false,drafts:[],loreSources:[],error,preview:null};
   activateKit(workspace.add(state));
 }
@@ -295,7 +295,7 @@ function editLore(update,key=null) {
 }
 function renderInventory() {
   preview.reveal(selected);const options=preview.sync();
-  view.scaleWidth=Math.max(...['player','curios','accessories'].map(mode=>E.layout(documentState,{...options,mode,offset:0,cosmetics:preview.state.cosmetics[mode]??false}).width));view.scaleHeight=0;
+  view.scaleWidth=Math.max(...E.inventoryNames.map(mode=>E.layout(documentState,{...options,mode,offset:0,cosmetics:preview.state.cosmetics[mode]??false}).width));view.scaleHeight=0;
   const purse=rawInvalid||invalidStats()||documentState.enabled===false?[]:HeritageKitStats.pursePreview(documentState);
   view.selected=selected;view.set(documentState,{...options,hideCrafting:true,purse,showStats:!rawInvalid&&!invalidStats()});
 }
@@ -339,7 +339,7 @@ function parse(replace=false,save=true) {
     errorState=parsed.error?sourceError(parsed.error):null;
     if(!parsed.error||parsed.previewable)documentState=parsed.document;
     if(!parsed.error)validDocument=K.copy(documentState);
-    if(replace){selectedSlots.clear();selectionMode=false;selectionAnchor=null;drafts.clear();const first=(Array.isArray(documentState.items)?documentState.items:[]).find(entry=>entry&&['curios','accessories'].includes(entry.inventory));selected=first?E.id(first):0;preview.state.mode=first?.inventory??'player';}display();
+    if(replace){selectedSlots.clear();selectionMode=false;selectionAnchor=null;drafts.clear();const first=(Array.isArray(documentState.items)?documentState.items:[]).find(E.isEquipment);selected=first?E.id(first):0;preview.state.mode=first?.inventory??'player';}display();
   }catch(failure){rawInvalid=true;errorState=sourceError(failure);feedback();}
   if(save)record('json');
 }
@@ -349,7 +349,7 @@ function commit(next,key=null,{replace=false,selected:nextSlot=selected,discard=
   try {
     const parsed=K.read(JSON.stringify(next)),nextCarried=M.cursor(nextCursor);
     documentState=parsed.document;validDocument=K.copy(documentState);rawInvalid=false;errorState=null;selected=nextSlot;carried=nextCarried;selectedSlots=new Set(nextSelection);
-    if(replace){selectedSlots.clear();selectionMode=false;selectionAnchor=null;drafts.clear();const first=(Array.isArray(documentState.items)?documentState.items:[]).find(entry=>entry&&['curios','accessories'].includes(entry.inventory));selected=first?E.id(first):0;preview.state.mode=first?.inventory??'player';}else for(const slot of discard)drafts.delete(slot);
+    if(replace){selectedSlots.clear();selectionMode=false;selectionAnchor=null;drafts.clear();const first=(Array.isArray(documentState.items)?documentState.items:[]).find(E.isEquipment);selected=first?E.id(first):0;preview.state.mode=first?.inventory??'player';}else for(const slot of discard)drafts.delete(slot);
     if(pendingDraft)drafts.set(selected,pendingDraft);
     const field=$('kit-json'),scroll=field.scrollTop,start=field.selectionStart,end=field.selectionEnd;
     field.value=JSON.stringify(documentState,null,2);field.setSelectionRange(Math.min(start,field.value.length),Math.min(end,field.value.length));field.scrollTop=scroll;
@@ -505,7 +505,7 @@ function equipment() {
   host.replaceChildren();if(documentState.enabled===false)return;
   const equipmentDocument=errorState?.target==='equipment'&&errorState.pending?errorState.pending:documentState;
   equipmentDocument.items.forEach((entry,n)=>{
-    if((entry.inventory??'player')==='player')return;
+    if(!E.configurable.includes(entry.inventory))return;
     const row=document.createElement('div');row.className='equipment-entry';row.dataset.entry=n;
     row.innerHTML='<label>Inventory<select data-property="inventory"><option value="curios">Curios</option><option value="accessories">Accessories</option></select></label><label>Slot name<input data-property="slot"></label><label>Index<input data-property="index" type="number" min="0" max="255"></label><label class="equipment-id">Item ID<input data-property="id" spellcheck="false"></label><label>Count<input data-property="count" type="number" min="1" max="99"></label><label class="check"><input data-property="ignore_stack_limit" type="checkbox"> Ignore stack limit</label><label class="check"><input data-property="cosmetic" type="checkbox"> Cosmetic</label><button type="button" aria-label="Remove equipment slot">Remove</button>';
     for(const field of row.querySelectorAll('[data-property]')) {

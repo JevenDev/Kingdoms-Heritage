@@ -7,7 +7,7 @@ document.body.insertAdjacentHTML('beforeend',`<dialog id="flow-dialog" aria-labe
 <label class="stack" data-flow-only>Player name<input id="flow-player" value="Player" maxlength="16"></label>
 <label class="stack">Resolution<select id="flow-resolution"><option value="1920x1080">1920 × 1080</option><option value="1280x720">1280 × 720</option><option value="1024x768">1024 × 768</option></select></label>
 <label class="stack">GUI scale<select id="flow-scale" aria-describedby="flow-scale-status"><option value="0">Auto</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4" selected>4</option></select></label>
-<label class="stack" data-flow-only>Inventory<select id="flow-inventory-mode"><option value="player">Vanilla</option><option value="curios">Curios</option><option value="accessories">Accessories</option></select></label>
+<label class="stack" data-flow-only>Inventory<select id="flow-inventory-mode"><option value="player">Vanilla</option><option value="curios">Curios</option><option value="accessories">Accessories</option><option id="flow-cosmetic-armor" value="cosmeticarmorreworked">Cosmetic Armor</option></select></label>
 <label class="stack" data-flow-only>Sample biome<input id="flow-biome" value="Plains"></label>
 <label class="stack" data-flow-only>Sample structure<input id="flow-structure" value="Wilderness"></label>
 <label class="stack" data-flow-only>Pool destination<select id="flow-pool" disabled><option value="random">Random</option></select></label>

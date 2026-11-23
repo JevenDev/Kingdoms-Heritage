@@ -1,6 +1,6 @@
 (() => {
 'use strict';
-const E=HeritageEquipment,K=HeritageKit,$=id=>document.getElementById(id),modes=['player','curios','accessories'];
+const E=HeritageEquipment,K=HeritageKit,$=id=>document.getElementById(id),modes=E.inventoryNames,cosmeticArmor=K.cosmeticArmorInventory;
 class EquipmentEditor {
   constructor({getDocument,getSelection,onSelect,onUpdate,notice,canSwitch}) {
     this.getDocument=getDocument;this.getSelection=getSelection;this.onSelect=onSelect;this.onUpdate=onUpdate;this.notice=notice;this.canSwitch=canSwitch;
@@ -9,13 +9,14 @@ class EquipmentEditor {
       $('mode-'+mode).addEventListener('click',()=>this.switchMode(mode));
       $('mode-'+mode).addEventListener('keydown',event=>{
         if(!['ArrowLeft','ArrowRight'].includes(event.key))return;
-        event.preventDefault();const next=modes[(modes.indexOf(mode)+(event.key==='ArrowRight'?1:2))%3];this.switchMode(next);$('mode-'+next).focus();
+        event.preventDefault();const available=modes.filter(name=>!$('mode-'+name).hidden),direction=event.key==='ArrowRight'?1:-1;
+        const next=available[(available.indexOf(mode)+direction+available.length)%available.length];this.switchMode(next);$('mode-'+next).focus();
       });
     }
     $('show-cosmetics').addEventListener('change',()=>this.control({kind:'cosmetics'}));
     $('configure-slots').addEventListener('click',()=>{
       if(!this.canSwitch())return;
-      this.editMode=this.state.mode;if(this.editMode==='player')return;
+      this.editMode=this.state.mode;if(!E.configurable.includes(this.editMode))return;
       this.editRows=E.profile(this.getDocument(),this.state.profiles,this.editMode).map(slot=>({...slot}));
       $('slot-layout-heading').textContent=(this.editMode==='curios'?'Curios':'Accessories')+' slot layout';
       this.drawRows();$('slot-layout-error').hidden=true;$('slot-layout-dialog').showModal();
@@ -43,7 +44,7 @@ class EquipmentEditor {
     if(saved){
       try{
         if(modes.includes(saved.mode))state.mode=saved.mode;
-        for(const mode of ['curios','accessories']){
+        for(const mode of E.configurable){
           if(saved.profiles?.[mode])state.profiles[mode]=E.validateProfile(saved.profiles[mode],mode);
           state.cosmetics[mode]=saved.cosmetics?.[mode]===true;
           state.offsets[mode]=Number.isInteger(saved.offsets?.[mode])?Math.max(0,saved.offsets[mode]):0;
@@ -51,32 +52,40 @@ class EquipmentEditor {
       }catch(failure){this.notice('Saved slot layout could not load. Choose Use mod defaults in Slot layout.');}
     }
     this.state=state;
-    this.hadEquipment=!!saved&&Array.isArray(this.getDocument().items)&&this.getDocument().items.some(entry=>['curios','accessories'].includes(entry.inventory));
+    this.hadEquipment=!!saved&&Array.isArray(this.getDocument().items)&&this.getDocument().items.some(E.isEquipment);
   }
   sync() {
-    const document=this.getDocument(),entries=document.enabled===false?[]:document.items||[],first=entries.find(entry=>['curios','accessories'].includes(entry.inventory));
-    if(first&&!this.hadEquipment&&this.state.mode==='player'){this.state.mode=first.inventory;this.state.cosmetics[first.inventory]=first.cosmetic??false;this.state.offsets[first.inventory]=E.reveal(document,this.state.profiles,E.id(first));}
+    const document=this.getDocument(),entries=document.enabled===false?[]:document.items||[],first=entries.find(E.isEquipment);
+    if(document.shop&&this.state.mode===cosmeticArmor)this.state.mode='player';
+    if(first&&!this.hadEquipment&&this.state.mode==='player'){
+      this.state.mode=first.inventory;
+      if(E.configurable.includes(first.inventory)){
+        this.state.cosmetics[first.inventory]=first.cosmetic??false;
+        this.state.offsets[first.inventory]=E.reveal(document,this.state.profiles,E.id(first));
+      }
+    }
     this.hadEquipment=!!first;
-    for(const mode of ['curios','accessories']){
+    for(const mode of E.configurable){
       const rows=this.state.profiles[mode],byName=new Map(rows.map(slot=>[slot.name,slot]));
       for(const slot of E.profile(document,this.state.profiles,mode)){
         const existing=byName.get(slot.name);
         if(existing)existing.count=Math.max(existing.count,slot.count);else rows.push(slot);
       }
     }
-    const layout=E.layout(document,this.options);if(this.state.mode!=='player')this.state.offsets[this.state.mode]=layout.offset;
+    const layout=E.layout(document,this.options);if(E.configurable.includes(this.state.mode))this.state.offsets[this.state.mode]=layout.offset;
     this.reflect();return this.options;
   }
   reflect() {
     for(const mode of modes){$('mode-'+mode).setAttribute('aria-selected',String(mode===this.state.mode));$('mode-'+mode).tabIndex=mode===this.state.mode?0:-1;}
-    const mode=this.state.mode;$('inventory').setAttribute('aria-labelledby','mode-'+mode);$('inventory').setAttribute('aria-label',(mode==='player'?'Vanilla':mode==='curios'?'Curios':'Accessories')+' inventory preview');
-    $('equipment-view-controls').hidden=mode==='player';$('show-cosmetics').checked=this.state.cosmetics[mode]??false;
+    const mode=this.state.mode;$('mode-'+cosmeticArmor).hidden=!!this.getDocument().shop;
+    $('inventory').setAttribute('aria-labelledby','mode-'+mode);$('inventory').setAttribute('aria-label',$('mode-'+mode).textContent+' inventory preview');
+    $('equipment-view-controls').hidden=!E.configurable.includes(mode);$('show-cosmetics').checked=this.state.cosmetics[mode]??false;
   }
   reveal(value) {
     const slot=E.address(value);if(slot.inventory==='player')return;
     this.state.mode=slot.inventory;
-    if(slot.inventory==='curios'||slot.cosmetic)this.state.cosmetics[slot.inventory]=slot.cosmetic;
-    if(!E.layout(this.getDocument(),this.options).slots.some(position=>position.id===value))this.state.offsets[slot.inventory]=E.reveal(this.getDocument(),this.state.profiles,value);
+    if(E.configurable.includes(slot.inventory)&&(slot.inventory==='curios'||slot.cosmetic))this.state.cosmetics[slot.inventory]=slot.cosmetic;
+    if(E.configurable.includes(slot.inventory)&&!E.layout(this.getDocument(),this.options).slots.some(position=>position.id===value))this.state.offsets[slot.inventory]=E.reveal(this.getDocument(),this.state.profiles,value);
   }
   switchMode(mode) {
     if(!this.canSwitch())return;
@@ -87,7 +96,7 @@ class EquipmentEditor {
   control(control) {
     if(!control)return;
     if(!this.canSwitch()){$('show-cosmetics').checked=this.state.cosmetics[this.state.mode]??false;return;}
-    const mode=this.state.mode;if(mode==='player')return;
+    const mode=this.state.mode;if(!E.configurable.includes(mode))return;
     let target=this.getSelection(),slot=E.address(target);
     if(control.kind==='cosmetics'){
       this.state.cosmetics[mode]=!this.state.cosmetics[mode];

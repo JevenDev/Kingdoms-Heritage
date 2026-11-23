@@ -654,9 +654,10 @@ class Inventory {
   renderBase(hiddenStackSlot) {
     const {width,height,inventoryX,inventoryY,mode}=this.layout,ctx=this.background.getContext('2d');ctx.setTransform(this.scale,0,0,this.scale,0,0);ctx.imageSmoothingEnabled=false;ctx.clearRect(0,0,width,height);
     for(const part of this.layout.blits)this.blit(ctx,part);
-    if(this.options.hideCrafting&&mode!=='accessories'){ctx.fillStyle='#c6c6c6';ctx.fillRect(inventoryX+95,inventoryY+4,78,74);}
+    if((this.options.hideCrafting||mode===K.cosmeticArmorInventory)&&mode!=='accessories'){ctx.fillStyle='#c6c6c6';ctx.fillRect(inventoryX+95,inventoryY+4,78,74);}
     else if(mode!=='accessories')text(ctx,'Crafting',inventoryX+97,inventoryY+6,'#404040');
     for(const position of this.layout.slots) {
+      if(position.inventory===K.cosmeticArmorInventory)ctx.drawImage(image('inventory.png'),7,7,18,18,position.x-1,position.y-1,18,18);
       const entry=this.entry(position.id);
       if(entry){
         if(position.id!==hiddenStackSlot)item(ctx,entry.item,position.x,position.y,this.requestIcon);

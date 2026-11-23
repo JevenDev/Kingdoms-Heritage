@@ -1,6 +1,7 @@
 (() => {
 'use strict';
 const object=value=>value!==null&&typeof value==='object'&&!Array.isArray(value);
+const cosmeticArmorInventory='cosmeticarmorreworked',inventoryNames=['player','curios','accessories',cosmeticArmorInventory];
 const idPattern=/^(?:[a-z0-9_.-]+:)?[a-z0-9/._-]+$/;
 const normalize=id=>id.includes(':')?id:'minecraft:'+id;
 const MAX_COUNT=2147483647;
@@ -54,14 +55,17 @@ function read(source) {
     for(const name of ['inventory','slot','cosmetic','index'])if(entry[name]===null)throw issue(label+': '+name+' cannot be null.',[...path,name]);
     const inventory=entry.inventory??'player',slot=entry.slot??'',cosmetic=entry.cosmetic??false;
     if(entry.ignore_stack_limit!==undefined&&typeof entry.ignore_stack_limit!=='boolean')throw issue(label+': ignore_stack_limit must be true or false.',[...path,'ignore_stack_limit']);
-    if(!['player','curios','accessories'].includes(inventory))throw issue(label+': unknown inventory.',[...path,'inventory']);
-    integer(entry.index,0,inventory==='player'?40:255,label+' slot index',[...path,'index']);
-    if(typeof slot!=='string'||(inventory==='player'&&slot!=='')||(inventory!=='player'&&(!slot.trim()||slot.length>128)))throw issue(label+': invalid equipment slot.',[...path,'slot']);
-    if(typeof cosmetic!=='boolean'||inventory==='player'&&cosmetic)throw issue(label+': invalid cosmetic setting.',[...path,'cosmetic']);
+    if(!inventoryNames.includes(inventory))throw issue(label+': unknown inventory.',[...path,'inventory']);
+    const cosmeticArmor=inventory===cosmeticArmorInventory,indexed=inventory==='player'||cosmeticArmor;
+    if(cosmeticArmor&&document.shop!==undefined)throw issue('Cosmetic Armor Reworked slots require a premade kit.',[...path,'inventory']);
+    integer(entry.index,0,cosmeticArmor?3:indexed?40:255,label+' slot index',[...path,'index']);
+    if(typeof slot!=='string'||(indexed?slot!=='':!slot.trim()||slot.length>128))throw issue(label+': invalid equipment slot.',[...path,'slot']);
+    if(typeof cosmetic!=='boolean'||indexed&&cosmetic)throw issue(label+': invalid cosmetic setting.',[...path,'cosmetic']);
     const key=[inventory,slot,entry.index,cosmetic].join('/');
     if(occupied.has(key))throw issue('Two items use the same slot: '+key,[...path,'index']);
     occupied.add(key);
     validateStack(entry,label,path,warnings);
+    if(cosmeticArmor&&(entry.item.count??1)!==1)throw issue(label+': a cosmetic armor slot can hold only one item.',[...path,'item','count']);
   }
   if(document.shop!==undefined)validateShop(document.shop,warnings);
   return {document,warnings:[...new Set(warnings)]};
@@ -121,12 +125,15 @@ function validateShop(shop,warnings) {
   }
 }
 function canPreview(document) {
-  return object(document)&&Array.isArray(document.items)&&document.items.length<=256&&document.items.every(entry=>
-    object(entry)&&Number.isInteger(entry.index)&&entry.index>=0&&entry.index<=((entry.inventory??'player')==='player'?40:255)
-    &&['player','curios','accessories'].includes(entry.inventory??'player')
-    &&((entry.inventory??'player')==='player'||typeof entry.slot==='string'&&entry.slot.trim().length>0&&entry.slot.length<=128&&typeof(entry.cosmetic??false)==='boolean')
-    &&object(entry.item)&&typeof entry.item.id==='string'
-    &&(entry.item.components===undefined||object(entry.item.components)));
+  return object(document)&&Array.isArray(document.items)&&document.items.length<=256&&document.items.every(entry=>{
+    if(!object(entry)||!object(entry.item)||typeof entry.item.id!=='string'||!Number.isInteger(entry.index)||entry.index<0
+        ||entry.item.components!==undefined&&!object(entry.item.components))return false;
+    const inventory=entry.inventory??'player';
+    if(inventory==='player')return entry.index<=40;
+    if(inventory===cosmeticArmorInventory)return document.shop===undefined&&entry.index<=3&&(entry.slot??'')===''&&(entry.cosmetic??false)===false;
+    return inventoryNames.includes(inventory)&&entry.index<=255&&typeof entry.slot==='string'
+      &&entry.slot.trim().length>0&&entry.slot.length<=128&&typeof(entry.cosmetic??false)==='boolean';
+  });
 }
 function inspect(source) {
   let document;
@@ -156,7 +163,7 @@ function moveSlot(document,from,to) {
   read(JSON.stringify(result));return result;
 }
 const itemAt=(document,index)=>(Array.isArray(document.items)?document.items:[]).find(entry=>entry&&(entry.inventory??'player')==='player'&&entry.index===index)?.item;
-const maxCount=value=>{const stack=value.item??value;return value.ignore_stack_limit===true?MAX_COUNT:stack.components?.['minecraft:max_stack_size']??items.get(normalize(stack.id))?.max??99;};
+const maxCount=value=>{if(value.inventory===cosmeticArmorInventory)return 1;const stack=value.item??value;return value.ignore_stack_limit===true?MAX_COUNT:stack.components?.['minecraft:max_stack_size']??items.get(normalize(stack.id))?.max??99;};
 function firstEmpty(document) {
   const occupied=new Set((Array.isArray(document.items)?document.items:[]).filter(entry=>entry&&(entry.inventory??'player')==='player').map(entry=>entry.index));
   return Array.from({length:36},(_,i)=>i).find(index=>!occupied.has(index));
@@ -184,6 +191,6 @@ function neighbor(index,key) {
 }
 const slotName=index=>index<9?'Hotbar '+(index+1):index<36?'Inventory '+(index-8):({36:'Boots',37:'Leggings',38:'Chestplate',39:'Helmet',40:'Offhand'})[index];
 const positions=Array.from({length:41},(_,index)=>({index,x:index<9?8+index*18:index<36?8+(index-9)%9*18:index===40?77:8,y:index<9?142:index<36?84+Math.floor((index-9)/9)*18:index===40?62:8+(39-index)*18}));
-globalThis.HeritageKit={parse,read,inspect,canPreview,itemWarnings,copy,setSlot,removeSlot,moveSlot,slotName,positions,items,normalize,itemAt,maxCount,firstEmpty,placeItem,neighbor};
+globalThis.HeritageKit={cosmeticArmorInventory,inventoryNames,parse,read,inspect,canPreview,itemWarnings,copy,setSlot,removeSlot,moveSlot,slotName,positions,items,normalize,itemAt,maxCount,firstEmpty,placeItem,neighbor};
 if(typeof module!=='undefined')module.exports=globalThis.HeritageKit;
 })();

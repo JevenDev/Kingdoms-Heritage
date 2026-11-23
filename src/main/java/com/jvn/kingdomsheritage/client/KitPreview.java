@@ -1,6 +1,7 @@
 package com.jvn.kingdomsheritage.client;
 
 import com.jvn.kingdomsheritage.HeritageConfig.InventoryPolicy;
+import com.jvn.kingdomsheritage.compat.EquipmentCompat;
 import com.jvn.kingdomsheritage.data.KitDefinition;
 import com.jvn.kingdomsheritage.data.KitLoadout;
 import com.jvn.kingdomsheritage.data.KitStats;
@@ -14,6 +15,7 @@ final class KitPreview {
     private static KitPreview rendering;
     private final Player player;
     private KitPreviewPlayer renderPlayer;
+    private boolean renderingCosmeticArmor;
     private KitLoadout.Snapshot original;
     private KitLoadout.Snapshot expected;
     private KitDefinition kit;
@@ -66,9 +68,13 @@ final class KitPreview {
 
     static Entity renderEntity(Entity entity) {
         if (rendering == null || entity != rendering.player) return entity;
+        var loadout = rendering.expected == null ? rendering.original : rendering.expected;
         if (rendering.renderPlayer == null) {
-            rendering.renderPlayer = new KitPreviewPlayer((AbstractClientPlayer) entity,
-                    rendering.expected == null ? rendering.original : rendering.expected);
+            rendering.renderPlayer = new KitPreviewPlayer((AbstractClientPlayer) entity, loadout);
+        }
+        if (rendering.kit != null && rendering.kit.shop() == null && !rendering.renderingCosmeticArmor) {
+            rendering.renderingCosmeticArmor = true;
+            EquipmentCompat.previewCosmeticArmor(rendering.renderPlayer, loadout::cosmeticArmor);
         }
         rendering.renderPlayer.prepare();
         return rendering.renderPlayer;
@@ -80,11 +86,19 @@ final class KitPreview {
         try {
             rendering = this;
             // inventory screens still read the live player's slots
-            if (expected != null) expected.write(player, true);
+            if (expected != null) expected.write(player, true, false);
             draw.run();
         } finally {
             rendering = previous;
-            if (actual != null) actual.write(player, false);
+            try {
+                if (renderingCosmeticArmor) {
+                    renderingCosmeticArmor = false;
+                    // the mod caches cosmetic stacks by the preview player's UUID
+                    EquipmentCompat.previewCosmeticArmor(renderPlayer, index -> ItemStack.EMPTY);
+                }
+            } finally {
+                if (actual != null) actual.write(player, false, false);
+            }
         }
     }
 }

@@ -1,22 +1,29 @@
 (() => {
 'use strict';
-const K=HeritageKit,D=HeritageEquipmentData,inventoryNames=['player','curios','accessories'];
+const K=HeritageKit,D=HeritageEquipmentData,{inventoryNames,cosmeticArmorInventory}=K,configurable=['curios','accessories'];
+const isEquipment=entry=>inventoryNames.includes(entry?.inventory)&&entry.inventory!=='player';
 function address(value) {
   if(Number.isInteger(value)&&value>=0&&value<=40)return {inventory:'player',slot:'',index:value,cosmetic:false};
   if(typeof value==='string'){
     let parsed;try{parsed=JSON.parse(value);}catch(failure){throw new Error('Invalid equipment destination.');}
-    if(Array.isArray(parsed)&&parsed.length===4&&['curios','accessories'].includes(parsed[0])&&typeof parsed[1]==='string'&&parsed[1].trim()&&parsed[1].length<=128&&Number.isInteger(parsed[2])&&parsed[2]>=0&&parsed[2]<=255&&typeof parsed[3]==='boolean')return {inventory:parsed[0],slot:parsed[1],index:parsed[2],cosmetic:parsed[3]};
+    if(Array.isArray(parsed)&&parsed.length===4){
+      const [inventory,slot,index,cosmetic]=parsed;
+      const supported=inventory===cosmeticArmorInventory?slot===''&&index<=3&&cosmetic===false
+        :configurable.includes(inventory)&&typeof slot==='string'&&slot.trim()&&slot.length<=128&&index<=255&&typeof cosmetic==='boolean';
+      if(supported&&Number.isInteger(index)&&index>=0)return {inventory,slot,index,cosmetic};
+    }
   }
   throw new Error('Invalid equipment destination.');
 }
 function id(entry) {
   const inventory=entry.inventory??'player';
   if(inventory==='player'){address(entry.index);return entry.index;}
-  const key=JSON.stringify([inventory,entry.slot,entry.index,entry.cosmetic??false]);address(key);return key;
+  const key=JSON.stringify([inventory,inventory===cosmeticArmorInventory?entry.slot??'':entry.slot,entry.index,entry.cosmetic??false]);address(key);return key;
 }
 function valid(value){try{address(value);return true;}catch(failure){return false;}}
 function name(value) {
   const slot=address(value);if(slot.inventory==='player')return K.slotName(slot.index);
+  if(slot.inventory===cosmeticArmorInventory)return 'Cosmetic '+K.slotName(36+slot.index).toLowerCase();
   return (slot.inventory==='curios'?'Curios ':'Accessories ')+(slot.cosmetic?'cosmetic ':'')+slot.slot+' '+(slot.index+1);
 }
 function entryAt(document,value) {return (Array.isArray(document.items)?document.items:[]).find(entry=>entry&&id(entry)===value);}
@@ -24,7 +31,8 @@ function setSlot(document,value,item) {
   if(typeof value==='number')return K.setSlot(document,value,item);
   const result=K.copy(document),destination=address(value),entry=entryAt(result,value);
   result.items??=[];
-  if(entry)entry.item=K.copy(item);else result.items.push({...destination,item:K.copy(item)});
+  if(entry)entry.item=K.copy(item);
+  else {const next={item:K.copy(item)};setDestination(next,destination);result.items.push(next);}
   K.read(JSON.stringify(result));return result;
 }
 function removeSlots(document,values) {
@@ -32,23 +40,25 @@ function removeSlots(document,values) {
   const result=K.copy(document);result.items=(result.items||[]).filter(entry=>!slots.has(id(entry)));return result;
 }
 function removeSlot(document,value) {return removeSlots(document,[value]);}
-function destination(entry,value) {
-  const target=address(value);entry.index=target.index;
-  if(target.inventory==='player'){delete entry.inventory;delete entry.slot;delete entry.cosmetic;}
-  else{entry.inventory=target.inventory;entry.slot=target.slot;entry.cosmetic=target.cosmetic;}
+function setDestination(entry,target) {
+  entry.index=target.index;
+  if(target.inventory==='player')delete entry.inventory;else entry.inventory=target.inventory;
+  if(configurable.includes(target.inventory)){entry.slot=target.slot;entry.cosmetic=target.cosmetic;}
+  else{delete entry.slot;delete entry.cosmetic;}
 }
 function putEntry(document,value,entry) {
-  const result=removeSlot(document,value),next=K.copy(entry);destination(next,value);result.items.push(next);K.read(JSON.stringify(result));return result;
+  const result=removeSlot(document,value),next=K.copy(entry);setDestination(next,address(value));result.items.push(next);K.read(JSON.stringify(result));return result;
 }
 function moveSlot(document,from,to) {
-  address(from);address(to);const result=K.copy(document),entry=entryAt(result,from);
+  const fromSlot=address(from),toSlot=address(to),result=K.copy(document),entry=entryAt(result,from);
   if(!entry||from===to)return result;
-  const other=entryAt(result,to);destination(entry,to);if(other)destination(other,from);
+  const other=entryAt(result,to);setDestination(entry,toSlot);if(other)setDestination(other,fromSlot);
   K.read(JSON.stringify(result));return result;
 }
 function placeItem(document,value,itemId,{fill=false}={}) {
   const entry=entryAt(document,value),previous=entry?.item,same=previous&&K.normalize(previous.id)===K.normalize(itemId),stack=same?K.copy(previous):{id:K.normalize(itemId)};
-  stack.count=fill?(same&&entry.ignore_stack_limit?previous.count??1:K.maxCount(same?entry:stack)):same?previous.count??1:1;
+  stack.count=address(value).inventory===cosmeticArmorInventory?1
+    :fill?(same&&entry.ignore_stack_limit?previous.count??1:K.maxCount(same?entry:stack)):same?previous.count??1:1;
   return setSlot(document,value,stack);
 }
 function slotMeta(inventory,name) {
@@ -56,10 +66,10 @@ function slotMeta(inventory,name) {
   return {order:known?.order??0,group,icon:known?.icon};
 }
 function defaults() {
-  return Object.fromEntries(['curios','accessories'].map(inventory=>[inventory,D.slots[inventory].map(slot=>({name:slot.name,count:slot.count,order:slot.order,group:slotMeta(inventory,slot.name).group}))]));
+  return Object.fromEntries(configurable.map(inventory=>[inventory,D.slots[inventory].map(slot=>({name:slot.name,count:slot.count,order:slot.order,group:slotMeta(inventory,slot.name).group}))]));
 }
 function validateProfile(value,inventory) {
-  if(!['curios','accessories'].includes(inventory)||!Array.isArray(value)||value.length>256)throw new Error('A slot layout can contain up to 256 slot types.');
+  if(!configurable.includes(inventory)||!Array.isArray(value)||value.length>256)throw new Error('A slot layout can contain up to 256 slot types.');
   const seen=new Set();
   return value.map(slot=>{
     if(!slot||typeof slot.name!=='string'||!slot.name.trim()||slot.name.length>128||seen.has(slot.name))throw new Error('Use a unique slot name from 1 to 128 characters.');
@@ -94,7 +104,7 @@ function slice(slots,start,count) {
   return result;
 }
 function reveal(document,profiles,value) {
-  const target=address(value);if(target.inventory==='player')return 0;
+  const target=address(value);if(!configurable.includes(target.inventory))return 0;
   const slots=profile(document,profiles,target.inventory);let index=target.index;
   for(const slot of slots){if(slot.name===target.slot)break;index+=slot.count;}
   return target.inventory==='curios'?Math.floor(index/48):Math.min(index,Math.max(0,total(slots)-8));
@@ -109,7 +119,7 @@ function layout(document,{mode='player',profiles,cosmetics=false,offset=0,purse}
   const result={mode,width:176,height:166,inventoryX:0,inventoryY:0,playerX:51,slots:[],blits:[],controls:[],offset:0,maxOffset:0,total:0,first:0,shown:0};
   const blit=(file,x,y,sx=0,sy=0,sw=D.assets[file]?.width??176,sh=D.assets[file]?.height??166,width=sw,height=sh,nine=false)=>result.blits.push({file,x,y,sx,sy,sw,sh,width,height,nine});
   let active=[],types=[];
-  if(mode!=='player'){
+  if(configurable.includes(mode)){
     types=profile(document,profiles,mode);result.total=total(types);
     result.maxOffset=mode==='curios'?Math.max(0,Math.ceil(result.total/48)-1):Math.max(0,result.total-8);
     result.offset=Math.max(0,Math.min(Number.isInteger(offset)?offset:0,result.maxOffset));
@@ -173,6 +183,14 @@ function layout(document,{mode='player',profiles,cosmetics=false,offset=0,purse}
       groupStart+=groupSize;groupY+=17;
     }
   }
+  if(mode===cosmeticArmorInventory&&!document.shop){
+    const icons=['boots','leggings','chestplate','helmet'];
+    for(let index=3;index>=0;index--){
+      const slot={inventory:mode,slot:'',index,cosmetic:false};
+      result.slots.push({...slot,id:id(slot),x:135,y:8+(3-index)*18,icon:'empty_armor_slot_'+icons[index]+'.png'});
+    }
+    result.total=result.shown=icons.length;
+  }
   const inventoryFile=mode==='accessories'?'accessories/gui/container/accessories_inventory.png':'inventory.png';
   blit(inventoryFile,result.inventoryX,result.inventoryY,0,0,176,166);
   if(mode==='player'&&document.enabled!==false&&purse?.length){
@@ -193,6 +211,6 @@ function neighbor(layout,value,key) {
   }
   return best.id;
 }
-globalThis.HeritageEquipment={address,id,valid,name,entryAt,setSlot,removeSlot,removeSlots,putEntry,moveSlot,placeItem,defaults,validateProfile,profile,total,reveal,layout,neighbor};
+globalThis.HeritageEquipment={inventoryNames,configurable,isEquipment,address,id,valid,name,entryAt,setSlot,removeSlot,removeSlots,putEntry,moveSlot,placeItem,defaults,validateProfile,profile,total,reveal,layout,neighbor};
 if(typeof module!=='undefined')module.exports=globalThis.HeritageEquipment;
 })();

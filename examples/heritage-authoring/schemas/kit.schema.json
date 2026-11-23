@@ -23,6 +23,16 @@
       { "required": ["items"] },
       { "required": ["shop"] }
     ],
+    "if": { "required": ["shop"] },
+    "then": {
+      "properties": {
+        "items": {
+          "items": {
+            "properties": { "inventory": { "not": { "const": "cosmeticarmorreworked" } } }
+          }
+        }
+      }
+    },
     "properties": {
       "title": {
         "type": "string",
@@ -260,7 +270,8 @@
           "enum": [
             "player",
             "curios",
-            "accessories"
+            "accessories",
+            "cosmeticarmorreworked"
           ],
           "default": "player"
         },
@@ -308,15 +319,27 @@
         }
       },
       "else": {
-        "required": [
-          "slot"
-        ],
-        "properties": {
-          "slot": {
-            "type": "string",
-            "maxLength": 128,
-            "minLength": 1,
-            "pattern": "\\S"
+        "if": { "properties": { "inventory": { "const": "cosmeticarmorreworked" } } },
+        "then": {
+          "description": "Cosmetic Armor Reworked for premade kits. Index 0 is boots, 1 leggings, 2 chestplate, and 3 helmet.",
+          "properties": {
+            "index": { "maximum": 3 },
+            "slot": { "const": "" },
+            "cosmetic": { "const": false },
+            "item": { "properties": { "count": { "const": 1 } } }
+          }
+        },
+        "else": {
+          "required": [
+            "slot"
+          ],
+          "properties": {
+            "slot": {
+              "type": "string",
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "\\S"
+            }
           }
         }
       }

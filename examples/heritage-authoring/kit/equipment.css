@@ -1,4 +1,4 @@
-.inventory-modes { display: flex; gap: 4px; border-bottom: 1px solid var(--line-soft); margin-bottom: 10px; }
+.inventory-modes { display: flex; flex-wrap: wrap; gap: 4px; border-bottom: 1px solid var(--line-soft); margin-bottom: 10px; }
 .inventory-modes button { min-height: var(--control-height); padding: 0 10px; border: 0; border-bottom: 1px solid transparent; border-radius: 0; background: transparent; color: var(--muted); font-size: var(--body-font-size); font-weight: 500; }
 .inventory-modes button[aria-selected=true] { color: var(--text); border-bottom-color: var(--accent); }
 .inventory-modes button:hover { background: transparent; color: var(--text); }
