@@ -7,6 +7,12 @@ const indexItem=item=>({item,search:(item.name+' '+item.id).toLowerCase()});
 const searchIndex=HeritageItems.items.map(indexItem),itemButtons=new Map(),library=document.querySelector('.kit-library');
 let documentState={title:'My kit',items:[]},validDocument={title:'My kit',items:[]},selected=0,page=0,rawInvalid=false,errorState=null,drafts=new Map(),loreSources=new Map(),slotClipboard=null;
 let activeItemButton,carried=null,pendingDelete=null,selectedSlots=new Set(),selectionMode=false,selectionAnchor=null;
+const scenePicker=HeritageScenes.referencePicker($('kit-intro-scene'),$('kit-custom-scene'),{inherit:true,change:id=>{
+  if(!canEdit('kit-intro-scene'))return;
+  const next=K.copy(documentState);
+  if(id===undefined)delete next.intro_scene;else next.intro_scene=id;
+  commit(next);
+}});
 let pageSize=90,pageCount=1,wheelPageTime=-Infinity;
 let history=[],historyIndex=-1,historyGroup=null,historyTime=0,saveTimer,saveUnavailable=false,saveBlocked=false,workspace,author,propertiesEditor;
 const view=new V.Inventory($('inventory'),{
@@ -115,7 +121,9 @@ function draftOptions() {
     option.textContent=name+(count>1?' ('+count+')':'');
   }
   field.value=workspace.active;
-  HeritageWorkflow.editor('kit',workspace.active);author?.refresh();
+  const context=HeritageWorkflow.editor('kit',workspace.active);
+  const scenes=HeritageScenes.cinematicChoices(HeritageScenes.importedCinematics(context?.cinematicFiles));
+  scenePicker.update(documentState.intro_scene,scenes);author?.refresh();
 }
 function activateKit(id) {
   if(id===workspace.active)return;
@@ -185,6 +193,7 @@ function feedback() {
   $('pending-edits').hidden=!pending;
   $('pending-message').textContent=pending?pending+' slot'+(pending===1?' has':'s have')+' edits to apply. ':'';
   const locked=rawInvalid||documentState.enabled===false;
+  scenePicker.lock(locked||!!carried);
   for(const id of ['title','description','title_key','description_key','order','tags','selected-slot','add-equipment','item-id','apply-id','components','apply-components','count','fill-stack','clear-slot','set-start','paste-slot'])$(id).disabled=locked;
   $('count').disabled=locked||!view.entry(selected);
   $('fill-stack').disabled=locked||!view.entry(selected)||view.entry(selected).ignore_stack_limit===true||(view.entry(selected).item.count??1)>=K.maxCount(view.entry(selected))||(K.items.get(K.normalize(view.entry(selected).item.id))?.max===undefined&&view.entry(selected).item.components?.['minecraft:max_stack_size']===undefined&&!view.entry(selected).ignore_stack_limit);

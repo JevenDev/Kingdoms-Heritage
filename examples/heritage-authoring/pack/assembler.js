@@ -2,7 +2,8 @@
 'use strict';
 const P=HeritagePack,$=id=>document.getElementById(id),storageKey='heritage.packAssembler.v1';
 if(!await HeritageSession.acquire(storageKey))return;
-try{P.setBundledKits((await HeritageFlowPreview.defaults()).kits);}
+let shipped;
+try{shipped=await HeritageFlowPreview.defaults();P.setBundledKits(shipped.kits);}
 catch(error){$('project-status').textContent=error.message;return;}
 const validators={kit:source=>HeritageKit.read(source),intro:HeritagePreview.readJson};
 const code=new HeritageJsonEditor($('export-json'),$('line-count'));
@@ -136,9 +137,9 @@ function fixIssue(issue){
     if(issue.field!=='path'&&catalog.kits.some(draft=>draft.id===issue.kitId))openEmbedded('kit',issue.kitId);else showKitLibrary(issue.kitId,issue.field==='path');return;
   }
   if(issue.locationId){state.active=issue.locationId;renderLocation();setStep('locations');}
-  else setStep(['name','namespace','description','guiScale','kitPreview','cardBorders'].includes(issue.field)?'pack':'locations');
+  else setStep(['name','namespace','description','guiScale','kitPreview','cardBorders','introScene'].includes(issue.field)?'pack':'locations');
   if(issue.locationId)setLocationPart(issue.field==='intro'?'intro':issue.field==='kits'?'kits':'details');returnToReview=returning;updateSteps();
-  const selector=issue.locationId?(issue.destination!==undefined?'[data-destination="'+issue.destination+'"][data-destination-field="'+issue.field+'"]':issue.field==='path'?'#location-id':issue.field==='intro'?'#location-intro':issue.field==='kits'?'#kit-mode':'[data-location-field="'+issue.field+'"]'):({'name':'#pack-name','namespace':'#namespace','description':'#pack-description','guiScale':'#pack-gui-scale','kitPreview':'#pack-kit-preview','cardBorders':'#pack-card-borders'})[issue.field]??'#kit-mode';
+  const selector=issue.locationId?(issue.destination!==undefined?'[data-destination="'+issue.destination+'"][data-destination-field="'+issue.field+'"]':issue.field==='path'?'#location-id':issue.field==='intro'?'#location-intro':issue.field==='kits'?'#kit-mode':'[data-location-field="'+issue.field+'"]'):({'name':'#pack-name','namespace':'#namespace','description':'#pack-description','guiScale':'#pack-gui-scale','kitPreview':'#pack-kit-preview','cardBorders':'#pack-card-borders','introScene':'#pack-custom-scene'})[issue.field]??'#kit-mode';
   const field=document.querySelector(selector)??$('kit-mode');for(let parent=field.parentElement;parent;parent=parent.parentElement)if(parent.tagName==='DETAILS')parent.open=true;field.focus();
 }
 function locationDescription(entry) {
@@ -630,9 +631,9 @@ function previewFile() {
 }
 function renderOutput({validate=false,rebuild=true}={}) {
   if(rebuild||!output)output=currentStep==='export'?P.build(state,catalog):P.inspect(state,catalog,{resources:validate||currentStep==='preview'});if(active()){showType();document.querySelectorAll('#pool-destinations > .pool-destination').forEach((row,index)=>destinationType(row,index,active().destinations[index]?.type));}renderOverview();
-  for(const field of document.querySelectorAll('[data-location-field],[data-destination-field],#pack-gui-scale,#pack-kit-preview,[data-kit-path],#namespace,#pack-name,#pack-description,#location-id,#kit-mode,#location-intro')) {
+  for(const field of document.querySelectorAll('[data-location-field],[data-destination-field],#pack-gui-scale,#pack-kit-preview,#pack-custom-scene,[data-kit-path],#namespace,#pack-name,#pack-description,#location-id,#kit-mode,#location-intro')) {
     const section=field.closest('[data-location-section]');if(section&&(currentStep!=='locations'||section.dataset.locationSection!==locationPart))continue;
-    const property=field.dataset.destinationField??field.dataset.locationField??({'pack-name':'name','pack-description':'description','namespace':'namespace','location-id':'path','kit-mode':'kits','location-intro':'intro','pack-gui-scale':'guiScale','pack-kit-preview':'kitPreview'})[field.id]??'path';
+    const property=field.dataset.destinationField??field.dataset.locationField??({'pack-name':'name','pack-description':'description','namespace':'namespace','location-id':'path','kit-mode':'kits','location-intro':'intro','pack-gui-scale':'guiScale','pack-kit-preview':'kitPreview','pack-custom-scene':'introScene'})[field.id]??'path';
     const location=field.hasAttribute('data-location-field')||field.hasAttribute('data-destination-field')||['location-id','kit-mode','location-intro'].includes(field.id);
     const issue=output.issues.find(issue=>issue.field===property&&(field.dataset.kitPath?issue.kitId===field.dataset.kitPath:location?issue.locationId===state.active&&(issue.destination===undefined?!field.hasAttribute('data-destination'):issue.destination===Number(field.dataset.destination)):!issue.locationId&&!issue.kitId));
     const showIssue=!!issue&&(revealValidation||touched.has(fieldKey(field)));
@@ -647,7 +648,7 @@ function renderOutput({validate=false,rebuild=true}={}) {
     const suggestion=showIssue&&property==='dimension'&&state.allowCustomTargets!==true?P.dimensionSuggestion(field.value):'';
     if(suggestion)message.append(element('button',{type:'button',class:'dimension-correction','data-correct-dimension':suggestion,'aria-label':'Use '+suggestion},'Use this ID'));
     if(showIssue)for(let parent=field.parentElement;parent;parent=parent.parentElement){if(parent.tagName==='DETAILS')parent.open=true;if(parent.matches('[data-location-types],[data-pool-types]'))parent.hidden=false;}
-    const help=field.dataset.locationField==='target'?'target-help':field.id==='pack-gui-scale'?'gui-scale-help':field.id==='pack-kit-preview'?'kit-preview-help':field.id==='namespace'?'namespace-help':field.id==='location-id'?'location-id-help':'';
+    const help=field.dataset.locationField==='target'?'target-help':field.id==='pack-gui-scale'?'gui-scale-help':field.id==='pack-kit-preview'?'kit-preview-help':field.id==='pack-custom-scene'?'intro-scene-help':field.id==='namespace'?'namespace-help':field.id==='location-id'?'location-id-help':'';
     field.setAttribute('aria-describedby',(help?help+' ':'')+message.id);
   }
   if(!rebuild){kitChoiceStatus();renderCard();return;}
@@ -677,11 +678,98 @@ function renderOutput({validate=false,rebuild=true}={}) {
   else if(output.previewFiles.some(file=>file.path===current))select.value=current;
   renderDownloadDetails();previewFile();locationOptions();kitChoiceStatus();renderCard();renderContentBrowser();updateSteps();coverageView?.refresh();
 }
+const Scenes=HeritageScenes;
+function updateScenePicker(previewId=P.selectionDocument(state).intro_scene){
+  const entries=Scenes.importedCinematics(state.importedFiles?.data);
+  scenePicker.update(P.selectionDocument(state).intro_scene,Scenes.cinematicChoices(entries));
+  const cinematic=[...entries,...shipped.cinematics].find(entry=>entry.id===previewId);
+  const button=$('preview-animation');
+  button.hidden=!cinematic;
+  button.dataset.cinematicId=cinematic?.id??'';
+  button.title=cinematic?'Preview timing for '+(cinematic.text??cinematic.id):'';
+}
+const scenePicker=Scenes.referencePicker($('pack-intro-scene'),$('pack-custom-scene'),{change:id=>{
+  const selection=P.selectionDocument(state);
+  if(id===null)delete selection.intro_scene;else selection.intro_scene=id;
+  state.selectionMetadata=selection;
+  historyLabel='Change default intro animation';changed();updateScenePicker();
+}});
+const animationDialog=$('animation-import'),animationInput=$('animation-file');
+let incomingAnimation,animationRequest=0;
+function animationStatus(message,error=false){
+  const status=$('animation-import-status');
+  status.textContent=message;status.hidden=!message;status.classList.toggle('error',error);
+}
+function updateAnimationClip(){
+  const clip=incomingAnimation?.source.clips.find(clip=>clip.name===$('animation-clip').value);
+  if(!clip?.duration)return;
+  $('animation-duration').textContent=clip.duration+' ticks · '+clip.duration/20+' seconds';
+  $('animation-pause').max=clip.duration-1;
+  $('animation-pause').disabled=clip.duration===1;
+  if(Number($('animation-pause').value)>=clip.duration)$('animation-pause').value='';
+}
+async function uploadAnimation(files){
+  if(files.length!==1){animationStatus('Choose one Blockbench animation export at a time.',true);return;}
+  const file=files[0],packId=projects?.active,request=++animationRequest;
+  animationStatus('Reading '+file.name+'…');
+  try{
+    const source=await HeritageAnimations.readFile(file);
+    if(request!==animationRequest||packId!==projects?.active)return;
+    incomingAnimation={source,packId};
+    $('animation-import-form').reset();
+    $('animation-name').value=file.name.replace(/(?:\.animation)?\.json$/i,'').replace(/[_-]+/g,' ').slice(0,120);
+    $('animation-clip').replaceChildren(...source.clips.map(clip=>{
+      const item=option(clip.name,clip.error?clip.name+' · '+clip.error:clip.name);
+      item.disabled=!!clip.error;return item;
+    }));
+    $('animation-clip').value=source.clips.find(clip=>clip.duration).name;
+    $('animation-error').hidden=true;
+    updateAnimationClip();animationStatus('');
+    if(!animationDialog.open)animationDialog.showModal();
+    $('animation-name').select();
+  }catch(error){
+    if(request===animationRequest&&packId===projects?.active)animationStatus(error.message,true);
+  }
+}
+HeritageAnimations.bindDrop($('animation-drop'),animationInput,$('choose-animation'),uploadAnimation);
+$('animation-clip').addEventListener('change',updateAnimationClip);
+$('cancel-animation').addEventListener('click',()=>animationDialog.close());
+animationDialog.addEventListener('close',()=>{incomingAnimation=null;});
+$('animation-import-form').addEventListener('submit',event=>{
+  event.preventDefault();
+  const error=$('animation-error'),makeDefault=$('animation-default').checked;
+  try{
+    if(!incomingAnimation||incomingAnimation.packId!==projects?.active)throw new Error('The active pack changed. Import the file again.');
+    if(saveBlocked)throw new Error(storageError);
+    pendingChanges.flush();
+    const {pack:next,id}=HeritageAnimations.add(state,incomingAnimation.source,{
+      name:$('animation-name').value,clip:$('animation-clip').value,perspective:$('animation-perspective').value,
+      exitPerspective:$('animation-exit').value,pause:$('animation-pause').value===''?null:Number($('animation-pause').value),makeDefault
+    });
+    projects.update(next);
+    try{projects.save();}catch(failure){projects.update(state);throw failure;}
+    state=next;historyLabel='Import intro animation';changed();save();updateScenePicker(id);
+    animationDialog.close();
+    animationStatus(makeDefault?'Added '+$('animation-name').value.trim()+' as the pack default.':'Added '+id+' to the pack.');
+  }catch(failure){error.textContent=failure.message;error.hidden=false;}
+});
+$('preview-animation').addEventListener('click',()=>{
+  const idToPreview=$('preview-animation').dataset.cinematicId;
+  const cinematic=[...Scenes.importedCinematics(state.importedFiles?.data),...shipped.cinematics].find(entry=>entry.id===idToPreview);
+  if(!cinematic)return;
+  const namespace='heritage_animation_preview',id=namespace+':animation';
+  const files=[
+    {path:'data/'+namespace+'/heritage/spawns/animation.json',document:{title:'Animation preview',type:'default',kits:[id],intro:cinematic}},
+    {path:'data/'+namespace+'/heritage/kits/animation.json',document:{title:'Preview kit',items:[]}}
+  ];
+  HeritageFlowPreview.open({errors:[],files},null,{resume:{phase:'intro',spawnId:id,kitId:id}});
+});
 function render({refreshOutput=true}={}) {
   for(const [id,key] of [['pack-name','name'],['namespace','namespace'],['pack-description','description']])$(id).value=state[key];
   $('pack-gui-scale').value=String(state.guiScale??0);
   $('pack-card-borders').checked=state.selectionMetadata?.card_borders!==false;
   $('pack-kit-preview').value=P.kitPreview(state)??'inventory';
+  updateScenePicker();animationStatus('');
   $('allow-custom-targets').checked=state.allowCustomTargets===true;
   $('keep-locations').checked=state.keepLocations;$('keep-kits').checked=state.keepKits;
   projectOptions();renderKits();renderIntros();renderLocation({sync:false,refreshContext:false});if(refreshOutput)renderOutput();packTools?.refresh();refreshShared();
@@ -707,7 +795,7 @@ $('pack-gui-scale').addEventListener('change',event=>{
   const value=Number(event.target.value);if(value)state.guiScale=value;else delete state.guiScale;changed();
 });
 $('pack-card-borders').addEventListener('change',event=>{
-  state.selectionMetadata={...state.selectionMetadata,card_borders:event.target.checked};
+  state.selectionMetadata={...P.selectionDocument(state),card_borders:event.target.checked};
   changed();
 });
 $('pack-kit-preview').addEventListener('change',event=>{

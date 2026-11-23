@@ -14,7 +14,9 @@ function context(search,raw){
   const params=new URLSearchParams(search),packId=params.get('pack');if(!packId)return null;
   const pack=JSON.parse(raw??'null')?.projects?.find(entry=>entry.id===packId);if(!pack)return {packId,packName:'Pack builder',locationId:params.get('location')??'',locationName:'',step:'locations',missing:true};
   const location=pack.state.locations.find(entry=>entry.id===params.get('location'));
-  return {packId,packName:pack.state.name,locationId:location?.id??params.get('location')??'',locationName:location?.fields.title??'',guiScale:pack.state.guiScale??0,fields:location?.fields??{},introId:location?.intro??'',kitIds:location?.kitMode==='selected'?location.kits:pack.state.kits.filter(kit=>kit.included).map(kit=>kit.id),missing:!!params.get('location')&&!location,step:step(params.get('step')??'locations')};
+  const scene=pack.state.selectionMetadata===undefined?{}:{introScene:pack.state.selectionMetadata?.intro_scene??null};
+  const imported=pack.state.importedFiles?.data?.filter(file=>/^data\/[^/]+\/heritage\/cinematics\//.test(file.path));
+  return {...scene,...(imported?.length?{cinematicFiles:imported}:{}),packId,packName:pack.state.name,locationId:location?.id??params.get('location')??'',locationName:location?.fields.title??'',guiScale:pack.state.guiScale??0,fields:location?.fields??{},introId:location?.intro??'',kitIds:location?.kitMode==='selected'?location.kits:pack.state.kits.filter(kit=>kit.included).map(kit=>kit.id),missing:!!params.get('location')&&!location,step:step(params.get('step')??'locations')};
 }
 function editorUrl(kind,{draft,create=false,packId,locationId}={}){
   if(!['kit','intro'].includes(kind))throw new Error('Unknown editor.');

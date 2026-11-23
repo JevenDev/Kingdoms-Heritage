@@ -2,6 +2,7 @@
 'use strict';
 const registry=typeof module!=='undefined'?require('./locations.js'):HeritageLocations;
 const preview=typeof module!=='undefined'?require('../editor/engine.js'):HeritagePreview;
+const scenes=typeof module!=='undefined'?require('../editor/scenes.js'):HeritageScenes;
 const fieldError=(field,message)=>Object.assign(new Error(message),{field});
 const labels={search_radius:'Search distance',random_radius:'Random spawn distance',order:'Position in the menu',title:'Location name'};
 const object=value=>value!==null&&typeof value==='object'&&!Array.isArray(value);
@@ -47,7 +48,7 @@ function bundledKitFiles(state,ranks){
 }
 const kitPreview=state=>state.kitPreview===undefined?state.selectionMetadata?.kit_preview:state.kitPreview;
 function selectionDocument(state){
-  const document={...copy(state.selectionMetadata??{}),gui_scale:state.guiScale===undefined?0:state.guiScale};
+  const document={...copy(state.selectionMetadata??{intro_scene:scenes.defaultSceneId}),gui_scale:state.guiScale===undefined?0:state.guiScale};
   const mode=kitPreview(state);
   if(mode!==undefined)document.kit_preview=mode;
   return document;
@@ -114,6 +115,8 @@ function drafts(raw,kind,validators) {
         const parsed=intros.get(state.source);draft.document=copy(parsed.wrapped?parsed.document.intro:parsed.document);
         if(validators.intro===preview.readJson)validatedIntroDocuments.set(draft.document,JSON.stringify({intro:draft.document}));
         if(parsed.wrapped&&parsed.document.type)draft.spawn=copy(parsed.document);
+        const asset=scenes.sceneAsset(state.animationAsset,draft.document.scene);
+        if(asset)draft.animationAsset=asset;
         if(state.validation?.error&&!state.validation.fromJson)throw new Error(state.validation.error.message||'Fix the draft error in the intro editor.');
       }
     } catch(error) {draft.error=error.message;draft.issue={path:error.path,field:error.field};}
@@ -280,7 +283,16 @@ function importedFiles(files) {
 }
 function inspect(state,catalog,{exporting=false,resources=exporting}={}) {
   const errors=[],warnings=[],files=[],issues=[],resourceFiles=[],intros=new Map(),validatedIntros=new Set();
-  const resolveIntro=id=>{if(!intros.has(id))intros.set(id,linkedIntro(id,catalog));return intros.get(id);};
+  const introAssets=new Map();
+  const resolveIntro=id=>{
+    if(!intros.has(id)){
+      const intro=linkedIntro(id,catalog);
+      const asset=scenes.sceneAsset(catalog.intros.find(draft=>draft.id===id)?.animationAsset,intro.scene);
+      if(asset)introAssets.set(asset.path,asset);
+      intros.set(id,intro);
+    }
+    return intros.get(id);
+  };
   const report=(label,action,locationId,filePath,kitId)=>{try{return action();}catch(error){
     errors.push(label+': '+error.message);
     const path=error.path??error.field?.split('.')??[];
@@ -304,6 +316,9 @@ function inspect(state,catalog,{exporting=false,resources=exporting}={}) {
   },undefined,selectionPath);
   report('Kit preview',()=>{
     if(selection.kit_preview!==undefined&&!['inventory','model'].includes(selection.kit_preview))throw Object.assign(fieldError('kitPreview','Choose Inventory or Model only.'),{path:['kit_preview']});
+  },undefined,selectionPath);
+  report('Default intro animation',()=>{
+    if(selection.intro_scene!==undefined&&(typeof selection.intro_scene!=='string'||!/^(?:[a-z0-9_.-]+:)?[a-z0-9/._-]+$/.test(selection.intro_scene)))throw Object.assign(fieldError('introScene','Enter a cinematic resource ID.'),{path:['intro_scene']});
   },undefined,selectionPath);
   report('Card borders',()=>{
     if(selection.card_borders!==undefined&&typeof selection.card_borders!=='boolean')throw Object.assign(fieldError('cardBorders','Card borders must be true or false.'),{path:['card_borders']});
@@ -393,12 +408,18 @@ function inspect(state,catalog,{exporting=false,resources=exporting}={}) {
   }
   files.sort((a,b)=>a.path==='pack.mcmeta'?-1:b.path==='pack.mcmeta'?1:a.path.localeCompare(b.path));
   const pictureCount=resourceFiles.length;
-  report('Imported resource files',()=>{const paths=new Set(resourceFiles.map(file=>file.path));for(const file of resources?importedFiles(state.importedFiles?.resources):state.importedFiles?.resources??[])if(!paths.has(file.path)&&file.path!=='pack.mcmeta'){paths.add(file.path);resourceFiles.push(file);}});
+  report('Imported resource files',()=>{
+    const paths=new Set(resourceFiles.map(file=>file.path));
+    const sources=[...introAssets.values(),...(state.importedFiles?.resources??[]).filter(file=>!introAssets.has(file.path))];
+    for(const file of resources?importedFiles(sources):sources)if(!paths.has(file.path)&&file.path!=='pack.mcmeta'){
+      paths.add(file.path);resourceFiles.push(file);
+    }
+  });
   if(resourceFiles.length)resourceFiles.unshift({path:'pack.mcmeta',...(resources?{content:JSON.stringify(metadata(state.resourceMetadata,34),null,2)+'\n'}:{})});
   return {files:errors.length?[]:files,resourceFiles:errors.length?[]:resourceFiles,pictureCount,previewFiles:errors.length?previewFiles(state,catalog,exporting,dataMetadata):files.filter(file=>file.document||typeof file.content==='string'),errors,issues,warnings:[...new Set(warnings)],kitCount:count,locationCount:spawnIds.size};
 }
 function build(state,catalog){return inspect(state,catalog,{exporting:true});}
-const api={copy,setBundledKits,bundledKits,bundledLocationIds,orderedKitIds,slug,fileId,resource,drafts,location,importSpawn,dimensionSuggestion,knownResource,validateSpawn,build,inspect,emptyKit,types,fields,destinationFields,usesPicture,pictureId,pictureBytes,selectionPath,kitPreview};
+const api={copy,setBundledKits,bundledKits,bundledLocationIds,orderedKitIds,slug,fileId,resource,drafts,location,importSpawn,dimensionSuggestion,knownResource,validateSpawn,build,inspect,emptyKit,types,fields,destinationFields,usesPicture,pictureId,pictureBytes,selectionPath,selectionDocument,kitPreview};
 if(typeof module!=='undefined')module.exports=api;
 else globalThis.HeritagePack=api;
 })();

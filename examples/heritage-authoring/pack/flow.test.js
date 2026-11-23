@@ -5,6 +5,9 @@ const fs=require('node:fs');
 const path=require('node:path');
 const Pack=require('./engine.js');
 const Flow=require('./flow.js');
+const Scenes=require('../editor/scenes.js');
+const Animations=require('./animations.js');
+const Coverage=require('./coverage.js');
 const bundled=require('./assets/defaults.json');
 test('location availability follows the party and counts only confirmed arrivals',()=>{
   const flow=new Flow.Session({spawns:[
@@ -273,7 +276,7 @@ test('sample locations resolve concrete targets and retain sample names for tags
 test('bundled definitions, translations and presentation assets match the current game',()=>{
   assert.deepEqual(bundled.selection,JSON.parse(fs.readFileSync(path.join(native,'data/kingdomsheritage/heritage/selection.json'),'utf8')));
   assert.deepEqual(bundled.translations,JSON.parse(fs.readFileSync(path.join(native,'assets/kingdomsheritage/lang/en_us.json'),'utf8')));
-  for(const kind of ['spawns','kits'])for(const {id,...entry} of bundled[kind])assert.deepEqual(entry,JSON.parse(fs.readFileSync(path.join(native,'data/kingdomsheritage/heritage',kind,id.split(':')[1]+'.json'),'utf8')));
+  for(const kind of ['spawns','kits','cinematics'])for(const {id,...entry} of bundled[kind])assert.deepEqual(entry,JSON.parse(fs.readFileSync(path.join(native,'data/kingdomsheritage/heritage',kind,id.split(':')[1]+'.json'),'utf8')));
   const assets=[...['card','card_expanded','card_fallback'].map(name=>[name+'.png','textures/gui/campaign_select_screen/campaign_select_screen_'+name+'.png']),...['default','random','plains','village'].map(name=>[name+'.png','textures/gui/locations/'+name+'.png']),...['click','hover','confirmation','dissolve'].map(name=>[name+'.ogg','sounds/ui/'+name+'.ogg']),...['disconnect','disconnect_highlighted'].map(name=>[name+'.png','textures/gui/sprites/selection/'+name+'.png']),['selection.ogg','sounds/music/selection.ogg'],['selection_background.fsh','shaders/core/selection_background.fsh']];
   assets.push(['selection_dissolve.fsh','shaders/core/selection_dissolve.fsh']);
   for(const name of ['tab_button','tab_button_selected','empty_slot','send_request'])assets.push([name+'.png','textures/gui/selection/'+name+'.png']);
@@ -282,6 +285,101 @@ test('bundled definitions, translations and presentation assets match the curren
     if(copy.endsWith('.fsh'))assert.equal(actual.toString().replaceAll('\r\n','\n'),expected.toString().replaceAll('\r\n','\n'));
     else assert.deepEqual(actual,expected);
   }
+});
+
+test('arrival preview resolves bundled wake-up and kit overrides with native precedence',()=>{
+  const output=build({keepLocations:true}),catalog=Flow.catalog(output,bundled);
+  const spawn=catalog.spawns.find(entry=>entry.id==='kingdomsheritage:plains'),kit=catalog.kits[0];
+  const scene=Flow.arrival(spawn,0,kit,catalog).intro;
+  assert.deepEqual(scene.scene.wait_at_ticks,[41]);
+  assert.equal(scene.text,spawn.intro.text);
+  assert.equal(scene.black_hold_ticks,2);
+  assert.equal(Flow.arrival({...spawn,intro:null},0,kit,catalog).intro,null);
+  assert.deepEqual(Flow.arrival({...spawn,intro:{...spawn.intro,control:'during_title'}},0,kit,catalog).intro,{...spawn.intro,control:'during_title'});
+
+  const custom=Flow.catalog({...output,files:[...output.files,{path:'data/preview/heritage/cinematics/stand.json',
+    document:{text:'Stand',scene:{...scene.scene,wait_at_ticks:[30]}}}]},bundled);
+  const override={...kit,intro_scene:'preview:stand'};
+  assert.deepEqual(Flow.arrival(spawn,0,override,custom).intro.scene.wait_at_ticks,[30]);
+  assert.equal(Flow.arrival({...spawn,intro:null},0,override,custom).intro.text,'Stand');
+  assert.deepEqual(Flow.arrival({...spawn,intro:scene},0,override,custom).intro.scene,scene.scene);
+  const session=new Flow.Session(catalog);
+  assert.ok(session.resume({phase:'intro',spawnId:spawn.id,kitId:kit.id}));
+  assert.deepEqual(session.arrival.intro,scene);
+});
+
+test('all bundled choices, custom references and no animation round-trip into the arrival flow',()=>{
+  const spawns={keepLocations:true};
+  assert.deepEqual(Scenes.presets.map(preset=>preset.id).sort(),bundled.cinematics.map(entry=>entry.id).sort());
+  assert.equal(Scenes.withDefault({text:'Welcome'},bundled).scene.animation_file,Scenes.defaultSceneId);
+  for(const {id} of Scenes.presets){
+    const output=build({...spawns,selectionMetadata:{intro_scene:id}}),choices=Flow.catalog(output,bundled);
+    const spawn=choices.spawns.find(entry=>entry.id==='kingdomsheritage:plains');
+    const kit=choices.kits[0],configured=Flow.arrival(spawn,0,kit,choices).intro;
+    assert.deepEqual(configured.scene,bundled.cinematics.find(entry=>entry.id===id).scene);
+    assert.equal(configured.text,spawn.intro.text);
+    assert.deepEqual(Flow.arrival(spawn,0,{...kit,intro_scene:null},choices).intro,spawn.intro);
+    assert.deepEqual(Flow.arrival({...spawn,intro:{...spawn.intro,scene:null}},0,kit,choices).intro,{...spawn.intro,scene:null});
+    choices.kits[1].intro_scene=null;
+    const routes=Coverage.page(choices,{}, {filter:spawn.id});
+    assert.notEqual(routes[0].parts.intro,routes[1].parts.intro);
+  }
+  const none=Flow.catalog(build({...spawns,selectionMetadata:{}}),bundled);
+  const spawn=none.spawns.find(entry=>entry.id==='kingdomsheritage:plains');
+  assert.deepEqual(Flow.arrival(spawn,0,none.kits[0],none).intro,spawn.intro);
+
+  const id='preview:my_animation',body={text:'Custom animation',scene:{animation_file:'preview:animation_asset',clip:'animation.preview.intro',duration_ticks:80,wait_at_ticks:[30]}};
+  const importedFiles={data:[{path:'data/preview/heritage/cinematics/my_animation.json',base64:Buffer.from(JSON.stringify(body)).toString('base64')}],resources:[]};
+  const custom=Flow.catalog(build({...spawns,selectionMetadata:{intro_scene:id},importedFiles}),bundled);
+  assert.deepEqual(Flow.arrival(spawn,0,custom.kits[0],custom).intro.scene,body.scene);
+});
+
+test('an imported Blockbench clip is selected, exported and playable without hand-written paths',()=>{
+  const filename=path.join(native,'assets/kingdomsheritage/heritage/animations/wake_up.animation.json');
+  const source=Animations.read(fs.readFileSync(filename,'utf8')),clip=source.clips[0];
+  assert.equal(clip.duration,82);
+  const settings={name:'Custom wake-up',clip:clip.name,perspective:'third_person_back',exitPerspective:'first_person',pause:30,makeDefault:true};
+  const {pack,id}=Animations.add({namespace:'preview'},source,settings);
+  const duplicate=Animations.add(pack,source,{...settings,makeDefault:false});
+  assert.notEqual(duplicate.id,id);
+  assert.equal(duplicate.pack.selectionMetadata.intro_scene,id);
+  const output=build({...pack,keepLocations:true}),choices=Flow.catalog(output,bundled);
+  const imported=Scenes.importedCinematics(pack.importedFiles.data);
+  assert.deepEqual(Scenes.cinematicChoices(imported),[{id,label:'Custom wake-up'}]);
+  const asset=output.resourceFiles.find(file=>file.path==='assets/preview/heritage/animations/imported_animations/custom_wake-up.animation.json');
+  assert.deepEqual(JSON.parse(asset.content).animations[clip.name],source.document.animations[clip.name]);
+  const spawn=choices.spawns.find(entry=>entry.id==='kingdomsheritage:plains');
+  const intro=Flow.arrival(spawn,0,choices.kits[0],choices).intro;
+  assert.equal(intro.scene.animation_file,id);
+  assert.equal(intro.scene.perspective,'third_person_back');
+  assert.deepEqual(intro.scene.wait_at_ticks,[30]);
+  assert.equal(Scenes.timing({...require('../editor/engine.js').packDefaults,...intro}).waits.length,1);
+});
+
+test('a scene imported in an intro draft ships with each pack that uses the draft',()=>{
+  const animation=Animations.read('{"animations":{"test.wake":{"animation_length":2,"bones":{"camera":{"rotation":[0,0,0]}}}}}');
+  const scene={animation_file:'heritage_cinematics:intro/test',clip:'test.wake',duration_ticks:40};
+  const animationAsset=Animations.resource(animation,scene.clip,scene.animation_file,'test.animation.json');
+  const document={text:'Welcome',scene},draft={id:'test',state:{name:'Wake-up',source:JSON.stringify(document),document,animationAsset}};
+  const entries=Pack.drafts({version:2,intros:[draft]},'intros',{intro:require('../editor/engine.js').readJson}).entries;
+  assert.deepEqual(entries[0].animationAsset,animationAsset);
+  const home=Pack.location('home'),camp=Pack.location('camp',2);home.intro=camp.intro=draft.id;
+  const catalog={kits:[],intros:entries},output=build({locations:[home,camp]},catalog);
+  assert.deepEqual(output.errors,[]);
+  const assets=output.resourceFiles.filter(file=>file.path===animationAsset.path);
+  assert.equal(assets.length,1);assert.deepEqual(JSON.parse(assets[0].content),animation.document);
+  assert.deepEqual(build({locations:[Pack.location('home')]},catalog).resourceFiles,[]);
+  assert.deepEqual(Animations.resourcePack(animationAsset,'Wake-up').map(file=>file.path),['pack.mcmeta',animationAsset.path]);
+});
+
+test('Blockbench import finds the valid clips and explains incompatible tracks',()=>{
+  const clip={animation_length:1.5,bones:{camera:{position:[0,0,0]}}};
+  const clips=Animations.read(JSON.stringify({animations:{valid:clip,offGrid:{...clip,animation_length:1.52},
+    easing:{...clip,bones:{camera:{rotation:{post:[0,0,0],lerp_mode:'catmullrom'}}}}}})).clips;
+  assert.deepEqual(clips[0],{name:'valid',duration:30});
+  assert.match(clips[1].error,/whole Minecraft tick/);
+  assert.match(clips[2].error,/linear keyframes/);
+  assert.throws(()=>Animations.read('{"meta":{"model_format":"bedrock"},"animations":[]}'),/Export Animations/);
 });
 
 test('a chosen pool destination stays fixed through story review and uses its own intro',()=>{

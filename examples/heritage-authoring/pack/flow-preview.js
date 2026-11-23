@@ -1,7 +1,7 @@
 (() => {
 'use strict';
 const clock=()=>Math.trunc(performance.now());
-const F=HeritageFlow,P=HeritagePreview,$=id=>document.getElementById(id),dialog=$('flow-dialog');
+const F=HeritageFlow,P=HeritagePreview,Scenes=HeritageScenes,$=id=>document.getElementById(id),dialog=$('flow-dialog');
 const canvas=$('flow-canvas'),mainContext=canvas.getContext('2d'),mainRenderer=new HeritageCanvas(mainContext),base=new URL('assets/',document.currentScript.src);
 let ctx=mainContext,renderer=mainRenderer;
 const layer=document.createElement('canvas'),layerContext=layer.getContext('2d'),layerRenderer=new HeritageCanvas(layerContext),transition=new HeritagePresentation.Transition();
@@ -31,7 +31,7 @@ let kitYaw=NaN,kitPitch=NaN,kitRenderedAt=0,highlightedCard=null;
 const pictures=new Map(),images=new Map(),buttons=new Map(),sounds=new Set();
 let session,bundled,loading,artLoading,inventory,viewport,page=0,expanded='',scroll=0,started=0,frame=0,opened=0,visible=0;
 let flowReturnFocus=null,needsFocus=false,openId=0,hiddenAt=0,lockedScale=0,playerScale=4,plannedRoute=null,planApplied=false,visited=new Set(),editAfterClose=null;
-let introConfig,segments=[],reviewGlyphs=[],shader,activeButtons,previewState,inventoryOptions={mode:'player'},notice='',statPanel;
+let introConfig,introTiming,introWait,introWaitIndex=0,segments=[],reviewGlyphs=[],shader,activeButtons,previewState,inventoryOptions={mode:'player'},notice='',statPanel;
 const music=new Audio();music.preload='none';music.src=new URL('selection.ogg',base);music.loop=true;music.volume=.18;
 const speechPlayers={review:HeritageDialogueAudio.create({volume:.7,muted:()=>$('flow-mute').checked}),intro:HeritageDialogueAudio.create({muted:()=>$('flow-mute').checked})};
 let speechCues=[],speechRunning=false;
@@ -142,13 +142,7 @@ async function loadOverlayShader(source,toast=false){
   };
   if(toast)toastBackground=effect;else dissolve=effect;
 }
-let defaultsLoading;
-function loadDefaults(){
-  return defaultsLoading??=fetch(new URL('defaults.json?v=11',base)).then(response=>{
-    if(!response.ok)throw new Error('Bundled locations and kits could not load.');
-    return response.json();
-  }).catch(error=>{defaultsLoading=null;throw error;});
-}
+const loadDefaults=Scenes.defaults;
 async function loadArt(){
   if(artLoading)return artLoading;
   artLoading=(async()=>{
@@ -641,7 +635,12 @@ function enter(focus=true){
     }
 
   }
-  if(session.phase==='intro'){introConfig=P.readJson(JSON.stringify(session.arrival.intro)).config;speechCues=P.blipCues(introConfig,sampleNames());}
+  introWait=null;introWaitIndex=0;
+  if(phase==='intro'){
+    introConfig=P.readJson(JSON.stringify(session.arrival.intro)).config;
+    const names=sampleNames();
+    introTiming=Scenes.timing(introConfig,names);speechCues=P.blipCues(introConfig,names);
+  }
   if(session.phase==='review'){const length=segments.reduce((total,segment)=>total+Array.from(segment.text).length*40+segment.pause,0);speechCues=P.revealCues(reviewGlyphs,tick=>F.revealed(segments,tick*50),Math.ceil(length/50)+1,{first:1,step:2,pitch:.95,spread:.1});}
   const custom=session.choices.spawns.some(spawn=>spawn.image&&!/^kingdomsheritage:/.test(spawn.image)&&!pictures.has(spawn.image));
   $('flow-status').textContent=[notice,effectNotice,custom?'Images from external resource packs use the fallback card here.':'',session.phase==='complete'?'Preview complete. Close this window to download your pack.':''].filter(Boolean).join(' ');
@@ -1126,6 +1125,12 @@ function reviewScreen(w,h,elapsed){
     hit('reveal','Reveal all',0,0,w,h,revealStory);text('Click or press Space to reveal all',center,h-27,{center:true,color:0xaaaaaa});
   }
 }
+function continueIntro(){
+  if(!introWait)return;
+  started=clock()-introWait.end*50;
+  introWait=null;introWaitIndex++;
+  $('flow-phase').textContent='Arrival intro';
+}
 function drawWorld(w,h,elapsed,config=introConfig){
   const image=images.get('default');
   const fit=Math.max(w/image.width,h/image.height),progress=P.clamp((elapsed/50-config.black_hold_ticks)/config.fade_from_black_ticks),reveal=progress*progress*(3-2*progress),zoom=Math.tan(70*Math.PI/360)/Math.tan((70-10*(1-reveal))*Math.PI/360);
@@ -1173,8 +1178,16 @@ function render(now){
     if(elapsed>=50){session.next();enter();transition.reveal(now);}
   }else if(session.phase==='review')reviewScreen(w,h,elapsed);
   else if(session.phase==='intro'){
-    drawWorld(w,h,elapsed);renderer.intro(introConfig,sampleNames(),elapsed/50,w,h,barSlant);
-    if(elapsed/50>=P.duration(introConfig,sampleNames()))next();
+    const names=sampleNames(),upcoming=introTiming.waits[introWaitIndex];
+    const time=Math.min(elapsed/50,upcoming?.end??introTiming.total);
+    drawWorld(w,h,time*50);renderer.intro(introConfig,names,time,w,h,barSlant);
+    if(upcoming&&time>=upcoming.at){
+      const prompt=Scenes.prompt(upcoming,names);
+      if(!introWait){introWait=upcoming;$('flow-phase').textContent='Waiting for input';}
+      renderer.prompt(prompt.glyphs,w,h,P.clamp((time-upcoming.at)/(upcoming.end-upcoming.at)));
+      const promptWidth=Math.min(w,Math.max(48,width(prompt.glyphs)+12));
+      hit('intro-continue',prompt.text,(w-promptWidth)/2,Math.round(h*.79)-4,promptWidth,16,continueIntro);
+    }else if(time>=introTiming.total)next();
   }else if(session.phase==='complete'){
     drawWorld(w,h,Infinity,P.packDefaults);
   }
@@ -1319,6 +1332,10 @@ $('flow-stage').addEventListener('keydown',event=>{
   else if(session.phase==='location'&&['ArrowLeft','ArrowRight','PageUp','PageDown'].includes(event.key)){event.preventDefault();browseLocation(['ArrowLeft','PageUp'].includes(event.key)?-1:1,event.key.startsWith('Page'));}
   else if(session.phase==='kit-shop'&&['PageUp','PageDown'].includes(event.key)){event.preventDefault();changeShopPage(event.key==='PageUp'?-1:1);}
   else if(session.phase==='kit'&&['ArrowLeft','ArrowRight'].includes(event.key)&&!event.target.closest('#flow-inventory')){event.preventDefault();selectKit(session.kitIndex+(event.key==='ArrowLeft'?-1:1));}
+});
+dialog.addEventListener('keydown',event=>{
+  if(!introWait||session?.phase!=='intro'||!Scenes.matchesKey(event,Scenes.prompt(introWait,sampleNames()).label))return;
+  event.preventDefault();continueIntro();
 });
 dialog.addEventListener('cancel',event=>{if(partyOpen){event.preventDefault();if(partyMenu)partyMenu=null;else toggleParty(false);return;}if(!session||session.shopOnly||session.phase==='complete')return;event.preventDefault();if(['location-confirm','kit','kit-confirm','kit-shop','review'].includes(session.phase)&&transition.phase==='idle'){sound('click');back();}});
 dialog.addEventListener('close',async()=>{

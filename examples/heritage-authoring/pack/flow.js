@@ -1,6 +1,7 @@
 (() => {
 'use strict';
 const K=typeof module==='undefined'?HeritageKit:(require('../kit/catalog.js'),require('../kit/engine.js'));
+const Scenes=typeof module!=='undefined'?require('../editor/scenes.js'):HeritageScenes;
 const compareText=(a,b)=>a<b?-1:a>b?1:0;
 const compare=(a,b)=>{
   const [an,ap]=a.id.split(':'),[bn,bp]=b.id.split(':');
@@ -8,10 +9,10 @@ const compare=(a,b)=>{
 };
 function catalog(output,bundled) {
   if(output.errors.length)throw new Error('Fix the pack errors before previewing.');
-  const entries={spawns:new Map(),kits:new Map()};
-  for(const kind of Object.keys(entries))for(const entry of bundled[kind])entries[kind].set(entry.id,structuredClone(entry));
+  const entries={spawns:new Map(),kits:new Map(),cinematics:new Map()};
+  for(const kind of Object.keys(entries))for(const entry of bundled[kind]??[])entries[kind].set(entry.id,structuredClone(entry));
   for(const file of output.files) {
-    const match=/^data\/([^/]+)\/heritage\/(spawns|kits)\/(.+)\.json$/.exec(file.path);
+    const match=/^data\/([^/]+)\/heritage\/(spawns|kits|cinematics)\/(.+)\.json$/.exec(file.path);
     if(!match)continue;
     const [,namespace,kind,name]=match,document=file.document?structuredClone(file.document):JSON.parse(file.content),id=namespace+':'+name;
     if(document.enabled===false)entries[kind].delete(id);
@@ -19,7 +20,7 @@ function catalog(output,bundled) {
   }
   const settings=output.files.find(file=>file.path==='data/kingdomsheritage/heritage/selection.json');
   const selection=settings?(settings.document??JSON.parse(settings.content)):bundled.selection;
-  const result={...Object.fromEntries(Object.entries(entries).map(([kind,values])=>[kind,[...values.values()].sort(compare)])),guiScale:selection?.gui_scale??0,cardBorders:selection?.card_borders!==false,kitPreview:selection?.kit_preview??'inventory'};
+  const result={...Object.fromEntries(Object.entries(entries).map(([kind,values])=>[kind,[...values.values()].sort(compare)])),introScene:selection?.intro_scene,guiScale:selection?.gui_scale??0,cardBorders:selection?.card_borders!==false,kitPreview:selection?.kit_preview??'inventory'};
   for(const spawn of result.spawns){const selectors=spawn.kits;spawn.kits=result.kits.filter(kit=>!selectors?.length||selectors.some(selector=>selector.startsWith('#')?(kit.tags??[]).some(tag=>K.normalize(tag)===K.normalize(selector.slice(1))):K.normalize(selector)===kit.id)).map(kit=>kit.id);}
   return result;
 }
@@ -30,6 +31,12 @@ function destination(spawn,index=0) {
   if(!Number.isInteger(index)||!spawn.pool[index])throw new Error('Choose an available pool destination.');
   const {pool,...base}=spawn,result={...structuredClone(base),...structuredClone(pool[index])};
   delete result.pool;
+  return result;
+}
+function arrival(spawn,index,kit,choices){
+  const result=destination(spawn,index);
+  const intro=Scenes.arrivalIntro(result.intro,kit?.intro_scene,choices.introScene,choices.cinematics);
+  if(intro)result.intro=intro;
   return result;
 }
 function locations(spawn,sample={}) {
@@ -209,7 +216,7 @@ class Session {
       }
     }
     const arriving=['loading','review','intro'].includes(this.phase);this.poolIndex=this.spawn.type==='pool'&&Number.isInteger(value.poolIndex)&&this.spawn.pool[value.poolIndex]?value.poolIndex:arriving?0:null;
-    this.arrival=arriving?destination(this.spawn,this.poolIndex??0):null;if(this.phase==='intro'&&!this.arrival.intro)this.phase='review';return true;
+    this.arrival=arriving?arrival(this.spawn,this.poolIndex??0,this.kit,this.choices):null;if(this.phase==='intro'&&!this.arrival.intro)this.phase='review';return true;
   }
   allowed(){return this.choices.kits.filter(kit=>!this.spawn?.kits||this.spawn.kits.includes(kit.id));}
   choose(id){
@@ -299,7 +306,7 @@ class Session {
     else if(this.phase==='intro')this.phase='complete';
   }
   prepareArrival(index){
-    this.arrival=destination(this.spawn,index);
+    this.arrival=arrival(this.spawn,index,this.kit,this.choices);
     this.poolIndex=this.spawn.type==='pool'?index:null;
     this.phase='loading';
   }
@@ -311,7 +318,7 @@ class Session {
     if(this.phase==='review')this.phase=this.kit.shop?'kit-shop':this.allowed().length===1?'location-confirm':'kit';
   }
 }
-const api={pageSize,defaultShopColumns,maxShopColumns,shopRows,shopOfferIndices,shopLayout,shopPanelWidth,drawShopPanel,browseLocation,companionNames,compare,catalog,label,place,destination,locations,context,narration,revealed,Session};
+const api={pageSize,defaultShopColumns,maxShopColumns,shopRows,shopOfferIndices,shopLayout,shopPanelWidth,drawShopPanel,browseLocation,companionNames,compare,catalog,label,place,destination,arrival,locations,context,narration,revealed,Session};
 if(typeof module!=='undefined')module.exports=api;
 else globalThis.HeritageFlow=api;
 })();

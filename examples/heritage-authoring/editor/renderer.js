@@ -109,7 +109,7 @@ function bars(w,h,ticks,config,slant,names={}) {
 function intro(config,names,time,w,h,slant=0) {
   const {main,sub,all,timing}=P.playback(config,names);
   const elapsed=time-config.black_hold_ticks;
-  if(time>=P.duration(config,names))return all.length;
+  if(time>=P.overlayDuration(config,names))return all.length;
   const progress=P.clamp(elapsed/config.fade_from_black_ticks),reveal=progress*progress*(3-2*progress);
   ctx.globalAlpha=Math.round(255*(1-reveal))/255;ctx.fillStyle='#000';ctx.fillRect(0,0,w,h);ctx.globalAlpha=1;
   bars(w,h,elapsed,config,slant,names);
@@ -120,6 +120,11 @@ function intro(config,names,time,w,h,slant=0) {
   for(const block of P.layout(config,main,sub,w,h,advance))drawBlock(block,visible,Math.round(alpha*255),Math.floor(textElapsed),config.outline,!config.outline);
   ctx.globalAlpha=1;return visible;
 }
-return {font,advance,load,sprite,block:drawBlock,bars,intro};
+function prompt(glyphs,w,h,progress=1){
+  const width=glyphs.reduce((sum,glyph)=>sum+advance(glyph),0);
+  const alpha=Math.round(255*progress**3*(progress*(6*progress-15)+10));
+  drawBlock({x:Math.floor(w/2)-Math.floor(width/2),y:Math.round(h*.79),scale:1,column:0,lineHeight:9,lines:[{width,glyphs}]},Infinity,alpha,0);
+}
+return {font,advance,load,sprite,block:drawBlock,bars,intro,prompt};
 };
 })();

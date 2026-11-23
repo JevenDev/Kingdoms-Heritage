@@ -18,7 +18,7 @@ function definitions(kind) {
   visit(root);
   return entries.sort((a,b)=>(a.order??0)-(b.order??0)||(a.id<b.id?-1:a.id>b.id?1:0));
 }
-const output=JSON.stringify({spawns:definitions('spawns'),kits:definitions('kits'),
+const output=JSON.stringify({spawns:definitions('spawns'),kits:definitions('kits'),cinematics:definitions('cinematics'),
   translations:read(path.join(native,'assets/kingdomsheritage/lang/en_us.json')),
   selection:read(path.join(native,'data/kingdomsheritage/heritage/selection.json'))},null,2)+'\n';
 if(process.argv.includes('--check')) {

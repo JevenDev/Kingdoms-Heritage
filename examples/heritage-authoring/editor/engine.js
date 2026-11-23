@@ -26,6 +26,7 @@ function readJson(source,{validate:check=true}={}) {
   if(!object(intro)) throw Object.assign(new Error('intro must be a JSON object.'),{path:wrapped?['intro']:[]});
   if(check&&!Object.hasOwn(intro,'text')) throw Object.assign(new Error('intro requires text.'),{field:'text',path:wrapped?['intro','text']:['text']});
   const config=Object.fromEntries(Object.entries(packDefaults).map(([key,fallback])=>[key,Object.hasOwn(intro,key)?intro[key]:fallback]));
+  if(Object.hasOwn(intro,'scene'))config.scene=intro.scene;
   for(const key of ['animation','control','bar_style']) if(typeof config[key]==='string') config[key]=config[key].toLowerCase();
   for(const key of ['title_position','subtitle_position']) if(typeof config[key]==='string') {
     const value=config[key].trim().toLowerCase().replaceAll(' ','_');
@@ -35,7 +36,9 @@ function readJson(source,{validate:check=true}={}) {
     config[key]=Object.hasOwn(intro,key)?intro[key]:null;
     if(config[key]&&typeof config[key]==='object'&&!Array.isArray(config[key]))config[key]={width:50,...config[key]};
   }
-  if(check)try{validate(config);}catch(error){
+  if(check)try{
+    validate(config);
+  }catch(error){
     error.path??=error.field?.split('.')??[];
     if(wrapped)error.path=['intro',...error.path];
     throw error;
@@ -480,10 +483,43 @@ function barProgress(cfg,time,names={}){
   const timing=cfg.timeline,ticks=time-timing.bar_start_ticks,entry=clamp(Math.fround(ticks/timing.bar_enter_ticks)),exit=clamp(Math.fround((ticks-timing.bar_enter_ticks-timing.bar_hold_ticks)/timing.bar_exit_ticks)),f=Math.fround;
   return f(f(1-f((1-entry)**3))*f(1-f(f(exit*exit)*exit)));
 }
-function duration(cfg,names={}) {
+function overlayDuration(cfg,names={}) {
   if(!cfg.timeline)return cfg.black_hold_ticks+presentation(cfg,names);
   const timing=cfg.timeline,bars=cfg.cinematic_bars?timing.bar_start_ticks+timing.bar_enter_ticks+timing.bar_hold_ticks+timing.bar_exit_ticks:0;
   return Math.max(cfg.black_hold_ticks+cfg.fade_from_black_ticks,textStart(cfg)+textDuration(cfg,names),bars);
+}
+function scenePauses(scene) {
+  if(Array.isArray(scene?.pauses))return scene.pauses;
+  if(Array.isArray(scene?.wait_at_ticks))return scene.wait_at_ticks.map(tick=>({tick}));
+  return [];
+}
+function duration(cfg,names={}) {
+  const scene=cfg.scene,sceneTicks=Number.isInteger(scene?.duration_ticks)?scene.duration_ticks+(scene.smooth_camera_return?12:0):0;
+  return Math.max(overlayDuration(cfg,names),sceneTicks);
+}
+function validateScene(scene,control) {
+  const error=(field,message)=>{throw Object.assign(new Error(message),{field:'scene'+(field?'.'+field:'')});};
+  if(!scene||typeof scene!=='object'||Array.isArray(scene))error('','Scene must be an object.');
+  if(control!=='after_title')error('','An animated scene requires after title control.');
+  if(typeof scene.animation_file!=='string'||!/^(?:[a-z0-9_.-]+:)?[a-z0-9/._-]+$/.test(scene.animation_file))error('animation_file','Enter an animation resource ID.');
+  if(typeof scene.clip!=='string'||!scene.clip.trim()||scene.clip.length>256)error('clip','Enter a clip name of 1 to 256 characters.');
+  if(!Number.isInteger(scene.duration_ticks)||scene.duration_ticks<1||scene.duration_ticks>1200)error('duration_ticks','Scene length must be 1 to 1200 whole ticks.');
+  for(const field of ['perspective','exit_perspective'])if(Object.hasOwn(scene,field)&&!['first_person','third_person_back','third_person_front','previous'].includes(scene[field]))error(field,'Choose a valid camera perspective.');
+  for(const field of ['smooth_camera_return','first_person_hide_arms_with_torso'])if(Object.hasOwn(scene,field)&&typeof scene[field]!=='boolean')error(field,'Enter true or false.');
+  const validTick=tick=>Number.isInteger(tick)&&tick>=1&&tick<scene.duration_ticks;
+  if(Object.hasOwn(scene,'first_person_hide_torso_at_tick')&&!validTick(scene.first_person_hide_torso_at_tick))error('first_person_hide_torso_at_tick','The torso hide time must be inside the clip.');
+  if(Object.hasOwn(scene,'pauses')&&Object.hasOwn(scene,'wait_at_ticks'))error('pauses','Use either pauses or wait_at_ticks.');
+  for(const field of ['pauses','wait_at_ticks'])if(Object.hasOwn(scene,field)&&!Array.isArray(scene[field]))error(field,'Pause points must be an array.');
+  const pauses=scenePauses(scene);
+  if(pauses.length>16)error('pauses','A scene can have up to 16 pauses.');
+  let previous=0;
+  for(const [index,pause] of pauses.entries()){
+    if(!pause||typeof pause!=='object'||Array.isArray(pause))error('pauses.'+index,'Each pause must be an object.');
+    if(!validTick(pause.tick)||pause.tick<=previous)error('pauses.'+index+'.tick','Pause ticks must be in order and inside the clip.');
+    previous=pause.tick;
+    if(Object.hasOwn(pause,'key')&&(typeof pause.key!=='string'||!/^[A-Za-z0-9_.:/-]{1,128}$/.test(pause.key)))error('pauses.'+index+'.key','Enter a key binding name.');
+    if(Object.hasOwn(pause,'prompt')&&(typeof pause.prompt!=='string'||!pause.prompt.trim()||pause.prompt.length>256||/[\u0000-\u001f\u007f-\u009f]/.test(pause.prompt)))error('pauses.'+index+'.prompt','Enter one line of 1 to 256 characters.');
+  }
 }
 function wordEnds(all) {return all.filter((g,i)=>!/\s/u.test(g.ch)&&(i+1===all.length||/\s/u.test(all[i+1].ch))).map(g=>g.index+1);}
 function visible(cfg,all,ticks,ends,timing=null) {
@@ -507,7 +543,7 @@ function revealCues(glyphs,visibleAt,total,{start=0,first=3,step=3,pitch=.9,spre
 function blipCues(cfg,names={},random=Math.random){
   if(!cfg.blip)return [];
   const {all:glyphs,ends,timing}=playback(cfg,names),start=textStart(cfg);
-  return revealCues(glyphs,tick=>visible(cfg,glyphs,tick-start,ends,timing),duration(cfg,names),{start},random);
+  return revealCues(glyphs,tick=>visible(cfg,glyphs,tick-start,ends,timing),overlayDuration(cfg,names),{start},random);
 }
 function glyphFrame(g,tick,alpha) {
   const e=g.effect, i=g.phase;
@@ -550,12 +586,13 @@ function validate(cfg) {
   }
   if(!['fade_in','word_by_word','letter_by_letter','immediate'].includes(cfg.animation)) throw Object.assign(new Error('Unknown reveal mode.'),{field:'animation'});
   if(!['after_title','during_title'].includes(cfg.control)) throw Object.assign(new Error('Unknown control setting.'),{field:'control'});
+  if(cfg.scene!=null)validateScene(cfg.scene,cfg.control);
   if(!['random','straight'].includes(cfg.bar_style)) throw Object.assign(new Error('Unknown bar style.'),{field:'bar_style'});
   playback(cfg);
   for(const variant of cfg.variants??[])playback({...cfg,...variant,variants:[]});
   return cfg;
 }
-const api={validateSamples,pacingCue,schedule,playback,revealDuration,factDefaults,keyDefaults,condition,validateCondition,dialogue,diagnostics,contextDefaults,token,effects,canonical,barHeight,barVisibility,sampleSlant,componentText,validateComponent,colors,positions,defaults,packDefaults,readJson,updateJson,cinematicPack,parse,wrap,padding,bounds,guiViewport,layout,presentation,trackTiming,textStart,textDuration,barProgress,duration,wordEnds,visible,revealCues,blipCues,glyphFrame,validate,clamp,active};
+const api={validateSamples,pacingCue,schedule,playback,revealDuration,factDefaults,keyDefaults,condition,validateCondition,dialogue,diagnostics,contextDefaults,token,effects,canonical,barHeight,barVisibility,sampleSlant,componentText,validateComponent,colors,positions,defaults,packDefaults,readJson,updateJson,cinematicPack,parse,wrap,padding,bounds,guiViewport,layout,presentation,trackTiming,textStart,textDuration,barProgress,overlayDuration,duration,scenePauses,validateScene,wordEnds,visible,revealCues,blipCues,glyphFrame,validate,clamp,active};
 if(typeof module!=='undefined') module.exports=api;
 else globalThis.HeritagePreview=api;
 })();

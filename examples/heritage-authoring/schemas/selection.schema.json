@@ -10,6 +10,11 @@
       "maximum": 4,
       "description": "0 or omitted uses the player GUI scale up to 4. A positive value overrides the GUI scale for selection screens and the entire arrival intro, including bars. Minecraft window and font limits apply. The saved player option stays unchanged."
     },
+    "intro_scene": {
+      "type": "string",
+      "pattern": "^(?:[a-z0-9_.-]+:)?[a-z0-9/._-]+$",
+      "description": "Default animation for text intros. Use a bundled wake-up cinematic ID or a custom cinematic ID. Omit for no default animation."
+    },
     "card_borders": {
       "type": "boolean",
       "default": true,

@@ -9,14 +9,14 @@ function cached(values,key,create){if(!values.has(key))values.set(key,create());
 function scene(choices,images,spawnId,kitId,poolIndex=null,cache=sceneCache()){
   const spawn=choices.spawns.find(entry=>entry.id===spawnId),kit=choices.kits.find(entry=>entry.id===kitId);if(!spawn||!kit||spawn.kits&&!spawn.kits.includes(kit.id))return null;
   if(spawn.type!=='pool')poolIndex=null;else if(!Number.isInteger(poolIndex)||!spawn.pool[poolIndex])return null;
-  const arrival=F.destination(spawn,poolIndex??0),{intro,...destination}=arrival,{pool,intro:defaultIntro,...card}=spawn;
+  const arrival=F.arrival(spawn,poolIndex??0,kit,choices),{intro,...destination}=arrival,{pool,intro:defaultIntro,...card}=spawn;
   const image=spawn.image?.split(':'),picture=image?images['assets/'+image[0]+'/'+image[1]]??'external':null,scale=choices.guiScale??0;
   const kitPart=cached(cache.kit,JSON.stringify([spawnId,kitId]),()=>{
     const inputs=[kit,choices.kits.filter(entry=>!spawn.kits||spawn.kits.includes(entry.id)).map(entry=>entry.id),scale];
     if(choices.kitPreview==='model')inputs.push('model');if(kit.shop)inputs.push('shop');return hash(inputs);
   });
   const emptyLoadout=kit.items?.length?false:kit.shop??true;
-  const parts={location:cached(cache.location,spawn,()=>hash([card,picture,choices.spawns.map(entry=>entry.id),scale,...(choices.cardBorders===false?['borderless']:[])])),kit:kitPart,arrival:hash([destination,kit.title,kit.title_key,emptyLoadout,scale]),intro:cached(cache.intro,JSON.stringify([spawnId,poolIndex]),()=>hash([intro??null,scale]))};
+  const parts={location:cached(cache.location,spawn,()=>hash([card,picture,choices.spawns.map(entry=>entry.id),scale,...(choices.cardBorders===false?['borderless']:[])])),kit:kitPart,arrival:hash([destination,kit.title,kit.title_key,emptyLoadout,scale]),intro:cached(cache.intro,JSON.stringify([spawnId,kitId,poolIndex]),()=>hash([intro??null,scale]))};
   return {key:JSON.stringify([spawnId,kitId,poolIndex]),spawnId,kitId,poolIndex,spawn,kit,arrival,parts,fingerprint:hash(parts)};
 }
 function count(choices,filter=''){

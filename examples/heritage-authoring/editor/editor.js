@@ -1,13 +1,17 @@
 (async () => {
 'use strict';
-const P=HeritagePreview, $=id=>document.getElementById(id),storageKey='heritage.introEditor.v1';
+const P=HeritagePreview,Scenes=HeritageScenes,$=id=>document.getElementById(id),storageKey='heritage.introEditor.v1';
 if(!await HeritageSession.acquire(storageKey))return;
 const editorRoute=new URLSearchParams(location.search),requested=editorRoute.get('draft');
 const previewFields=['resolution','viewport','background',...Object.keys(P.contextDefaults),'preview-variables','preview-facts','preview-keys','loop','show-text-boxes'];
 const canvas=$('preview'), ctx=canvas.getContext('2d'), renderer=new HeritageCanvas(ctx),font=renderer.font,sprite=renderer.sprite;
-let jsonState=P.readJson(JSON.stringify({intro:P.defaults}));
-let config=jsonState.config, main=[], sub=[], all=[], blocks=[], cues=[], revealEnds=[], revealTiming=null;
+const [bundled]=await Promise.all([Scenes.defaults(),renderer.load()]);
+let jsonState=P.readJson(JSON.stringify({intro:editorRoute.has('pack')?P.defaults:Scenes.withDefault(P.defaults,bundled)}));
+const sceneWorldFields=['black_hold_ticks','fade_from_black_ticks'];
+let config=jsonState.config,previewConfig=config,inheritsScene=false,main=[], sub=[], all=[], blocks=[], cues=[], revealEnds=[], revealTiming=null;
 let time=0, playing=false, previewing=true, muted=false, lastFrame=0, frameRequest=0, slant=P.sampleSlant(crypto.randomUUID()), activeField=$('text'), valid=true;
+let previewTiming, nextWait=0, waiting=null,packCinematics=[],animationAsset=null;
+const attachedAnimation=()=>Scenes.sceneAsset(animationAsset,config.scene);
 const speech=HeritageDialogueAudio.create({muted:()=>muted});
 let playRequest=0;
 let history=[], historyIndex=-1, restoringHistory=false, historyGroup=null, historyTime=0, currentValidation={error:null,fromJson:false};
@@ -27,7 +31,8 @@ function draftOptions() {
     option.textContent=name+(count>1?' ('+count+')':'');
   }
   field.value=workspace.active;
-  packContext=HeritageWorkflow.editor('intro',workspace.active);author?.refresh();
+  packContext=HeritageWorkflow.editor('intro',workspace.active);
+  packCinematics=Scenes.importedCinematics(packContext?.cinematicFiles);author?.refresh();
 }
 function saveDraft() {
   clearTimeout(saveTimer);
@@ -54,7 +59,11 @@ function activateIntro(id) {
     restoreHistory(0);saveDraft();
   }catch(error){$('intro-drafts').value=workspace.active;$('copy-status').textContent='Could not open intro: '+error.message;}
 }
-function openIntro(raw=JSON.stringify({intro:{text:'A new journey begins.',subtitle:''}},null,2),name='My intro') {
+function openIntro(raw,name='My intro') {
+  if(raw===undefined){
+    const intro={text:'A new journey begins.',subtitle:''};
+    raw=JSON.stringify({intro:editorRoute.has('pack')?intro:Scenes.withDefault(intro,bundled)},null,2);
+  }
   let parsed=P.readJson(JSON.stringify({intro:{text:'A new journey begins.',subtitle:''}})),error=null;
   try{parsed=P.readJson(raw);}catch(failure){error={message:failure.message,field:failure.field,path:failure.path};}
   const state={
@@ -86,8 +95,10 @@ function updateHistoryButtons() {
 function historySnapshot() {
   return {
     name:$('intro-name').value,source:$('json').value,document:jsonState.document,
+    ...(attachedAnimation()?{animationAsset}:{}),
     validation:{...currentValidation,error:currentValidation.error?{message:currentValidation.error.message,field:currentValidation.error.field,path:currentValidation.error.path}:null},
-    values:fields.map(field=>field.type==='checkbox'?field.checked:field.value),
+    values:fields.map(field=>field.type==='checkbox'?field.checked:
+      inheritsScene&&sceneWorldFields.includes(field.dataset.field)?String(config[field.dataset.field]):field.value),
     selection:[$('json').selectionStart,$('json').selectionEnd],
     preview:Object.fromEntries(previewFields.map(id=>[id,$(id).type==='checkbox'?$(id).checked:$(id).value]))
   };
@@ -112,6 +123,7 @@ function restoreHistory(direction) {
   pause();
   historyIndex=next;
   const snapshot=history[next];
+  animationAsset=snapshot.animationAsset??null;
   jsonState=P.readJson(JSON.stringify(snapshot.document));config=jsonState.config;
   let restoredValidation=snapshot.validation,recovered=false;
   if(restoredValidation?.error&&restoredValidation.fromJson) {
@@ -184,7 +196,7 @@ function updateCoordinateControls() {
   }
 }
 function stopSounds(){speech.stop();}
-function pause(){playRequest++;playing=false;if(frameRequest)cancelAnimationFrame(frameRequest);frameRequest=0;HeritageIcons.action('play','play','Play');stopSounds();if(blocks.length)draw();}
+function pause(){playRequest++;playing=false;waiting=null;if(frameRequest)cancelAnimationFrame(frameRequest);frameRequest=0;HeritageIcons.action('play','play','Play');stopSounds();if(blocks.length)draw();}
 
 const advance=renderer.advance;
 function updateGuiScale(requested=Number($('viewport').value)) {
@@ -202,7 +214,10 @@ function updateGuiScale(requested=Number($('viewport').value)) {
   $('pack-preview-scale').hidden=!packContext?.guiScale;$('pack-preview-scale').textContent='Using this pack’s GUI scale '+packContext?.guiScale+'.';
 }
 function rebuild() {
-  const playback=P.playback(config,names());
+  const id=packContext?.introScene===undefined?bundled.selection.intro_scene:packContext.introScene;
+  previewConfig=packContext&&!packContext.missing?Scenes.arrivalIntro(config,undefined,id,[...packCinematics,...bundled.cinematics]):config;
+  inheritsScene=previewConfig!==config;
+  const playback=P.playback(previewConfig,names());
   main=playback.main;sub=playback.sub;revealTiming=playback.timing;
   const warnings=P.diagnostics(config,names());$('dialogue-warning').hidden=!warnings.length;$('dialogue-warning').textContent=warnings.join(' ');
   all=[...main,{ch:'\n',index:main.length,effect:{}},...sub];
@@ -212,17 +227,24 @@ function rebuild() {
   canvas.width=preview.width;canvas.height=preview.height;
   canvas.style.aspectRatio=preview.width+' / '+preview.height;canvas.style.setProperty('--preview-aspect',preview.width/preview.height);
   blocks=P.layout(config,main,sub,w,h,advance);
-  cues=P.blipCues(config,names(),random(3529));
+  cues=P.blipCues(previewConfig,names(),random(3529));
   const missing=[...new Set(all.filter(g=>!font.has(g.ch)&&g.ch!=='\n').map(g=>g.ch))];
   $('font-warning').hidden=!missing.length;
   $('font-warning').textContent=missing.length?'The preview font is missing these characters: '+missing.join(' ')+'. Check them in Minecraft.':'';
-  $('timeline').max=P.duration(config,names());
+  previewTiming=Scenes.timing(previewConfig,names());
+  $('timeline').max=previewTiming.total;
   $('bar-height-range').max=Math.max(config.bar_height,Math.trunc(h/4));$('bar-height-range').value=config.bar_height;
   const barHeight=P.barHeight(h,config.bar_height);$('bar-height-effective').textContent=!config.cinematic_bars?'Bars off':barHeight<config.bar_height?'Limited to '+barHeight+' px':(barHeight/h*100).toFixed(1)+'% per bar';
   for(const field of fields.filter(field=>field.dataset.field.startsWith('timeline.')))field.value=configValue(config,field.dataset.field);
   syncConditionalControls();timelineEditor?.update(time,valid);for(const editor of richEditors.values())editor.refresh();
 }
 function syncConditionalControls(){
+  for(const field of document.querySelectorAll('[data-field=black_hold_ticks],[data-field=fade_from_black_ticks]')){
+    const disabled=inheritsScene&&field.getAttribute('aria-invalid')!=='true';
+    if(disabled||field.disabled)field.value=(disabled?previewConfig:config)[field.dataset.field];
+    field.disabled=disabled;
+    field.closest('label').dataset.tooltip=JSON.stringify([field.closest('label').firstChild.textContent.trim(),inheritsScene?'Set by the pack’s default intro animation.':'20 ticks = 1 second.']);
+  }
   for(const field of document.querySelectorAll('[data-field=hide_hud_during_bars],[data-field=bar_height],[data-field=bar_style],[data-field^="timeline.bar_"],#bar-height-range'))field.disabled=!config.cinematic_bars&&field.getAttribute('aria-invalid')!=='true';
   $('new-angle').disabled=!config.cinematic_bars||config.bar_style!=='random';
   const reveal=document.querySelector('[data-field=reveal_ticks]');reveal.disabled=config.animation==='immediate'&&reveal.getAttribute('aria-invalid')!=='true';reveal.closest('label').dataset.tooltip=JSON.stringify(['Text reveal',config.animation==='immediate'?'Immediate text does not use a reveal duration.':'Base reveal time. Inline pauses and speed changes adjust the actual duration. 20 ticks = 1 second.']);
@@ -264,7 +286,7 @@ function validation(error=null,fromJson=false) {
 }
 function refreshPreview() {
   rebuild();
-  time=Math.min(P.textStart(config)+P.revealDuration(config,names())+10,P.textStart(config)+P.textDuration(config,names())-config.fade_out_ticks-1);
+  time=Math.min(P.textStart(previewConfig)+P.revealDuration(previewConfig,names())+10,P.textStart(previewConfig)+P.textDuration(previewConfig,names())-previewConfig.fade_out_ticks-1);
   previewing=true;
   draw();
 }
@@ -291,6 +313,7 @@ function editing(event,{record=true}={}) {
     for(const field of changedFields) {
       if(field.readOnly)continue;
       const [key,part]=field.dataset.field.split('.');
+      if(inheritsScene&&sceneWorldFields.includes(key))continue;
       if(part&&key!=='timeline'&&!$(key.replace('_coordinates','')+'-custom').checked)continue;
       let value=field.value;
       if(field.type==='checkbox') value=field.checked;
@@ -428,16 +451,17 @@ function setupPositionControls() {
 }
 
 const drawBlock=(...args)=>renderer.block(...args,config.outline,!config.outline);
-const bars=(...args)=>renderer.bars(...args,config,slant,names());
 function draw() {
+  const config=previewConfig;
   const w=preview.guiWidth,h=preview.guiHeight;
   ctx.setTransform(preview.scale,0,0,preview.scale,0,0);ctx.imageSmoothingEnabled=false;ctx.globalAlpha=1;
   ctx.fillStyle=$('background').value;ctx.fillRect(0,0,w,h);
-  const elapsed=time-P.textStart(config),worldElapsed=time-config.black_hold_ticks,total=P.duration(config,names());
-  if(time<total) {
+  const {overlay,total,waits}=previewTiming;
+  const elapsed=time-P.textStart(config),worldElapsed=time-config.black_hold_ticks;
+  if(time<overlay) {
     const progress=P.clamp(worldElapsed/config.fade_from_black_ticks), reveal=progress*progress*(3-2*progress);
     ctx.globalAlpha=Math.round(255*(1-reveal))/255;ctx.fillStyle='#000';ctx.fillRect(0,0,w,h);ctx.globalAlpha=1;
-    bars(w,h,worldElapsed);
+    renderer.bars(w,h,worldElapsed,config,slant,names());
     if(elapsed>=0) {
       let alpha=P.clamp((P.textDuration(config,names())-elapsed)/config.fade_out_ticks);
       if(config.animation==='fade_in') alpha*=P.clamp(elapsed/config.reveal_ticks);
@@ -450,6 +474,11 @@ function draw() {
   }
   ctx.globalAlpha=1;
   drawBounds();
+  const prompt=waiting??(!playing?waits.find(wait=>time>=wait.at&&time<=wait.end):null);
+  if(prompt){
+    const progress=waiting?P.clamp((time-prompt.at)/(prompt.end-prompt.at)):1;
+    renderer.prompt(Scenes.prompt(prompt,names()).glyphs,w,h,progress);
+  }
   $('move-subtitle').disabled=!sub.length;
   $('timeline').value=time;timelineEditor?.tick(time);
   const clock=(time/20).toFixed(1)+' / '+(total/20).toFixed(1)+' s';
@@ -457,31 +486,48 @@ function draw() {
     $('clock').textContent=clock;
     $('timeline').setAttribute('aria-valuetext',(time/20).toFixed(1)+' seconds of '+(total/20).toFixed(1));
   }
-  const phase=time>=total?'Complete':elapsed<0?'Black screen':elapsed>=P.textDuration(config,names())-config.fade_out_ticks?'Text fade out':config.animation!=='immediate'&&elapsed<P.revealDuration(config,names())?'Text reveal':'Text hold';
+  const phase=prompt?'Waiting for input':time>=total?'Complete':time>=overlay?'Scene animation':elapsed<0?'Black screen':elapsed>=P.textDuration(config,names())-config.fade_out_ticks?'Text fade out':config.animation!=='immediate'&&elapsed<P.revealDuration(config,names())?'Text reveal':'Text hold';
   if($('phase').textContent!==phase)$('phase').textContent=phase;
 }
 function frame(now) {
   frameRequest=0;
-  if(playing) {
-    time=Math.min(P.duration(config,names()),time+Math.max(0,now-lastFrame)/50);
-    if(time>=P.duration(config,names())) {
-      if($('loop').checked){time=0;stopSounds();speech.start(cues,0).catch(error=>{$('audio-status').textContent=error.message;});}
-      else pause();
-    }
-    draw();
+  if(!playing)return;
+  const target=time+Math.max(0,now-lastFrame)/50,wait=previewTiming.waits[nextWait];
+  if(!waiting&&wait&&target>=wait.at){
+    nextWait++;
+    waiting=wait;
+    HeritageIcons.action('play','play','Continue');
   }
+  time=Math.min(waiting?.end??previewTiming.total,target);
+  if(time>=previewTiming.total){
+    if($('loop').checked){
+      time=0;nextWait=0;stopSounds();
+      speech.start(cues,()=>time).catch(error=>{$('audio-status').textContent=error.message;});
+    }else{pause();return;}
+  }
+  draw();
   lastFrame=now;
-  if(playing)frameRequest=requestAnimationFrame(frame);
+  if(!waiting||time<waiting.end)frameRequest=requestAnimationFrame(frame);
+}
+function continuePreview(){
+  time=waiting.end;
+  waiting=null;
+  lastFrame=performance.now();
+  HeritageIcons.action('play','pause','Pause');
+  if(!frameRequest)frameRequest=requestAnimationFrame(frame);
 }
 async function play(restart=false) {
-  if(playing&&!restart) {pause();return;}
+  if(waiting&&!restart){continuePreview();return;}
+  if(playing){pause();if(!restart)return;}
   if(!font.size)return;const request=++playRequest;
   if(config.blip&&!muted) {
     try {await speech.prepare();$('audio-status').textContent='';}
     catch(error) {$('audio-status').textContent='Preview audio could not load: '+error.message;}
   }
   if(request!==playRequest)return;
-  if(restart||previewing||time>=P.duration(config,names()))time=0;
+  if(restart||previewing||time>=previewTiming.total)time=0;
+  nextWait=previewTiming.waits.findIndex(wait=>wait.end>=time);
+  if(nextWait<0)nextWait=previewTiming.waits.length;
   if(config.blip&&!muted){await speech.start(cues,()=>time).catch(error=>{$('audio-status').textContent='Preview audio could not load: '+error.message;});if(request!==playRequest){stopSounds();return;}}
   previewing=false;
   playing=true;
@@ -498,7 +544,6 @@ function wrapSelection(open,close) {
   field.focus();field.setSelectionRange(a+open.length,b+open.length);
   $('preset').value='custom';editing({target:field});
 }
-await renderer.load();
 for(const [name,value] of Object.entries(P.colors)) {
   const option=document.createElement('option');option.value=hex(value);option.textContent=name.replaceAll('_',' ');$('named-color').append(option);
 }
@@ -534,6 +579,11 @@ setupPositionControls();
 $('settings').addEventListener('submit',event=>event.preventDefault());
 $('play').addEventListener('click',()=>play());
 $('restart').addEventListener('click',()=>play(true));
+document.addEventListener('keydown',event=>{
+  if(!waiting||document.querySelector('dialog[open]')||!Scenes.matchesKey(event,Scenes.prompt(waiting,names()).label))return;
+  event.preventDefault();
+  continuePreview();
+});
 $('timeline').addEventListener('input',()=>{
   const requested=Number($('timeline').value);pause();previewing=false;time=requested;draw();
 });
@@ -615,9 +665,14 @@ $('download-intro').addEventListener('click',()=>{
 });
 $('download-cinematic').addEventListener('click',()=>{
   if(!valid)return;
-  const pack=P.cinematicPack(jsonState,$('intro-name').value);
-  HeritageSession.download(new Blob([HeritageZip.zip(pack.files)],{type:'application/zip'}),pack.filename);
-  $('copy-status').textContent='Install the datapack, then run /heritage cinematic play @s '+pack.id+'.';
+  const name=$('intro-name').value,pack=P.cinematicPack(jsonState,name),asset=attachedAnimation();
+  const base=pack.filename.slice(0,-4);
+  const files=asset?[
+    {path:base+'-data.zip',content:HeritageZip.zip(pack.files)},
+    {path:base+'-resources.zip',content:HeritageZip.zip(HeritageAnimations.resourcePack(asset,name))}
+  ]:pack.files;
+  HeritageSession.download(new Blob([HeritageZip.zip(files)],{type:'application/zip'}),asset?base+'-packs.zip':pack.filename);
+  $('copy-status').textContent=(asset?'Extract and install both packs':'Install the datapack')+', then run /heritage cinematic play @s '+pack.id+'.';
 });
 if(requested&&workspace.entries.has(requested))activateIntro(requested);
 if(editorRoute.get('create')==='1'){if(restoredLibrary&&!saveBlocked)openIntro();if(editorRoute.has('name')&&!saveBlocked){$('intro-name').value=editorRoute.get('name');$('intro-name').dispatchEvent(new Event('input',{bubbles:true}));}editorRoute.delete('name');editorRoute.delete('create');editorRoute.set('draft',workspace.active);window.history.replaceState(null,'',location.pathname+(editorRoute.size?'?'+editorRoute:'')+location.hash);}
@@ -637,11 +692,12 @@ function textMode(visual){
   $('text-mode-visual').setAttribute('aria-pressed',String(visual));$('text-mode-markup').setAttribute('aria-pressed',String(!visual));
 }
 $('text-mode-visual').addEventListener('click',()=>textMode(true));$('text-mode-markup').addEventListener('click',()=>textMode(false));
-const timelineHost=document.createElement('div');timelineHost.className='intro-timeline-host';document.querySelector('.playback').after(timelineHost);
-timelineEditor=HeritageTimeline.create(timelineHost,{get:()=>config,names,snapshot:()=>JSON.parse(JSON.stringify(jsonState.document)),seek:value=>{pause();previewing=false;time=value;draw();},
-  change:(changes,record,key)=>{pause();jsonState=P.updateJson(jsonState,changes);config=jsonState.config;$('json').value=JSON.stringify(jsonState.document,null,2);$('preset').value='custom';fillFields();validation();rebuild();previewing=false;const segment=HeritageTimeline.layout(config,names()).tracks.flatMap(track=>track.segments).find(segment=>segment.key===key);time=Math.min(P.duration(config,names()),key.endsWith('start_ticks')?configValue(config,key):segment?.to??time);draw();if(record)recordHistory({type:'change',target:fields.find(field=>field.dataset.field===key)});},
+const transport=document.querySelector('.playback'),timelineHost=document.createElement('div');
+timelineHost.className='intro-timeline-host';transport.after(timelineHost);
+timelineEditor=HeritageTimeline.create(timelineHost,{get:()=>config,preview:()=>previewConfig,names,transport,attachment:attachedAnimation,cinematics:()=>[...packCinematics,...bundled.cinematics],snapshot:()=>JSON.parse(JSON.stringify(jsonState.document)),seek:value=>{previewing=false;time=value;pause();},
+  change:(changes,record,key,attachment)=>{pause();jsonState=P.updateJson(jsonState,changes);config=jsonState.config;if(attachment)animationAsset=attachment;$('json').value=JSON.stringify(jsonState.document,null,2);$('preset').value='custom';fillFields();validation();rebuild();previewing=false;const segment=HeritageTimeline.layout(previewConfig,names(),previewConfig!==config).tracks.flatMap(track=>track.segments).find(segment=>segment.key===key);time=Math.min(previewTiming.total,key.endsWith('start_ticks')?configValue(config,key):segment?.to??time);draw();if(record)recordHistory({type:'change',target:fields.find(field=>field.dataset.field===key)});},
   commit:key=>recordHistory({type:'change',target:fields.find(field=>field.dataset.field===key)}),
-  cancel:original=>{pause();jsonState=P.readJson(JSON.stringify(original));config=jsonState.config;$('json').value=JSON.stringify(jsonState.document,null,2);fillFields();validation();rebuild();time=Math.min(time,P.duration(config,names()));draw();scheduleSave();}
+  cancel:original=>{pause();jsonState=P.readJson(JSON.stringify(original));config=jsonState.config;$('json').value=JSON.stringify(jsonState.document,null,2);fillFields();validation();rebuild();time=Math.min(time,previewTiming.total);draw();scheduleSave();}
 });
 author=HeritageAuthoring.create({kind:'intro',active:()=>workspace.active,
   stages:[{id:'text',label:'text',heading:'Write the arrival intro',help:'Name the intro, then write the text players see when they arrive.'},{id:'layout',label:'layout & style',heading:'Place and style the text',help:'Choose positions or drag the text boxes in the live preview.'},{id:'cinematic',label:'timing & bars',heading:'Set the cinematic pacing',help:'Adjust the timing and bars while checking the live preview.'},{id:'review',label:'review',heading:'Review this intro',help:'Play the full intro, then use it in your pack or create another.'}],
@@ -649,7 +705,7 @@ author=HeritageAuthoring.create({kind:'intro',active:()=>workspace.active,
   adopt:entry=>{const state=JSON.parse(JSON.stringify(entry.state));workspace.entries.set(entry.id,{state,history:[state],historyIndex:0});activateIntro(entry.id);},
   select:activateIntro,newEntry:()=>openIntro(),issue:authorIssue,persist:()=>{saveDraft();return !saveBlocked&&!saveUnavailable;},
   prepare:()=>{if(!valid||saveBlocked)return false;saveDraft();return !saveBlocked&&!saveUnavailable;},
-  summary:()=>({title:$('intro-name').value||'Untitled intro',description:P.parse(config.text,names()).map(glyph=>glyph.ch).join(''),lines:[(P.duration(config,names())/20).toFixed(1)+' seconds',config.animation.replaceAll('_',' '),config.cinematic_bars?'Cinematic bars: '+config.bar_style.replaceAll('_',' ')+' · '+config.bar_height+' GUI px':'Cinematic bars off',packContext?.guiScale?'Pack GUI scale: '+packContext.guiScale:'Preview GUI scale: '+$('viewport').value]}),
+  summary:()=>({title:$('intro-name').value||'Untitled intro',description:P.parse(config.text,names()).map(glyph=>glyph.ch).join(''),lines:[(previewTiming.total/20).toFixed(1)+' seconds',config.animation.replaceAll('_',' '),config.cinematic_bars?'Cinematic bars: '+config.bar_style.replaceAll('_',' ')+' · '+config.bar_height+' GUI px':'Cinematic bars off',packContext?.guiScale?'Pack GUI scale: '+packContext.guiScale:'Preview GUI scale: '+$('viewport').value]}),
   stageChanged:()=>{finishDrag();timelineEditor?.cancel();pause();draw();syncCodeScroll();}
 });
 if(packContext&&!packContext.missing){const human=value=>{const text=String(value).split(':').at(-1).replaceAll('_',' ');return text.charAt(0).toUpperCase()+text.slice(1);};for(const kind of ['biome','structure'])if(packContext.fields.type===kind&&packContext.fields.target&&!packContext.fields.target.startsWith('#'))$(kind).value=human(packContext.fields.target);if(packContext.fields.dimension)$('dimension').value=human(packContext.fields.dimension);}

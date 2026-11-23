@@ -7,6 +7,79 @@
     "text"
   ],
   "properties": {
+    "scene": {
+      "type": ["object", "null"],
+      "description": "A local animation override. Omit to inherit the kit or global animation. Use null for text and bars without an animation. Animated scenes require after_title control.",
+      "required": ["animation_file", "clip", "duration_ticks"],
+      "not": {"required": ["pauses", "wait_at_ticks"]},
+      "additionalProperties": false,
+      "properties": {
+        "animation_file": {
+          "type": "string",
+          "pattern": "^(?:[a-z0-9_.-]+:)?[a-z0-9/._-]+$",
+          "description": "Loads assets/<namespace>/heritage/animations/<path>.animation.json from the client resource pack."
+        },
+        "clip": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "description": "Name of a Blockbench Bedrock animation with numeric position and rotation tracks. Both views support camera, body, left_arm, right_arm, left_leg and right_leg. Third person also renders head."
+        },
+        "duration_ticks": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1200,
+          "description": "Length of the exported animation in game ticks at 20 ticks per second."
+        },
+        "perspective": {
+          "enum": ["first_person", "third_person_back", "third_person_front", "previous"],
+          "default": "first_person",
+          "description": "Camera perspective used during the scene."
+        },
+        "exit_perspective": {
+          "enum": ["first_person", "third_person_back", "third_person_front", "previous"],
+          "default": "first_person",
+          "description": "Camera perspective applied after the scene completes."
+        },
+        "smooth_camera_return": {
+          "type": "boolean",
+          "default": false,
+          "description": "After the clip, ease the camera to the normal exit view over 12 ticks."
+        },
+        "first_person_hide_torso_at_tick": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1199,
+          "description": "Optional tick before the clip ends from which the torso is hidden in first person."
+        },
+        "first_person_hide_arms_with_torso": {
+          "type": "boolean",
+          "default": false,
+          "description": "Hide both arms at the first-person torso hide tick."
+        },
+        "pauses": {
+          "type": "array",
+          "maxItems": 16,
+          "description": "Ordered, distinct pause ticks inside the clip.",
+          "items": {
+            "type": "object",
+            "required": ["tick"],
+            "properties": {
+              "tick": {"type": "integer", "minimum": 1, "maximum": 1199},
+              "key": {"type": "string", "pattern": "^[A-Za-z0-9_.:/-]{1,128}$", "default": "key.inventory"},
+              "prompt": {"type": "string", "minLength": 1, "maxLength": 256, "description": "Use {key} for the outlined, bracketed key label."}
+            }
+          }
+        },
+        "wait_at_ticks": {
+          "type": "array",
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": {"type": "integer", "minimum": 1, "maximum": 1199},
+          "description": "Increasing tick positions before the clip ends. Playback pauses at each tick until the inventory binding is pressed."
+        }
+      }
+    },
     "variables": {
       "type": "object",
       "maxProperties": 64,

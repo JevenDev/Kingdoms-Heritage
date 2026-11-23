@@ -43,6 +43,7 @@ function read(source) {
   integer(document.order??0,-2147483648,2147483647,'order',['order']);
   integer(document.selected_slot??0,0,8,'selected_slot',['selected_slot']);
   if(document.tags!==undefined&&(!Array.isArray(document.tags)||document.tags.length>128||document.tags.some(tag=>typeof tag!=='string'||!idPattern.test(tag))))throw issue('tags must contain up to 128 resource IDs, without #.',['tags']);
+  if(document.intro_scene!=null&&(typeof document.intro_scene!=='string'||!idPattern.test(document.intro_scene)))throw issue('Enter a cinematic resource ID.',['intro_scene']);
   stats.validate(document);
   if(document.shop!==undefined&&document.items===undefined)document.items=[];
   if(!Array.isArray(document.items)||document.items.length>256)throw issue('items must be an array of up to 256 entries.',['items']);

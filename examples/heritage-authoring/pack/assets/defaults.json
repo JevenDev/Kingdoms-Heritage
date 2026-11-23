@@ -1695,6 +1695,92 @@
       "id": "kingdomsheritage:byo"
     }
   ],
+  "cinematics": [
+    {
+      "text": "Wake up",
+      "title": true,
+      "animation": "immediate",
+      "black_hold_ticks": 2,
+      "fade_from_black_ticks": 10,
+      "hold_ticks": 8,
+      "fade_out_ticks": 11,
+      "scene": {
+        "animation_file": "kingdomsheritage:wake_up",
+        "clip": "animation.heritage.wake_up",
+        "duration_ticks": 82,
+        "smooth_camera_return": true,
+        "first_person_hide_torso_at_tick": 65,
+        "first_person_hide_arms_with_torso": true,
+        "wait_at_ticks": [
+          41
+        ]
+      },
+      "id": "kingdomsheritage:wake_up"
+    },
+    {
+      "text": "Wake up",
+      "title": true,
+      "animation": "immediate",
+      "black_hold_ticks": 2,
+      "fade_from_black_ticks": 10,
+      "hold_ticks": 8,
+      "fade_out_ticks": 11,
+      "scene": {
+        "animation_file": "kingdomsheritage:wake_up_ground_brace",
+        "clip": "animation.heritage.wake_up",
+        "duration_ticks": 82,
+        "smooth_camera_return": true,
+        "first_person_hide_torso_at_tick": 65,
+        "first_person_hide_arms_with_torso": true,
+        "wait_at_ticks": [
+          41
+        ]
+      },
+      "id": "kingdomsheritage:wake_up_ground_brace"
+    },
+    {
+      "text": "Wake up",
+      "title": true,
+      "animation": "immediate",
+      "black_hold_ticks": 2,
+      "fade_from_black_ticks": 10,
+      "hold_ticks": 8,
+      "fade_out_ticks": 11,
+      "scene": {
+        "animation_file": "kingdomsheritage:wake_up_third_person",
+        "clip": "animation.heritage.wake_up_third_person",
+        "duration_ticks": 82,
+        "perspective": "third_person_front",
+        "exit_perspective": "third_person_back",
+        "smooth_camera_return": true,
+        "wait_at_ticks": [
+          41
+        ]
+      },
+      "id": "kingdomsheritage:wake_up_third_person"
+    },
+    {
+      "text": "Wake up",
+      "title": true,
+      "animation": "immediate",
+      "black_hold_ticks": 2,
+      "fade_from_black_ticks": 10,
+      "hold_ticks": 8,
+      "fade_out_ticks": 11,
+      "scene": {
+        "animation_file": "kingdomsheritage:wake_up_third_person_ground_brace",
+        "clip": "animation.heritage.wake_up_third_person",
+        "duration_ticks": 82,
+        "perspective": "third_person_front",
+        "exit_perspective": "third_person_back",
+        "smooth_camera_return": true,
+        "wait_at_ticks": [
+          41
+        ]
+      },
+      "id": "kingdomsheritage:wake_up_third_person_ground_brace"
+    }
+  ],
   "translations": {
     "kingdomsheritage.configuration.selectionMusic": "Character Creation Music",
     "kingdomsheritage.configuration.selectionMusicMode": "Music Track",
@@ -1791,6 +1877,7 @@
     "screen.kingdomsheritage.begin": "Begin",
     "screen.kingdomsheritage.wait": "Preparing...",
     "screen.kingdomsheritage.loading": "Loading...",
+    "screen.kingdomsheritage.scene_continue": "Press %s to continue",
     "screen.kingdomsheritage.preparing_terrain": "Preparing terrain...",
     "screen.kingdomsheritage.expand": "Read description",
     "screen.kingdomsheritage.collapse": "Collapse description",
@@ -1944,6 +2031,7 @@
   },
   "selection": {
     "gui_scale": 3,
-    "kit_preview": "inventory"
+    "kit_preview": "inventory",
+    "intro_scene": "kingdomsheritage:wake_up"
   }
 }

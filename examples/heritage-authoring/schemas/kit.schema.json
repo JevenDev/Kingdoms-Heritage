@@ -43,6 +43,11 @@
         "type": "string",
         "maxLength": 256
       },
+      "intro_scene": {
+        "type": ["string", "null"],
+        "pattern": "^(?:[a-z0-9_.-]+:)?[a-z0-9/._-]+$",
+        "description": "ID of a Heritage cinematic with an animated scene. Omit to inherit the global animation. Use null to disable the animation for this kit unless the intro supplies its own override."
+      },
       "order": {
         "type": "integer",
         "default": 0

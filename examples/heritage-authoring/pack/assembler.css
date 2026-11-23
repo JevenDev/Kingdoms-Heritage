@@ -293,6 +293,12 @@ a.content-asset:hover { background:var(--panel); }
 .assembler .pack-settings fieldset { margin:0; padding-top:8px; }
 .assembler .pack-settings legend { margin-bottom:8px; }
 .pack-presentation select { max-width:280px; }
+#animation-drop { margin-top:4px; }
+#animation-import { width:min(480px,calc(100vw - 48px)); }
+#animation-import form, .animation-views { display:grid; gap:12px; }
+.animation-views { grid-template-columns:repeat(2,minmax(0,1fr)); }
+#animation-import h2, #animation-import p, #animation-import .dialog-actions { margin:0; }
+#animation-pause { max-width:140px; }
 .bundled-options { gap:8px; }
 .pack-player-preview, .location-visual-preview { display:flex; flex-direction:column; gap:16px; min-width:0; }
 .pack-player-preview > .section-heading, .location-visual-preview > .section-heading { align-items:center; }

@@ -178,11 +178,11 @@ test('ZIP validation rejects unsafe paths, duplicate names and unsupported conte
 
 test('GUI scaling stays optional and exports one global settings file when configured',()=>{
   const original=state();
-  assert.deepEqual(JSON.parse(Pack.build(original,catalog).files.find(file=>file.path===Pack.selectionPath).content),{gui_scale:0});
+  assert.deepEqual(JSON.parse(Pack.build(original,catalog).files.find(file=>file.path===Pack.selectionPath).content),{intro_scene:'kingdomsheritage:wake_up',gui_scale:0});
   for(const guiScale of [0,1,4]){
     const input={...original,guiScale,namespace:'renamed_pack'},output=Pack.build(input,catalog);
     assert.deepEqual(output.errors,[]);
-    assert.deepEqual(JSON.parse(output.files.find(file=>file.path===Pack.selectionPath).content),{gui_scale:guiScale});
+    assert.deepEqual(JSON.parse(output.files.find(file=>file.path===Pack.selectionPath).content),{intro_scene:'kingdomsheritage:wake_up',gui_scale:guiScale});
     const files=archiveFiles(Zip.zip(output.files));
     assert.equal(JSON.parse(new TextDecoder().decode(files.get(Pack.selectionPath))).gui_scale,guiScale);
     assert.equal(output.files.filter(file=>file.path.endsWith('/heritage/selection.json')).length,1);

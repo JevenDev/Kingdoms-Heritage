@@ -1,5 +1,5 @@
 'use strict';
-const test=require('node:test'),assert=require('node:assert/strict'),P=require('./engine.js'),R=require('./rich-text.js'),T=require('./timeline.js');
+const test=require('node:test'),assert=require('node:assert/strict'),P=require('./engine.js'),R=require('./rich-text.js'),T=require('./timeline.js'),Scenes=require('./scenes.js');
 const text=source=>P.parse(source).map(glyph=>glyph.ch).join('');
 test('visual text keeps resolved location placeholders as atomic source ranges',()=>{
   const source='<wave><gold><biome></gold></wave>...';const atoms=R.atoms(source,{biome:'Birch Forest'});assert.equal(atoms[0].token,'biome');assert.equal(atoms[0].text,'Birch Forest');assert.equal(source.slice(atoms[0].start,atoms[0].end),'<biome>');assert.equal(atoms[0].style.effect.wave,true);assert.equal(atoms[0].style.tint,P.colors.gold);
@@ -39,4 +39,52 @@ test('editing a bar exit materializes independent tracks without changing the en
 test('world fade changes and text hold changes no longer resize other tracks',()=>{
   const config=P.updateJson(P.readJson(JSON.stringify(P.defaults)),T.changes(P.defaults,'fade_from_black_ticks',500)).config,model=T.layout(config);assert.equal(model.tracks[1].segments.at(-1).to,P.defaults.black_hold_ticks+P.presentation(P.defaults));assert.equal(model.tracks[0].segments.at(-1).to,560);assert.equal(model.tracks[2].segments.at(-1).to,180);
   const next=P.updateJson(P.readJson(JSON.stringify(config)),T.changes(config,'hold_ticks',10)).config;assert.equal(T.layout(next).tracks[2].segments.at(-1).to,180);assert.equal(next.fade_from_black_ticks,500);assert.equal(T.layout(next).tracks[1].segments[1].value,10);
+});
+
+test('preview waits for the overlay to end before showing early scene pauses',()=>{
+  const config={...P.defaults,scene:{duration_ticks:82,smooth_camera_return:true,wait_at_ticks:[20,40]}};
+  const overlay=P.overlayDuration(config),preview=Scenes.timing(config);
+  assert.equal(preview.total,overlay+94);
+  assert.deepEqual(preview.waits.map(wait=>[wait.tick,wait.at,wait.end]),[[20,overlay,overlay+10],[40,overlay+30,overlay+40]]);
+  assert.equal(Scenes.clipTime(overlay+5,preview),20);
+  assert.equal(Scenes.clipTime(overlay+35,preview),40);
+  assert.equal(T.layout(config).total,preview.total);
+
+  const short={...config,black_hold_ticks:0,fade_from_black_ticks:1,animation:'immediate',hold_ticks:1,fade_out_ticks:1};
+  assert.equal(Scenes.timing(short).total,114);
+  assert.deepEqual(Scenes.timing(short).waits.map(wait=>wait.at),[20,50]);
+});
+
+test('preview uses native prompt text, sample bindings and yellow bracketed keys',()=>{
+  const {label,glyphs}=Scenes.prompt({});
+  assert.equal(label,'E');
+  assert.equal(glyphs.map(glyph=>glyph.ch).join(''),'Press [E] to continue');
+  assert.equal(glyphs.filter(glyph=>glyph.tint===P.colors.yellow).map(glyph=>glyph.ch).join(''),'[E]');
+  const custom=Scenes.prompt({key:'key.jump',prompt:'Press {key} to stand {key} in {biome} <bold>'},{keys:{'key.jump':'J'}});
+  assert.equal(custom.label,'J');
+  assert.equal(custom.glyphs.map(glyph=>glyph.ch).join(''),'Press [J] to stand [J] in {biome} <bold>');
+  assert.equal(Scenes.prompt({key:'key.other'},{keys:{'key.inventory':'I'}}).label,'I');
+});
+
+test('an explicit disabled scene stays distinct from an inherited scene',()=>{
+  const original=P.readJson(JSON.stringify({intro:{text:'Welcome'}}));
+  const disabled=P.updateJson(original,{scene:null});
+  assert.equal(disabled.document.intro.scene,null);
+  assert.equal(T.layout(disabled.config).scene,null);
+  assert.equal(P.updateJson(disabled,{scene:undefined}).config.scene,undefined);
+});
+
+test('cinematic pauses round-trip through the timeline, including legacy pause ticks',()=>{
+  const initial=P.readJson(JSON.stringify({text:'Wake up',scene:{animation_file:'example:wake',clip:'animation.wake',duration_ticks:82,wait_at_ticks:[20],smooth_camera_return:true}}));
+  const first=T.withPause(initial.config.scene,20,{tick:21,key:'key.jump',prompt:'Press {key} to stand'});
+  const scene=T.withPause(first,null,{tick:12,key:'key.inventory'});
+  const updated=P.updateJson(initial,{scene});
+  assert.equal(updated.config.scene.wait_at_ticks,undefined);
+  assert.deepEqual(P.scenePauses(updated.config.scene),[{tick:12,key:'key.inventory'},{tick:21,key:'key.jump',prompt:'Press {key} to stand'}]);
+  assert.equal(T.layout(updated.config).scene.animation_file,'example:wake');
+  assert.equal(P.duration({...updated.config,black_hold_ticks:0,fade_from_black_ticks:1,animation:'immediate',hold_ticks:1,fade_out_ticks:1}),94);
+  assert.throws(()=>P.updateJson(updated,{scene:{...scene,duration_ticks:21}}),/inside the clip/);
+  assert.throws(()=>P.updateJson(updated,{scene:T.withPause(scene,null,{tick:12})}),/in order/);
+  assert.throws(()=>P.updateJson(updated,{scene:{...scene,pauses:[{tick:8,key:'Space key'}]}}),/binding name/);
+  assert.equal(P.updateJson(updated,{scene:undefined}).document.scene,undefined);
 });

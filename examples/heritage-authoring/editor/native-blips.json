@@ -1,7 +1,7 @@
 {
   "nativeSources": {
-    "client/SpawnIntroOverlay.java": "6a44eab7e51741c8698d44ae1955552dddc115dd88b3bffec8120c0ed35e3dde",
-    "data/IntroDefinition.java": "f4f64499ddcd9a04c397763dc89df27ab34b41c7e927f8b8016bd2c6a64e1783"
+    "client/SpawnIntroOverlay.java": "e04534557dcc607d918ed741b2636dc15021c8b5401d9e84b9447a6ed7971af8",
+    "data/IntroDefinition.java": "1af5b9da6b8146d398e557d4632887ba3944d58d4666536f35c832b0b427057a"
   },
   "samples": [
     {
