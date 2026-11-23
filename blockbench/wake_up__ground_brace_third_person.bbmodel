@@ -25,41 +25,16 @@
   ],
   "elements": [
     {
-      "name": "camera_preview",
-      "box_uv": true,
-      "from": [-1.5, 25, -2],
-      "to": [1.5, 27, 1],
-      "uv_offset": [26, 1],
-      "color": 1,
-      "origin": [0, 26, 0],
-      "type": "cube",
-      "uuid": "620c112c-f548-5162-9cf1-0df3ed564cbc",
-      "faces": {
-        "north": {
-          "uv": [29, 4, 32, 6],
-          "texture": 0
-        },
-        "east": {
-          "uv": [26, 4, 29, 6],
-          "texture": 0
-        },
-        "south": {
-          "uv": [35, 4, 38, 6],
-          "texture": 0
-        },
-        "west": {
-          "uv": [32, 4, 35, 6],
-          "texture": 0
-        },
-        "up": {
-          "uv": [32, 4, 29, 1],
-          "texture": 0
-        },
-        "down": {
-          "uv": [35, 1, 32, 4],
-          "texture": 0
-        }
-      }
+      "name": "third_person_preview",
+      "position": [0, 26, -64],
+      "rotation": [0, 180, 0],
+      "fov": 70,
+      "aspect_ratio": [16, 9],
+      "linked_preview": "",
+      "visibility": true,
+      "export": false,
+      "type": "camera",
+      "uuid": "620c112c-f548-5162-9cf1-0df3ed564cbc"
     },
     {
       "name": "head_preview",
