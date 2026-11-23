@@ -1,5 +1,6 @@
 package com.jvn.kingdomsheritage.data;
 
+import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
 import com.mojang.serialization.JsonOps;
 import java.util.Locale;
@@ -13,11 +14,24 @@ public record IntroDefinition(Component text, Component subtitle, boolean title,
                               int fadeOutTicks, int fadeFromBlackTicks, boolean cinematicBars, BarStyle barStyle,
                               int barTransitionTicks, Position titlePosition, Position subtitlePosition, int blackHoldTicks,
                               boolean outline, boolean hideHudDuringBars,
-                              Coordinates titleCoordinates, Coordinates subtitleCoordinates, boolean largeSubtitle, int barHeight, Timeline timeline, DialogueDefinition dialogue, IntroScene scene) {
+                              Coordinates titleCoordinates, Coordinates subtitleCoordinates, boolean largeSubtitle, int barHeight, Timeline timeline, DialogueDefinition dialogue, IntroScene scene, boolean inheritScene) {
     public IntroDefinition {
         if (scene != null && control != Control.AFTER_TITLE) {
             throw new IllegalArgumentException("a cinematic scene requires after_title control");
         }
+    }
+
+    public IntroDefinition(Component text, Component subtitle, boolean title, Animation animation,
+                           Control control, boolean blip, int revealTicks, int holdTicks,
+                           int fadeOutTicks, int fadeFromBlackTicks, boolean cinematicBars, BarStyle barStyle,
+                           int barTransitionTicks, Position titlePosition, Position subtitlePosition, int blackHoldTicks,
+                           boolean outline, boolean hideHudDuringBars, Coordinates titleCoordinates,
+                           Coordinates subtitleCoordinates, boolean largeSubtitle, int barHeight, Timeline timeline,
+                           DialogueDefinition dialogue, IntroScene scene) {
+        this(text, subtitle, title, animation, control, blip, revealTicks, holdTicks, fadeOutTicks, fadeFromBlackTicks,
+                cinematicBars, barStyle, barTransitionTicks, titlePosition, subtitlePosition, blackHoldTicks,
+                outline, hideHudDuringBars, titleCoordinates, subtitleCoordinates, largeSubtitle, barHeight, timeline,
+                dialogue, scene, scene == null);
     }
 
     public IntroDefinition(Component text, Component subtitle, boolean title, Animation animation,
@@ -161,7 +175,8 @@ public record IntroDefinition(Component text, Component subtitle, boolean title,
                 GsonHelper.getAsBoolean(json, "large_subtitle", false), barHeight(json),
                 json.has("timeline") && !json.get("timeline").isJsonNull()
                         ? Timeline.parse(GsonHelper.getAsJsonObject(json, "timeline")) : null, dialogue,
-                json.has("scene") ? IntroScene.parse(GsonHelper.getAsJsonObject(json, "scene")) : null);
+                json.has("scene") && !json.get("scene").isJsonNull()
+                        ? IntroScene.parse(GsonHelper.getAsJsonObject(json, "scene")) : null, !json.has("scene"));
     }
 
     private static int barHeight(JsonObject json) {
@@ -286,6 +301,7 @@ public record IntroDefinition(Component text, Component subtitle, boolean title,
         json.addProperty("bar_height", barHeight);
         if (timeline != null) json.add("timeline", timeline.json());
         if (scene != null) json.add("scene", scene.json());
+        else if (!inheritScene) json.add("scene", JsonNull.INSTANCE);
         dialogue.write(json);
         json.addProperty("title_position", titlePosition.name().toLowerCase(Locale.ROOT));
         json.addProperty("subtitle_position", subtitlePosition.name().toLowerCase(Locale.ROOT));

@@ -17,7 +17,14 @@ import net.minecraft.world.item.ItemStack;
 
 public record KitDefinition(ResourceLocation id, String title, String description, int order,
                             int selectedSlot, List<Entry> entries, List<String> tags, String titleKey, String descriptionKey,
-                            KitShop shop, KitStats stats, ResourceLocation introScene) {
+                            KitShop shop, KitStats stats, ResourceLocation introScene, boolean inheritIntroScene) {
+    public KitDefinition(ResourceLocation id, String title, String description, int order, int selectedSlot,
+                         List<Entry> entries, List<String> tags, String titleKey, String descriptionKey,
+                         KitShop shop, KitStats stats, ResourceLocation introScene) {
+        this(id, title, description, order, selectedSlot, entries, tags, titleKey, descriptionKey, shop, stats,
+                introScene, introScene == null);
+    }
+
     public KitDefinition(ResourceLocation id, String title, String description, int order, int selectedSlot,
                          List<Entry> entries, List<String> tags, String titleKey, String descriptionKey, KitShop shop, KitStats stats) {
         this(id, title, description, order, selectedSlot, entries, tags, titleKey, descriptionKey, shop, stats, null);
@@ -72,7 +79,8 @@ public record KitDefinition(ResourceLocation id, String title, String descriptio
         return new KitDefinition(id, title, description, DefinitionJson.integer(json, "order", 0), selectedSlot, List.copyOf(entries),
                 DefinitionJson.ids(json, "tags", false), DefinitionJson.text(json, "title_key", 256, true),
                 DefinitionJson.text(json, "description_key", 256, true), shop, KitStats.parse(json),
-                DefinitionJson.optionalId(json, "intro_scene"));
+                json.has("intro_scene") && json.get("intro_scene").isJsonNull()
+                        ? null : DefinitionJson.optionalId(json, "intro_scene"), !json.has("intro_scene"));
     }
 
     public List<StackEntry> decode(HolderLookup.Provider registries) {

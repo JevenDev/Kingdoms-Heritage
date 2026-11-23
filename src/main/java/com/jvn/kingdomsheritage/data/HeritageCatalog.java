@@ -20,9 +20,10 @@ public final class HeritageCatalog {
                     SelectionSettings selection, JsonObject payload) {
         IntroDefinition arrivalIntro(SpawnDefinition spawn, KitDefinition kit) {
             var intro = spawn.intro();
-            if (intro != null && (intro.scene() != null || intro.control() == IntroDefinition.Control.DURING_TITLE)) return intro;
+            if (intro != null && (!intro.inheritScene() || intro.scene() != null
+                    || intro.control() == IntroDefinition.Control.DURING_TITLE)) return intro;
             var sceneId = kit.introScene();
-            if (sceneId == null && intro != null) sceneId = selection.introScene();
+            if (kit.inheritIntroScene() && sceneId == null && intro != null) sceneId = selection.introScene();
             if (sceneId == null) return intro;
             var cinematic = cinematics.get(sceneId);
             return intro == null ? cinematic : intro.withSceneFrom(cinematic);
