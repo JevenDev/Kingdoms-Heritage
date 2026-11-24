@@ -1,5 +1,5 @@
 <div align="center">
-  <h1>Kingdoms: Heritage</h1>
+  <h1><img src="https://raw.githubusercontent.com/JevenDev/Kingdoms-Heritage/main/images/kingdoms-heritage-title.png" width="100%" alt="Kingdoms: Heritage"></h1>
 
   <p><img src="https://raw.githubusercontent.com/JevenDev/Kingdoms-Heritage/main/images/gameplay/random-spawn-intro.gif" width="100%" alt="The player selects Random spawn and the Adventurer kit, confirms their arrival, then wakes up and stands as their sword and shield appear"></p>
 
@@ -26,19 +26,19 @@
 
 ## <img src="https://raw.githubusercontent.com/JevenDev/Kingdoms-Heritage/main/images/features.png" width="100%" alt="Features">
 
-### Choose where you begin
+# Choose where you begin
 
 On your first join, pick world spawn, a village, open plains, or a random spot in the wilderness.
 
 <p><img src="https://raw.githubusercontent.com/JevenDev/Kingdoms-Heritage/main/images/gameplay/starting-locations.png" width="100%" alt="The starting-location screen with Default, Random, Village, and Plains cards"></p>
 
-### Start together
+# Start together
 
 Invite friends from the selection screen. Your party shares a starting location, and everyone picks their own gear.
 
 <p><img src="https://raw.githubusercontent.com/JevenDev/Kingdoms-Heritage/main/images/gameplay/multiplayer-spongebob.png" width="100%" alt="The multiplayer party screen with SpongeBob in a two-player group"></p>
 
-### Choose your kit
+# Choose your kit
 
 Choose an `Adventurer` or `Miner` kit, pick `Naked` to start empty-handed, or spend points on tools, food, and armor in the `BYO` shop. Double-check your inventory and spawn before confirming. A server admin can reopen selection, and you keep your existing inventory on a reset.
 
@@ -46,7 +46,7 @@ Choose an `Adventurer` or `Miner` kit, pick `Naked` to start empty-handed, or sp
 
 <p><img src="https://raw.githubusercontent.com/JevenDev/Kingdoms-Heritage/main/images/gameplay/byo-shop.png" width="100%" alt="The BYO starter kit shop with a pickaxe and sword selected and eight points left"></p>
 
-### Wake up in your location
+# Wake up in your location
 
 After confirming your spawn and kit, you’ll arrive at your chosen location with a first-person wake-up animation by default. By default, each player’s chosen starting location also becomes their respawn point. Servers can disable this with `homelandRespawn`.
 
@@ -56,7 +56,7 @@ After confirming your spawn and kit, you’ll arrive at your chosen location wit
 
 ## <img src="https://raw.githubusercontent.com/JevenDev/Kingdoms-Heritage/main/images/compatibility.png" width="100%" alt="Compatibility">
 
-### Requirements
+# Requirements
 
 - NeoForge 21.1.248 or later
 - [ToucanLib](https://modrinth.com/mod/toucan/versions?g=1.21.1&l=neoforge) 1.0.0+
@@ -106,16 +106,18 @@ To hide the bundled kits or replace them with your own, see the [guide to overri
 
 Created with <3 by jvn (me!)
 
-Songs included:
+### Music
 - solace - jvn
 - cc - jvn
 - excuses - jvn (interpolated the melody of "[excuse](https://c418.bandcamp.com/track/excuse)" by c418!)
+
+### Sounds
 
 The interface sounds are from [Interface Bleeps by Bleeoop](https://bleeoop.itch.io/interface-bleeps) and retain their original sound library license.
 
 Kingdoms: Heritage is [All Rights Reserved](https://github.com/JevenDev/Kingdoms-Heritage/blob/main/LICENSE). See the [attribution file](https://github.com/JevenDev/Kingdoms-Heritage/blob/main/attribution.md) for more details.
 
-Website & AI Assistance
+### Website & AI Assistance
 
 For the website, Generative AI was used to make pretty much most (if not all) of the pack creator website's back end functionality, the mod however was made by myself with AI assistance for polishing features and bug fixing things that I couldn't figure out on my own. No AI was used for the art, logo, music/sfx, or any other assets in the mod/site.
 
