@@ -20,4 +20,4 @@ The selection music was made by me :3
 
 ## Website & AI Assistance
 
-For the website, Generative AI was used to make pretty much most (if not all) of the **pack creator** website's back end functionality, the <u>mod however was made by myself with AI assistance for bug fixing</u> that I couldn't figure out on my own. No AI was used for the art, music/sfx, or any other assets in the mod/site.
+For the website, Generative AI was used to make pretty much most (if not all) of the pack creator website's back end functionality, the <u>mod however was made by myself with AI assistance for polishing features and bug fixing</u> things that I couldn't figure out on my own. No AI was used for the art, logo, music/sfx, or any other assets in the mod/site.

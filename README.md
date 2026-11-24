@@ -1,7 +1,7 @@
 <div align="center">
   <h1>Kingdoms: Heritage</h1>
 
-  <p><img src="images/gameplay/random-spawn-intro.gif" width="100%" alt="The player selects Random spawn and the Adventurer kit, confirms their arrival, then wakes up and stands as their sword and shield appear"></p>
+  <p><img src="https://raw.githubusercontent.com/JevenDev/Kingdoms-Heritage/main/images/gameplay/random-spawn-intro.gif" width="100%" alt="The player selects Random spawn and the Adventurer kit, confirms their arrival, then wakes up and stands as their sword and shield appear"></p>
 
   <p><em>Where we dropping boys ??</em></p>
 
@@ -22,39 +22,39 @@
   </p>
 </div>
 
-<p><img src="images/divider.png" width="100%" alt="Horizontal divider"></p>
+<p><img src="https://raw.githubusercontent.com/JevenDev/Kingdoms-Heritage/main/images/divider.png" width="100%" alt="Horizontal divider"></p>
 
-## <img src="images/features.png" width="100%" alt="Features">
+## <img src="https://raw.githubusercontent.com/JevenDev/Kingdoms-Heritage/main/images/features.png" width="100%" alt="Features">
 
 ### Choose where you begin
 
 On your first join, pick world spawn, a village, open plains, or a random spot in the wilderness.
 
-<p><img src="images/gameplay/starting-locations.png" width="100%" alt="The starting-location screen with Default, Random, Village, and Plains cards"></p>
+<p><img src="https://raw.githubusercontent.com/JevenDev/Kingdoms-Heritage/main/images/gameplay/starting-locations.png" width="100%" alt="The starting-location screen with Default, Random, Village, and Plains cards"></p>
 
 ### Start together
 
 Invite friends from the selection screen. Your party shares a starting location, and everyone picks their own gear.
 
-<p><img src="images/gameplay/multiplayer-spongebob.png" width="100%" alt="The multiplayer party screen with SpongeBob in a two-player group"></p>
+<p><img src="https://raw.githubusercontent.com/JevenDev/Kingdoms-Heritage/main/images/gameplay/multiplayer-spongebob.png" width="100%" alt="The multiplayer party screen with SpongeBob in a two-player group"></p>
 
 ### Choose your kit
 
 Choose an `Adventurer` or `Miner` kit, pick `Naked` to start empty-handed, or spend points on tools, food, and armor in the `BYO` shop. Double-check your inventory and spawn before confirming. A server admin can reopen selection, and you keep your existing inventory on a reset.
 
-<p><img src="images/gameplay/starter-kit.png" width="100%" alt="The Adventurer starter kit inventory preview with the Miner and BYO kits alongside it"></p>
+<p><img src="https://raw.githubusercontent.com/JevenDev/Kingdoms-Heritage/main/images/gameplay/starter-kit.png" width="100%" alt="The Adventurer starter kit inventory preview with the Miner and BYO kits alongside it"></p>
 
-<p><img src="images/gameplay/byo-shop.png" width="100%" alt="The BYO starter kit shop with a pickaxe and sword selected and eight points left"></p>
+<p><img src="https://raw.githubusercontent.com/JevenDev/Kingdoms-Heritage/main/images/gameplay/byo-shop.png" width="100%" alt="The BYO starter kit shop with a pickaxe and sword selected and eight points left"></p>
 
 ### Wake up in your location
 
 After confirming your spawn and kit, you’ll arrive at your chosen location with a first-person wake-up animation by default. By default, each player’s chosen starting location also becomes their respawn point. Servers can disable this with `homelandRespawn`.
 
-<p><img src="images/gameplay/wake-up-intro.gif" width="100%" alt="A player wakes up in the Plains, stands, and brings their starter sword and shield into view"></p>
+<p><img src="https://raw.githubusercontent.com/JevenDev/Kingdoms-Heritage/main/images/gameplay/wake-up-intro.gif" width="100%" alt="A player wakes up in the Plains, stands, and brings their starter sword and shield into view"></p>
 
-<p><img src="images/divider.png" width="100%" alt="Horizontal divider"></p>
+<p><img src="https://raw.githubusercontent.com/JevenDev/Kingdoms-Heritage/main/images/divider.png" width="100%" alt="Horizontal divider"></p>
 
-## <img src="images/compatibility.png" width="100%" alt="Compatibility">
+## <img src="https://raw.githubusercontent.com/JevenDev/Kingdoms-Heritage/main/images/compatibility.png" width="100%" alt="Compatibility">
 
 ### Requirements
 
@@ -70,9 +70,9 @@ Custom starter kits have support for:
 - [Iron's Spells 'n Spellbooks](https://modrinth.com/mod/irons-spells-n-spellbooks/versions?g=1.21.1&l=neoforge) (starting mana and mana capacity)
 - Starting health and hunger, plus modifiers for max health and other vanilla or modded player attributes.
 
-<p><img src="images/divider.png" width="100%" alt="Horizontal divider"></p>
+<p><img src="https://raw.githubusercontent.com/JevenDev/Kingdoms-Heritage/main/images/divider.png" width="100%" alt="Horizontal divider"></p>
 
-## <img src="images/faq.png" width="100%" alt="FAQ">
+## <img src="https://raw.githubusercontent.com/JevenDev/Kingdoms-Heritage/main/images/faq.png" width="100%" alt="FAQ">
 
 <details>
 <summary>View FAQ</summary>
@@ -97,9 +97,9 @@ To hide the bundled kits or replace them with your own, see the [guide to overri
 
 </details>
 
-<p><img src="images/divider.png" width="100%" alt="Horizontal divider"></p>
+<p><img src="https://raw.githubusercontent.com/JevenDev/Kingdoms-Heritage/main/images/divider.png" width="100%" alt="Horizontal divider"></p>
 
-## <img src="images/credits-and-license.png" width="100%" alt="Credits &amp; License">
+## <img src="https://raw.githubusercontent.com/JevenDev/Kingdoms-Heritage/main/images/credits-and-license.png" width="100%" alt="Credits &amp; License">
 
 <details>
 <summary>View credits and license</summary>
@@ -121,16 +121,16 @@ For the website, Generative AI was used to make pretty much most (if not all) of
 
 </details>
 
-<p><img src="images/divider.png" width="100%" alt="Horizontal divider"></p>
+<p><img src="https://raw.githubusercontent.com/JevenDev/Kingdoms-Heritage/main/images/divider.png" width="100%" alt="Horizontal divider"></p>
 
-## <img src="images/more-kingdoms-mods.png" width="100%" alt="More Kingdoms mods">
+## <img src="https://raw.githubusercontent.com/JevenDev/Kingdoms-Heritage/main/images/more-kingdoms-mods.png" width="100%" alt="More Kingdoms mods">
 
 <p align="center">
-  <a href="https://modrinth.com/mod/villager-retaliation"><img src="images/villager-retaliation-icon.png" width="32%" alt="Kingdoms: Villager Retaliation!"></a>
-  <a href="https://modrinth.com/resourcepack/villager-retaliation-x-fresh-animations"><img src="images/vr-fresh-animations-icon.png" width="32%" alt="Villager Retaliation! x Fresh Animations"></a>
-  <a href="https://modrinth.com/resourcepack/villager-retaliation-x-human-era-villagers"><img src="images/vr-human-era-icon.png" width="32%" alt="Villager Retaliation! x Human Era: Villagers"></a>
+  <a href="https://modrinth.com/mod/villager-retaliation"><img src="https://raw.githubusercontent.com/JevenDev/Kingdoms-Heritage/main/images/villager-retaliation-icon.png" width="32%" alt="Kingdoms: Villager Retaliation!"></a>
+  <a href="https://modrinth.com/resourcepack/villager-retaliation-x-fresh-animations"><img src="https://raw.githubusercontent.com/JevenDev/Kingdoms-Heritage/main/images/vr-fresh-animations-icon.png" width="32%" alt="Villager Retaliation! x Fresh Animations"></a>
+  <a href="https://modrinth.com/resourcepack/villager-retaliation-x-human-era-villagers"><img src="https://raw.githubusercontent.com/JevenDev/Kingdoms-Heritage/main/images/vr-human-era-icon.png" width="32%" alt="Villager Retaliation! x Human Era: Villagers"></a>
 </p>
 
 <p align="center">
-  <a href="https://modrinth.com/resourcepack/excalibur-x-villager-retaliation-fa"><img src="images/vr-excalibur-icon.png" width="32%" alt="Excalibur X Villager Retaliation &amp; FA"></a>
+  <a href="https://modrinth.com/resourcepack/excalibur-x-villager-retaliation-fa"><img src="https://raw.githubusercontent.com/JevenDev/Kingdoms-Heritage/main/images/vr-excalibur-icon.png" width="32%" alt="Excalibur X Villager Retaliation &amp; FA"></a>
 </p>
