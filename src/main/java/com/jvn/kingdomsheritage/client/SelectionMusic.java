@@ -16,7 +16,8 @@ import net.neoforged.neoforge.common.NeoForge;
 public final class SelectionMusic {
     private enum Song {
         ORIGINAL("selection_music", "music.kingdomsheritage.selection"),
-        SOLACE("selection_music_solace", "music.kingdomsheritage.solace");
+        SOLACE("selection_music_solace", "music.kingdomsheritage.solace"),
+        EXCUSES("selection_music_excuses", "music.kingdomsheritage.excuses");
 
         private final SoundEvent sound;
         private final String titleKey;
@@ -27,7 +28,8 @@ public final class SelectionMusic {
         }
     }
 
-    private static Song nextSong = Song.ORIGINAL;
+    private static final Song[] ROTATION = Song.values();
+    private static int nextSongIndex;
     private static Song song;
     private static Track track;
 
@@ -42,9 +44,10 @@ public final class SelectionMusic {
         song = switch (HeritageConfig.SELECTION_MUSIC_MODE.get()) {
             case ORIGINAL -> Song.ORIGINAL;
             case SOLACE -> Song.SOLACE;
+            case EXCUSES -> Song.EXCUSES;
             case ALTERNATE -> {
-                var current = nextSong;
-                nextSong = current == Song.ORIGINAL ? Song.SOLACE : Song.ORIGINAL;
+                var current = ROTATION[nextSongIndex];
+                nextSongIndex = (nextSongIndex + 1) % ROTATION.length;
                 yield current;
             }
         };

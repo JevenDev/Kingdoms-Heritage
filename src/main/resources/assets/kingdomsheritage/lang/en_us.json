@@ -1,7 +1,7 @@
 {
   "kingdomsheritage.configuration.selectionMusic": "Character Creation Music",
   "kingdomsheritage.configuration.selectionMusicMode": "Music Track",
-  "kingdomsheritage.configuration.selectionMusicMode.tooltip": "Applies the next time you enter character creation. Alternate switches songs each session. Original and Solace always play the selected track.",
+  "kingdomsheritage.configuration.selectionMusicMode.tooltip": "Applies the next time you enter character creation. Alternate switches tracks between sessions. Pick a track to repeat it every session.",
   "kingdomsheritage.configuration.randomSpawnRadius": "Random Spawn Radius",
   "kingdomsheritage.configuration.locationSearchRadius": "Location Search Radius",
   "kingdomsheritage.configuration.structureSearchRadius": "Structure Search Radius",
@@ -24,6 +24,7 @@
   "toast.kingdomsheritage.now_playing": "Now playing",
   "music.kingdomsheritage.selection": "Selection music - jvn",
   "music.kingdomsheritage.solace": "Solace - jvn",
+  "music.kingdomsheritage.excuses": "excuses - jvn",
   "intro.kingdomsheritage.wilderness": "Wilderness",
   "intro.kingdomsheritage.unknown": "Unknown",
   "structure.minecraft.village_desert": "Desert Village",

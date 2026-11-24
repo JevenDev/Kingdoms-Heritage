@@ -1,11 +1,21 @@
 package com.jvn.kingdomsheritage;
 
 import java.util.List;
+import net.minecraft.network.chat.Component;
 import net.neoforged.neoforge.common.ModConfigSpec;
+import net.neoforged.neoforge.common.TranslatableEnum;
 
 public final class HeritageConfig {
     public enum InventoryPolicy { REPLACE, MERGE, PRESERVE }
-    public enum SelectionMusicMode { ALTERNATE, ORIGINAL, SOLACE }
+    public enum SelectionMusicMode implements TranslatableEnum {
+        ALTERNATE, ORIGINAL, SOLACE, EXCUSES;
+
+        @Override
+        public Component getTranslatedName() {
+            return this == EXCUSES ? Component.translatable("music.kingdomsheritage.excuses")
+                    : TranslatableEnum.super.getTranslatedName();
+        }
+    }
 
     public static final ModConfigSpec SPEC;
     public static final ModConfigSpec CLIENT_SPEC;
@@ -47,7 +57,7 @@ public final class HeritageConfig {
         SPEC = builder.build();
         var client = new ModConfigSpec.Builder();
         SELECTION_MUSIC = client.define("selectionMusic", true);
-        SELECTION_MUSIC_MODE = client.comment("ALTERNATE switches tracks on each new character creation session. ORIGINAL and SOLACE always play that track.")
+        SELECTION_MUSIC_MODE = client.comment("ALTERNATE rotates through the tracks across character creation sessions. ORIGINAL, SOLACE, and EXCUSES repeat the chosen track.")
                 .defineEnum("selectionMusicMode", SelectionMusicMode.ALTERNATE);
         CLIENT_SPEC = client.build();
     }
