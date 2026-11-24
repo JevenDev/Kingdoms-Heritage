@@ -37,7 +37,7 @@ public final class HeritageConfig {
                 .defineInRange("biomeSearchRadius", 100000, 256, 1000000);
         INVENTORY_POLICY = builder.defineEnum("inventoryPolicy", InventoryPolicy.MERGE);
         EXEMPT_EXISTING_PLAYERS = builder.define("exemptExistingPlayers", true);
-        HOMELAND_RESPAWN = builder.define("homelandRespawn", false);
+        HOMELAND_RESPAWN = builder.define("homelandRespawn", true);
         builder.push("screenFlow");
         SCREEN_ORDER = builder.comment("Order overrides within each declared placement, for example examplevr:setup=200. Applied on server startup.")
                 .defineListAllowEmpty("order", List.<String>of(), value -> value instanceof String);
