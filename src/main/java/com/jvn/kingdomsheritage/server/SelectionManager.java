@@ -446,8 +446,10 @@ public final class SelectionManager {
     }
 
     private static HeritageConfig.InventoryPolicy inventoryPolicy(ServerPlayer player) {
-        return state(player).getBoolean("reset") || !HeritageConfig.STARTER_KITS_ENABLED.get()
-                ? HeritageConfig.InventoryPolicy.PRESERVE : HeritageConfig.INVENTORY_POLICY.get();
+        if (!HeritageConfig.STARTER_KITS_ENABLED.get()) return HeritageConfig.InventoryPolicy.PRESERVE;
+        var state = state(player);
+        if (!state.getBoolean("reset")) return HeritageConfig.INVENTORY_POLICY.get();
+        return state.getBoolean("reset_replace") ? HeritageConfig.InventoryPolicy.REPLACE : HeritageConfig.InventoryPolicy.PRESERVE;
     }
 
     private static void sendProgress(ServerPlayer player, String stage) {
@@ -463,12 +465,17 @@ public final class SelectionManager {
     }
 
     public static void reset(ServerPlayer player) {
+        reset(player, HeritageConfig.InventoryPolicy.PRESERVE);
+    }
+
+    static void reset(ServerPlayer player, HeritageConfig.InventoryPolicy policy) {
         SpawnIntro.release(player);
         if (pending(player)) throw new HeritageException("pending", "Recover the pending selection before resetting it");
         SelectionSteps.remove(player);
         SelectionLifecycle.reset(player);
         state(player).putBoolean("complete", false);
         state(player).putBoolean("reset", true);
+        state(player).putBoolean("reset_replace", policy == HeritageConfig.InventoryPolicy.REPLACE);
         SelectionSession.remove(player.getUUID());
         login(new PlayerEvent.PlayerLoggedInEvent(player));
     }

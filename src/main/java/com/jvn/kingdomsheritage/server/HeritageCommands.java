@@ -3,6 +3,7 @@ package com.jvn.kingdomsheritage.server;
 import com.jvn.kingdomsheritage.api.HeritageCinematics;
 import com.jvn.kingdomsheritage.compat.EquipmentCompat;
 import com.jvn.kingdomsheritage.HeritageConfig;
+import com.jvn.kingdomsheritage.HeritageConfig.InventoryPolicy;
 import com.jvn.kingdomsheritage.data.HeritageCatalog;
 import com.jvn.kingdomsheritage.data.HeritageException;
 import com.jvn.kingdomsheritage.data.SpawnDefinition;
@@ -50,11 +51,15 @@ public final class HeritageCommands {
                         .then(Commands.argument("player", EntityArgument.player()).executes(context ->
                                 validate(context.getSource(), EntityArgument.getPlayer(context, "player")))))
                 .then(Commands.literal("reset").requires(source -> source.hasPermission(2))
-                        .then(Commands.argument("player", EntityArgument.player()).executes(context ->
-                                change(context.getSource(), EntityArgument.getPlayer(context, "player"), false))))
+                        .then(Commands.argument("player", EntityArgument.player())
+                                .executes(context -> reset(context.getSource(), EntityArgument.getPlayer(context, "player"), InventoryPolicy.PRESERVE))
+                                .then(Commands.literal("preserve").executes(context ->
+                                        reset(context.getSource(), EntityArgument.getPlayer(context, "player"), InventoryPolicy.PRESERVE)))
+                                .then(Commands.literal("replace").executes(context ->
+                                        reset(context.getSource(), EntityArgument.getPlayer(context, "player"), InventoryPolicy.REPLACE)))))
                 .then(Commands.literal("recover").requires(source -> source.hasPermission(2))
                         .then(Commands.argument("player", EntityArgument.player()).executes(context ->
-                                change(context.getSource(), EntityArgument.getPlayer(context, "player"), true)))));
+                                recover(context.getSource(), EntityArgument.getPlayer(context, "player"))))));
     }
 
     private static int debug(CommandSourceStack source, int count) {
@@ -106,16 +111,25 @@ public final class HeritageCommands {
         return 1;
     }
 
-    private static int change(CommandSourceStack source, ServerPlayer player, boolean recover) throws CommandSyntaxException {
+    private static int reset(CommandSourceStack source, ServerPlayer player, InventoryPolicy policy) throws CommandSyntaxException {
         try {
-            if (recover) SelectionManager.recover(player);
-            else SelectionManager.reset(player);
+            SelectionManager.reset(player, policy);
         } catch (IllegalArgumentException error) {
             throw new SimpleCommandExceptionType(HeritageException.component(error)).create();
         }
-        String message = recover ? "commands.kingdomsheritage.recovered" : HeritageConfig.STARTER_KITS_ENABLED.get()
-                ? "commands.kingdomsheritage.reset" : "commands.kingdomsheritage.reset_location";
+        String message = !HeritageConfig.STARTER_KITS_ENABLED.get() ? "commands.kingdomsheritage.reset_location"
+                : policy == InventoryPolicy.REPLACE ? "commands.kingdomsheritage.reset_replace" : "commands.kingdomsheritage.reset";
         source.sendSuccess(() -> Component.translatable(message, player.getDisplayName()), true);
+        return 1;
+    }
+
+    private static int recover(CommandSourceStack source, ServerPlayer player) throws CommandSyntaxException {
+        try {
+            SelectionManager.recover(player);
+        } catch (IllegalArgumentException error) {
+            throw new SimpleCommandExceptionType(HeritageException.component(error)).create();
+        }
+        source.sendSuccess(() -> Component.translatable("commands.kingdomsheritage.recovered", player.getDisplayName()), true);
         return 1;
     }
 

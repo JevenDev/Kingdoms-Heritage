@@ -128,6 +128,7 @@ final class SelectionFinalization {
         rollback.accept(() -> restore(state, original));
         state.putBoolean("complete", true);
         state.remove("reset");
+        state.remove("reset_replace");
         // the game mode guard blocks changes while selection is pending
         state.putBoolean("pending", false);
     }

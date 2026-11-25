@@ -531,7 +531,7 @@ final class KitSelectionView {
         var font = Minecraft.getInstance().font;
         int center = bounds.getX() + bounds.getWidth() / 2;
         var budget = model.shopBudgetLabel(model.index());
-        var notice = model.preserveNotice();
+        var notice = model.policyNotice();
         boolean showNotice = !notice.getString().isEmpty();
         int noticeY = Math.max(2, bounds.getY() - STAT_CLEARANCE - font.lineHeight - 2);
         int titleY = showNotice ? Math.max(2, noticeY - font.lineHeight - 2) : noticeY;

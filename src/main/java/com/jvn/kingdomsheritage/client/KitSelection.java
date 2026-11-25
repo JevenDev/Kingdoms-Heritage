@@ -260,10 +260,13 @@ public final class KitSelection {
         return !catalog.has("reset") || !catalog.get("reset").getAsBoolean();
     }
 
-    Component preserveNotice() {
-        if (inventoryPolicy != HeritageConfig.InventoryPolicy.PRESERVE) return Component.empty();
-        return Component.translatable(grantsStarterStats()
-                ? "screen.kingdomsheritage.policy.preserve_notice" : "screen.kingdomsheritage.policy.preserve_reset");
+    Component policyNotice() {
+        if (!grantsStarterStats()) {
+            return Component.translatable(inventoryPolicy == HeritageConfig.InventoryPolicy.REPLACE
+                    ? "screen.kingdomsheritage.policy.replace_reset" : "screen.kingdomsheritage.policy.preserve_reset");
+        }
+        return inventoryPolicy == HeritageConfig.InventoryPolicy.PRESERVE
+                ? Component.translatable("screen.kingdomsheritage.policy.preserve_notice") : Component.empty();
     }
 
     Component policyHint() {
