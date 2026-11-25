@@ -41,7 +41,7 @@ final class KitPreview {
         this.stacks = stacks;
         this.policy = policy;
         try {
-            if (kit != null && policy != InventoryPolicy.PRESERVE) {
+            if (kit != null) {
                 expected = KitLoadout.plan(original, player.getInventory().items.size(), kit, stacks, policy);
             }
         } catch (IllegalArgumentException error) {
@@ -60,7 +60,11 @@ final class KitPreview {
     }
 
     long purseGrant() {
-        return expected == null ? 0 : kit.stats().purse();
+        return expected == null || policy == InventoryPolicy.PRESERVE ? 0 : kit.stats().purse();
+    }
+
+    int overflowStacks() {
+        return expected == null ? 0 : expected.overflowStacks();
     }
 
     int purchaseIndex(int slot) {

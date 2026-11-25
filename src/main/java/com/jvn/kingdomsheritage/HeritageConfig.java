@@ -45,7 +45,8 @@ public final class HeritageConfig {
                 .defineInRange("structureSearchTimeoutSeconds", 60, 1, 600);
         BIOME_SEARCH_RADIUS = builder.comment("Maximum radius for biome searches without an explicit search_radius.")
                 .defineInRange("biomeSearchRadius", 100000, 256, 1000000);
-        INVENTORY_POLICY = builder.defineEnum("inventoryPolicy", InventoryPolicy.MERGE);
+        INVENTORY_POLICY = builder.comment("REPLACE clears existing gear before giving the kit. MERGE keeps existing gear and requires enough space. PRESERVE keeps existing gear and drops any kit items that do not fit at arrival.")
+                .defineEnum("inventoryPolicy", InventoryPolicy.MERGE);
         EXEMPT_EXISTING_PLAYERS = builder.define("exemptExistingPlayers", true);
         HOMELAND_RESPAWN = builder.define("homelandRespawn", true);
         builder.push("screenFlow");

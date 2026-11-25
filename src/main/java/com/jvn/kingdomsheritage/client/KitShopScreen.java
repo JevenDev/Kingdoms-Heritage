@@ -323,7 +323,7 @@ final class KitShopScreen extends Screen {
         try {
             for (var pick : requested) {
                 var planned = KitLoadout.plan(original, mainSize, kit, entries, policy);
-                int slot = KitShop.nextSlot(player, planned::item, stock.get(pick.offer()));
+                int slot = KitShop.nextSlot(player, planned::item, stock.get(pick.offer()), policy);
                 if (slot < 0) return false;
                 placed.add(new KitShop.Pick(pick.offer(), slot));
                 entries = shop.loadout(player, policy, fixed, stock, placed);
@@ -337,7 +337,7 @@ final class KitShopScreen extends Screen {
 
     private void trade(List<KitShop.Pick> requested, KitShop.Pick pick, int slot, boolean buying) {
         if (choose(requested) || !buying && reflowAfterRefund(requested)) {
-            trade = new Trade(pick.offer(), slot, buying, Util.getMillis());
+            trade = slot == KitShop.OVERFLOW_SLOT ? null : new Trade(pick.offer(), slot, buying, Util.getMillis());
             SelectionSounds.DISSOLVE.play(0.5F);
         } else SelectionSounds.ERROR.play();
         updateControls();
@@ -365,7 +365,7 @@ final class KitShopScreen extends Screen {
 
     private void updateControls() {
         boolean refresh = controlsDirty;
-        boolean canBuy = policy != InventoryPolicy.PRESERVE;
+        boolean canBuy = true;
         try {
             refresh |= preview.apply(kit, loadout, policy);
         } catch (IllegalArgumentException error) {
@@ -404,11 +404,12 @@ final class KitShopScreen extends Screen {
             button.visible = offer >= 0;
             button.active = button.visible && available;
             if (refresh && button.visible) {
-                offerSlots[cell] = canBuy ? KitShop.nextSlot(selection.player(), preview::item, stock.get(offer)) : -1;
+                offerSlots[cell] = canBuy ? KitShop.nextSlot(selection.player(), preview::item, stock.get(offer), policy) : -1;
                 offerStatuses[cell] = purchaseStatus(offer, offerSlots[cell]);
                 var message = text("buy", stock.get(offer).getHoverName(), shop.offers().get(offer).cost()).copy();
                 Component blocked = purchaseProblem(offer, offerStatuses[cell]);
                 if (blocked != null) message.append(". ").append(blocked);
+                else if (offerSlots[cell] == KitShop.OVERFLOW_SLOT) message.append(". ").append(text("drops_at_spawn"));
                 if (bought[offer] >= shop.offers().get(offer).limit()) {
                     message.append(". ").append(text("bought", bought[offer], shop.offers().get(offer).limit()));
                 }
@@ -448,6 +449,11 @@ final class KitShopScreen extends Screen {
         updateControls();
         SelectionBackground.render(graphics, width, height);
         SelectionText.centered(graphics, font, title, width / 2, top - 32, 0xffffffff);
+        int overflow = preview.overflowStacks();
+        if (overflow > 0) {
+            SelectionText.centered(graphics, font, text(overflow == 1 ? "overflow_one" : "overflow", overflow),
+                    width / 2, top - 19, 0xfff2cd83);
+        }
         int hoveredOffer = -1;
         OfferStatus hoveredStatus = OfferStatus.AVAILABLE;
         for (int cell = 0; cell < layout.pageSize(); cell++) {

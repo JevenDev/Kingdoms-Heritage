@@ -22,7 +22,7 @@ final class DialogueContexts {
         boolean belongings = !player.getInventory().isEmpty()
                 || EquipmentCompat.slots(player).stream().anyMatch(slot -> !slot.get().get().isEmpty());
         boolean keeps = belongings && policy != HeritageConfig.InventoryPolicy.REPLACE;
-        boolean receives = policy != HeritageConfig.InventoryPolicy.PRESERVE && hasKitItems;
+        boolean receives = hasKitItems;
         var title = kit.titleKey().isEmpty() ? Component.literal(kit.title()) : Component.translatableWithFallback(kit.titleKey(), kit.title());
         var equipment = receives ? keeps ? Component.translatable("dialogue.kingdomsheritage.equipment_merged", title) : title
                 : Component.translatable("screen.kingdomsheritage." + (keeps ? "review_carried_items" : "review_empty_items"));

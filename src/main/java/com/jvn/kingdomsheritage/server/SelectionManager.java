@@ -262,12 +262,10 @@ public final class SelectionManager {
             SelectionSteps.requireComplete(player, request.spawn(), request.kit());
             var policy = inventoryPolicy(player);
             var stacks = kit.loadout(player, policy, request.offers());
-            if (policy != HeritageConfig.InventoryPolicy.PRESERVE) {
-                KitStatGrants.validate(player, kit.stats());
-                EquipmentCompat.validate(player, stacks);
-                if (!request.offers().isEmpty()) {
-                    KitLoadout.plan(KitLoadout.capture(player, false), player.getInventory().items.size(), kit, stacks, policy);
-                }
+            if (policy != HeritageConfig.InventoryPolicy.PRESERVE) KitStatGrants.validate(player, kit.stats());
+            EquipmentCompat.validate(player, stacks);
+            if (!request.offers().isEmpty()) {
+                KitLoadout.plan(KitLoadout.capture(player, false), player.getInventory().items.size(), kit, stacks, policy);
             }
             SelectionLifecycle.choices(player, spawnId, kitId);
             session.begin(player, request, SelectionParty.search(player, spawn));
@@ -503,10 +501,8 @@ public final class SelectionManager {
             try {
                 var decoded = kit.decode(player.registryAccess());
                 kit.decodeOffers(player.registryAccess());
-                if (policy != HeritageConfig.InventoryPolicy.PRESERVE) {
-                    EquipmentCompat.validate(player, decoded);
-                    KitStatGrants.validate(player, kit.stats());
-                }
+                EquipmentCompat.validate(player, decoded);
+                if (policy != HeritageConfig.InventoryPolicy.PRESERVE) KitStatGrants.validate(player, kit.stats());
                 choice.addProperty("problem", "");
             } catch (IllegalArgumentException failure) {
                 var problem = HeritageException.component(failure);

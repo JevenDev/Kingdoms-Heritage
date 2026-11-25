@@ -52,7 +52,7 @@ public final class KitSelection {
         inventoryPreview = new KitPreview(player);
         inventoryPolicy = catalog.has("inventory_policy") ? HeritageConfig.InventoryPolicy.valueOf(
                 catalog.get("inventory_policy").getAsString()) : HeritageConfig.InventoryPolicy.REPLACE;
-        shopTabHeight = modelPreview || inventoryPolicy == HeritageConfig.InventoryPolicy.PRESERVE ? 0
+        shopTabHeight = modelPreview ? 0
                 : choices.stream().mapToInt(choice -> choice.get("shop") instanceof JsonObject shop
                         && shop.get("sections") instanceof JsonArray sections ? KitShopTabs.previewHeight(sections.size()) : 0)
                         .max().orElse(0);
@@ -89,7 +89,7 @@ public final class KitSelection {
     }
 
     private boolean hasShop(KitDefinition definition) {
-        return definition != null && definition.shop() != null && inventoryPolicy != HeritageConfig.InventoryPolicy.PRESERVE;
+        return definition != null && definition.shop() != null;
     }
 
     Component shopBudgetLabel(int index) {
@@ -255,6 +255,12 @@ public final class KitSelection {
     boolean submitted() { return submitted; }
     Component problem() { return problem; }
     Player player() { return player; }
+
+    Component preserveNotice() {
+        if (inventoryPolicy != HeritageConfig.InventoryPolicy.PRESERVE) return Component.empty();
+        return Component.translatable(catalog.has("reset") && catalog.get("reset").getAsBoolean()
+                ? "screen.kingdomsheritage.policy.preserve_reset" : "screen.kingdomsheritage.policy.preserve_notice");
+    }
 
     Component policyHint() {
         return problem.getString().isEmpty() ? Component.translatable("screen.kingdomsheritage.policy."

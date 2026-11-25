@@ -18,6 +18,7 @@ import net.minecraft.world.item.Items;
 public record KitShop(int budget, List<Offer> offers, List<Section> sections, int columns) {
     public static final int MAX_OFFERS = 256;
     public static final int MAX_PICKS = 41;
+    public static final int OVERFLOW_SLOT = MAX_PICKS;
     public static final int ROWS = 8;
     public static final int DEFAULT_COLUMNS = 4;
     public static final int MAX_COLUMNS = 9;
@@ -202,15 +203,13 @@ public record KitShop(int budget, List<Offer> offers, List<Section> sections, in
                                                    List<ItemStack> stock, List<Pick> picks) {
         cost(picks);
         if (picks.isEmpty()) return fixed;
-        if (policy == InventoryPolicy.PRESERVE) {
-            throw new HeritageException("shop_preserve", "This start keeps your existing equipment");
-        }
         var entries = new ArrayList<KitDefinition.StackEntry>(fixed.size() + picks.size());
         entries.addAll(fixed);
         for (var pick : picks) {
             int slot = pick.slot();
             var stack = stock.get(pick.offer());
-            if (slot < 0 || slot >= MAX_PICKS || slot >= 36 && slot != equipmentSlot(player, stack)) {
+            boolean overflow = policy == InventoryPolicy.PRESERVE && slot == OVERFLOW_SLOT;
+            if (!overflow && (slot < 0 || slot >= MAX_PICKS || slot >= 36 && slot != equipmentSlot(player, stack))) {
                 throw new HeritageException("shop_slot", "This stack does not fit in the selected slot");
             }
             entries.add(new KitDefinition.StackEntry("player", "", slot, false, stack, true));
@@ -220,6 +219,11 @@ public record KitShop(int budget, List<Offer> offers, List<Section> sections, in
 
     public static int nextSlot(Player player, IntFunction<ItemStack> items, ItemStack stack) {
         return KitLoadout.purchaseSlot(items, player.getInventory().items.size(), equipmentSlot(player, stack), stack);
+    }
+
+    public static int nextSlot(Player player, IntFunction<ItemStack> items, ItemStack stack, InventoryPolicy policy) {
+        int slot = nextSlot(player, items, stack);
+        return slot < 0 && policy == InventoryPolicy.PRESERVE ? OVERFLOW_SLOT : slot;
     }
 
     private static int equipmentSlot(Player player, ItemStack stack) {

@@ -7,6 +7,7 @@ import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 import java.util.function.IntConsumer;
 import java.util.function.IntFunction;
 import net.minecraft.world.entity.player.Inventory;
@@ -31,15 +32,22 @@ public final class KitLoadout {
         private final Map<EquipmentSlot, ItemStack> equipment;
         private final int selected;
         private final int[] purchaseIndices;
+        private final List<ItemStack> overflow;
 
-        private Snapshot(List<ItemStack> items, Map<EquipmentSlot, ItemStack> equipment, int selected, int[] purchaseIndices) {
+        private Snapshot(List<ItemStack> items, Map<EquipmentSlot, ItemStack> equipment, int selected, int[] purchaseIndices,
+                         List<ItemStack> overflow) {
             this.items = items;
             this.equipment = equipment;
             this.selected = selected;
             this.purchaseIndices = purchaseIndices;
+            this.overflow = List.copyOf(overflow);
         }
 
         public ItemStack item(int index) { return items.get(index).copy(); }
+
+        public List<ItemStack> overflow() { return overflow.stream().map(ItemStack::copy).toList(); }
+
+        public int overflowStacks() { return overflow.size(); }
 
         ItemStack equipped(net.minecraft.world.entity.EquipmentSlot slot) {
             return switch (slot) {
@@ -114,13 +122,18 @@ public final class KitLoadout {
             var stack = slot.get().get();
             equipment.put(EquipmentSlot.of(slot), copy ? stack.copy() : stack);
         }
-        return new Snapshot(items, equipment, inventory.selected, null);
+        return new Snapshot(items, equipment, inventory.selected, null, List.of());
     }
 
     public static Snapshot plan(Snapshot original, int mainSize, KitDefinition kit,
                                 List<KitDefinition.StackEntry> entries, InventoryPolicy policy) {
-        if (policy == InventoryPolicy.PRESERVE) return original;
+        boolean preserve = policy == InventoryPolicy.PRESERVE;
         boolean replace = policy == InventoryPolicy.REPLACE;
+        var overflow = new ArrayList<ItemStack>();
+        Consumer<ItemStack> excess = preserve ? overflow::add : unused -> {
+            throw new HeritageException("full_inventory", "There is not enough inventory space for this kit. Choose a smaller kit or ask an administrator to recover your selection");
+        };
+        IntConsumer untracked = unused -> {};
         var items = new ArrayList<ItemStack>(original.items.size());
         original.items.forEach(stack -> items.add(replace ? ItemStack.EMPTY : stack.copy()));
         var equipment = new LinkedHashMap<EquipmentSlot, ItemStack>();
@@ -132,21 +145,22 @@ public final class KitLoadout {
             if (entry.inventory().equals("player")) {
                 if (entry.purchase()) {
                     int purchaseIndex = purchases++;
-                    placePurchase(items, mainSize, entry.index(), entry.stack().copy(), slot -> purchaseIndices[slot] = purchaseIndex);
+                    placePurchase(items, mainSize, entry.index(), entry.stack().copy(), preserve, excess,
+                            slot -> purchaseIndices[slot] = purchaseIndex);
                 } else if (replace || items.get(entry.index()).isEmpty()) items.set(entry.index(), entry.stack().copy());
-                else merge(items, mainSize, entry.stack().copy());
+                else merge(items, mainSize, entry.stack().copy(), excess, untracked);
             } else {
                 var slot = EquipmentSlot.of(entry);
                 var current = equipment.get(slot);
                 if (current == null) throw new HeritageException("equipment", "Unavailable equipment slot: %s",
                         entry.inventory() + "/" + entry.slot() + "/" + entry.index());
                 if (replace || current.isEmpty()) equipment.put(slot, entry.stack().copy());
-                else merge(items, mainSize, entry.stack().copy());
+                else merge(items, mainSize, entry.stack().copy(), excess, untracked);
             }
         }
         int selected = replace || original.items.subList(0, mainSize).stream().allMatch(ItemStack::isEmpty)
                 ? kit.selectedSlot() : original.selected;
-        return new Snapshot(items, equipment, selected, purchaseIndices);
+        return new Snapshot(items, equipment, selected, purchaseIndices, overflow);
     }
 
     static int purchaseSlot(IntFunction<ItemStack> items, int mainSize, int equipment, ItemStack stack) {
@@ -165,10 +179,17 @@ public final class KitLoadout {
         return empty;
     }
 
-    static void placePurchase(List<ItemStack> items, int mainSize, int slot, ItemStack stack, IntConsumer filled) {
+    private static void placePurchase(List<ItemStack> items, int mainSize, int slot, ItemStack stack,
+                                      boolean preserve, Consumer<ItemStack> excess, IntConsumer filled) {
+        if (preserve && slot == KitShop.OVERFLOW_SLOT) {
+            merge(items, mainSize, stack, excess, filled);
+            return;
+        }
         var target = items.get(slot);
         if (!target.isEmpty() && (slot >= mainSize || stackRoom(target, stack) == 0)) {
-            throw new HeritageException("shop_occupied", "A starter kit slot is already occupied");
+            if (!preserve) throw new HeritageException("shop_occupied", "A starter kit slot is already occupied");
+            merge(items, mainSize, stack, excess, filled);
+            return;
         }
         if (slot >= mainSize) {
             items.set(slot, stack);
@@ -184,7 +205,7 @@ public final class KitLoadout {
             items.set(slot, stack);
             filled.accept(slot);
         } else {
-            filled.accept(putInEmptySlot(items, mainSize, stack));
+            placeInEmptySlot(items, mainSize, stack, excess, filled);
         }
     }
 
@@ -201,21 +222,22 @@ public final class KitLoadout {
         return true;
     }
 
-    private static void merge(List<ItemStack> items, int mainSize, ItemStack stack) {
+    private static void merge(List<ItemStack> items, int mainSize, ItemStack stack, Consumer<ItemStack> excess, IntConsumer filled) {
         for (int slot = 0; slot < mainSize; slot++) {
-            fillStack(items.get(slot), stack);
+            if (fillStack(items.get(slot), stack)) filled.accept(slot);
             if (stack.isEmpty()) return;
         }
-        putInEmptySlot(items, mainSize, stack);
+        placeInEmptySlot(items, mainSize, stack, excess, filled);
     }
 
-    private static int putInEmptySlot(List<ItemStack> items, int mainSize, ItemStack stack) {
+    private static void placeInEmptySlot(List<ItemStack> items, int mainSize, ItemStack stack, Consumer<ItemStack> excess, IntConsumer filled) {
         for (int slot = 0; slot < mainSize; slot++) {
             if (items.get(slot).isEmpty()) {
                 items.set(slot, stack);
-                return slot;
+                filled.accept(slot);
+                return;
             }
         }
-        throw new HeritageException("full_inventory", "There is not enough inventory space for this kit. Choose a smaller kit or ask an administrator to recover your selection");
+        excess.accept(stack);
     }
 }

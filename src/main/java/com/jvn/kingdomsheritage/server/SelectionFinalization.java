@@ -9,6 +9,7 @@ import com.jvn.kingdomsheritage.data.HeritageException;
 import com.jvn.kingdomsheritage.data.IntroDefinition;
 import com.jvn.kingdomsheritage.data.KitDefinition;
 import com.jvn.kingdomsheritage.data.KitLoadout;
+import com.jvn.kingdomsheritage.data.KitStats;
 import com.jvn.kingdomsheritage.data.SpawnDefinition;
 import com.jvn.kingdomsheritage.mixin.KitEquipmentUpdates;
 import java.util.ArrayDeque;
@@ -18,6 +19,7 @@ import java.util.function.Consumer;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.level.GameType;
 
 final class SelectionFinalization {
@@ -31,9 +33,9 @@ final class SelectionFinalization {
     static Member plan(ServerPlayer player, SpawnDefinition spawn, KitDefinition kit,
                        List<KitDefinition.StackEntry> entries, HeritageConfig.InventoryPolicy policy,
                        SpawnDefinition arrivalDefinition, SpawnResolver.Destination arrival) {
-        var inventory = policy == HeritageConfig.InventoryPolicy.PRESERVE ? null : KitLoadout.capture(player, true);
-        var planned = inventory == null ? null : KitLoadout.plan(inventory, player.getInventory().items.size(), kit, entries, policy);
-        if (planned != null) KitStatGrants.validate(player, kit.stats());
+        var inventory = KitLoadout.capture(player, true);
+        var planned = KitLoadout.plan(inventory, player.getInventory().items.size(), kit, entries, policy);
+        if (policy != HeritageConfig.InventoryPolicy.PRESERVE) KitStatGrants.validate(player, kit.stats());
         var arrivalIntro = HeritageCatalog.arrivalIntro(arrivalDefinition, kit);
         var intro = SpawnIntro.prepare(arrivalDefinition, arrival, arrivalIntro);
         intro.add("dialogue_context", DialogueContexts.create(player, spawn, kit, policy, !entries.isEmpty()).json());
@@ -54,7 +56,6 @@ final class SelectionFinalization {
                 SelectionManager.teleport(player, member.arrival(), SelectionManager.state(player).getFloat("yaw"));
             }
             for (var member : members) {
-                if (member.planned() == null) continue;
                 var player = member.player();
                 var backup = member.inventory();
                 var planned = member.planned();
@@ -63,7 +64,7 @@ final class SelectionFinalization {
                     planned = KitLoadout.plan(backup, player.getInventory().items.size(), member.kit(), member.entries(), member.policy());
                 }
                 var original = backup;
-                var stats = member.kit().stats();
+                var stats = member.policy() == HeritageConfig.InventoryPolicy.PRESERVE ? KitStats.EMPTY : member.kit().stats();
                 boolean updateHealth = stats.changesHealth();
                 boolean updateMana = stats.changesMana();
                 if (updateMana) {
@@ -81,6 +82,7 @@ final class SelectionFinalization {
                 write(player, planned);
                 if (updateHealth || updateMana) ((KitEquipmentUpdates) player).heritage$refreshEquipment();
                 KitStatGrants.apply(player, stats, rollback);
+                dropOverflow(player, planned, rollback);
             }
             for (var member : members) {
                 var player = member.player();
@@ -103,6 +105,19 @@ final class SelectionFinalization {
             usage.consume(first.spawn(), members.size());
         });
         for (var member : members) SelectionSteps.complete(member.player(), member.decisions());
+    }
+
+    private static void dropOverflow(ServerPlayer player, KitLoadout.Snapshot loadout, Consumer<Runnable> rollback) {
+        var level = player.serverLevel();
+        for (var stack : loadout.overflow()) {
+            var drop = new ItemEntity(level, player.getX(), player.getY(), player.getZ(), stack, 0, 0, 0);
+            drop.setTarget(player.getUUID());
+            drop.setDefaultPickUpDelay();
+            rollback.accept(drop::discard);
+            if (!level.addFreshEntity(drop)) {
+                throw new HeritageException("kit_drop", "Could not drop the extra kit items at the destination. Please try again");
+            }
+        }
     }
 
     static void markComplete(CompoundTag state, Consumer<Runnable> rollback) {

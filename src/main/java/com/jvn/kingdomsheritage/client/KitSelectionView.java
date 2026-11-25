@@ -531,7 +531,10 @@ final class KitSelectionView {
         var font = Minecraft.getInstance().font;
         int center = bounds.getX() + bounds.getWidth() / 2;
         var budget = model.shopBudgetLabel(model.index());
-        int titleY = Math.max(2, bounds.getY() - STAT_CLEARANCE - font.lineHeight - 2);
+        var notice = model.preserveNotice();
+        boolean showNotice = !notice.getString().isEmpty();
+        int noticeY = Math.max(2, bounds.getY() - STAT_CLEARANCE - font.lineHeight - 2);
+        int titleY = showNotice ? Math.max(2, noticeY - font.lineHeight - 2) : noticeY;
         int budgetY = titleY - 11;
         int headingY = (budget == null ? titleY : budgetY) - 12;
         graphics.pose().pushPose();
@@ -541,6 +544,15 @@ final class KitSelectionView {
         var title = DefinitionJson.component(choice, "title").copy();
         title.append(" (" + (model.index() + 1) + "/" + model.choices().size() + ")");
         SelectionText.centered(graphics, font, font.plainSubstrByWidth(title.getString(), Math.min(screen.width - 24, bounds.getWidth() + 60)), center, titleY, 0xffffff);
+        if (showNotice) {
+            int available = Math.max(1, 2 * Math.min(center, screen.width - center) - 16);
+            float scale = Math.min(1F, (float) available / Math.max(1, font.width(notice)));
+            graphics.pose().pushPose();
+            graphics.pose().translate(center, Math.max(titleY + font.lineHeight, noticeY), 0);
+            graphics.pose().scale(scale, scale, 1);
+            SelectionText.centered(graphics, font, notice, 0, 0, 0xf2cd83);
+            graphics.pose().popPose();
+        }
         if (budget != null && budgetY >= 0) {
             var summary = budget.copy().withStyle(style -> style.withColor(0xf2cd83));
             if (model.hasIncludedGear()) {
