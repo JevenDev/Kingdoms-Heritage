@@ -93,7 +93,7 @@ final class KitShopScreen extends Screen {
         offerStatuses = new OfferStatus[layout.pageSize()];
         offerSlots = new int[layout.pageSize()];
         bought = new int[stock.size()];
-        preview = new KitPreview(selection.player());
+        preview = new KitPreview(selection.player(), selection.grantsStarterStats());
     }
 
     List<KitShop.Pick> picks() { return picks; }

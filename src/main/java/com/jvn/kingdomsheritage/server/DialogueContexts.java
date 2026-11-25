@@ -23,7 +23,8 @@ final class DialogueContexts {
                 || EquipmentCompat.slots(player).stream().anyMatch(slot -> !slot.get().get().isEmpty());
         boolean keeps = belongings && policy != HeritageConfig.InventoryPolicy.REPLACE;
         boolean receives = hasKitItems;
-        var title = kit.titleKey().isEmpty() ? Component.literal(kit.title()) : Component.translatableWithFallback(kit.titleKey(), kit.title());
+        var title = kit == null ? Component.empty() : kit.titleKey().isEmpty()
+                ? Component.literal(kit.title()) : Component.translatableWithFallback(kit.titleKey(), kit.title());
         var equipment = receives ? keeps ? Component.translatable("dialogue.kingdomsheritage.equipment_merged", title) : title
                 : Component.translatable("screen.kingdomsheritage." + (keeps ? "review_carried_items" : "review_empty_items"));
         Component names = companions.isEmpty() ? Component.empty() : companions.size() == 1 ? Component.literal(companions.getFirst())
@@ -31,13 +32,13 @@ final class DialogueContexts {
                         String.join(", ", companions.subList(0, companions.size() - 1)), companions.getLast());
         var values = new LinkedHashMap<String, Component>();
         values.put("player", player.getName());
-        values.put("kit", title);
+        if (kit != null) values.put("kit", title);
         values.put("spawn", spawn.titleKey().isEmpty() ? Component.literal(spawn.title()) : Component.translatableWithFallback(spawn.titleKey(), spawn.title()));
         values.put("party_leader", leader.getName());
         values.put("party_size", Component.literal(Integer.toString(members.size())));
         values.put("companions", names);
         values.put("equipment", equipment);
-        var context = new DialogueContext(values, Map.of("player", player.getGameProfile().getName(), "kit", kit.id().toString(),
+        var context = new DialogueContext(values, Map.of("player", player.getGameProfile().getName(), "kit", kit == null ? "" : kit.id().toString(),
                 "spawn", spawn.id().toString(), "party_leader", leader.getGameProfile().getName(),
                 "party_size", Integer.toString(members.size()), "companions", String.join(", ", companions),
                 "inventory_policy", policy.name().toLowerCase(java.util.Locale.ROOT),

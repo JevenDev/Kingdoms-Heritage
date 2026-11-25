@@ -241,14 +241,15 @@ final class ClientParty {
             pendingSpawn = null;
             ClientSelection.followPartySpawn(location);
         }
-        boolean choosingKit = ClientSelection.choosingKit() || !HeritageScreens.finished()
-                && (HeritageScreens.placement() != HeritageScreens.Placement.BEFORE_SPAWN || !partyScreen(minecraft.screen));
+        boolean kitsEnabled = ClientSelection.starterKitsEnabled();
+        boolean choosingKit = kitsEnabled && (ClientSelection.choosingKit() || !HeritageScreens.finished()
+                && (HeritageScreens.placement() != HeritageScreens.Placement.BEFORE_SPAWN || !partyScreen(minecraft.screen)));
         String stage = SelectionTransition.active() ? "loading" : choosingKit ? "kit" : "spawn";
         if (!reportedStage.equals(stage) || ticks % 10 == 0) {
             reportedStage = stage;
             action(HeritageNetwork.PartyAction.STAGE, null, stage);
         }
-        if (grouped() && !spawn.isEmpty() && ticks % 10 == 0) {
+        if (kitsEnabled && grouped() && !spawn.isEmpty() && ticks % 10 == 0) {
             var kits = ClientSelection.kits();
             kitChanged(spawn, kits != null && kits.spawnId().equals(spawn) ? kits.kitId() : null);
         }
@@ -722,7 +723,9 @@ final class ClientParty {
         var lines = new ArrayList<Component>();
         lines.add(Component.literal(player.name()).withStyle(member(player.id()) ? ChatFormatting.YELLOW : ChatFormatting.WHITE));
         lines.add(text("stage_" + player.stage()).copy().withStyle(ChatFormatting.GRAY));
-        if (member(player.id())) lines.add(text("kit_choice", kitChoice(player.id())).copy().withStyle(ChatFormatting.GRAY));
+        if (ClientSelection.starterKitsEnabled() && member(player.id())) {
+            lines.add(text("kit_choice", kitChoice(player.id())).copy().withStyle(ChatFormatting.GRAY));
+        }
         if (player.id().equals(self())) lines.add(text("you").copy().withStyle(ChatFormatting.GRAY));
         if (player.id().equals(leader)) lines.add(text("leader").copy().withStyle(ChatFormatting.GOLD));
         else if (MEMBERS.contains(player.id())) lines.add(text("member").copy().withStyle(ChatFormatting.GREEN));

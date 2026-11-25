@@ -75,6 +75,12 @@ public final class HeritageFlow {
                 if (dependency.step().placement() != step.placement()) throw new IllegalArgumentException("Ordering dependency crosses placements: " + step.id() + " -> " + id);
             }
         }
+        if (!HeritageConfig.STARTER_KITS_ENABLED.get()) {
+            for (var registration : REGISTRY.values()) {
+                var step = registration.step();
+                if (step.placement().compareTo(ScreenStep.Placement.BEFORE_KIT) >= 0) excluded.add(step.id());
+            }
+        }
         active = ScreenStep.sorted(REGISTRY.values().stream().map(Registration::step).filter(step -> !excluded.contains(step.id()))
                 .map(step -> step.order(orders.getOrDefault(step.id(), step.order()))).toList());
         disabled = Set.copyOf(excluded);

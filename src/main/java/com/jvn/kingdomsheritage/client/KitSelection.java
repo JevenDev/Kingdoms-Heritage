@@ -49,9 +49,9 @@ public final class KitSelection {
         choices = ClientSelection.allowedKits(catalog, spawn);
         player = Minecraft.getInstance().player;
         modelPreview = SelectionSettings.parseKitPreview(catalog) == SelectionSettings.KitPreview.MODEL;
-        inventoryPreview = new KitPreview(player);
+        inventoryPreview = new KitPreview(player, grantsStarterStats());
         inventoryPolicy = catalog.has("inventory_policy") ? HeritageConfig.InventoryPolicy.valueOf(
-                catalog.get("inventory_policy").getAsString()) : HeritageConfig.InventoryPolicy.REPLACE;
+                catalog.get("inventory_policy").getAsString()) : HeritageConfig.InventoryPolicy.PRESERVE;
         shopTabHeight = modelPreview ? 0
                 : choices.stream().mapToInt(choice -> choice.get("shop") instanceof JsonObject shop
                         && shop.get("sections") instanceof JsonArray sections ? KitShopTabs.previewHeight(sections.size()) : 0)
@@ -230,7 +230,7 @@ public final class KitSelection {
         } catch (IllegalArgumentException error) {
             definition = null;
         }
-        return new NeighborPreview(definition, items, new KitPreview(player), shopTabs(definition));
+        return new NeighborPreview(definition, items, new KitPreview(player, grantsStarterStats()), shopTabs(definition));
     }
 
     void renderNeighbor(int index, Runnable draw) {
@@ -256,10 +256,14 @@ public final class KitSelection {
     Component problem() { return problem; }
     Player player() { return player; }
 
+    boolean grantsStarterStats() {
+        return !catalog.has("reset") || !catalog.get("reset").getAsBoolean();
+    }
+
     Component preserveNotice() {
         if (inventoryPolicy != HeritageConfig.InventoryPolicy.PRESERVE) return Component.empty();
-        return Component.translatable(catalog.has("reset") && catalog.get("reset").getAsBoolean()
-                ? "screen.kingdomsheritage.policy.preserve_reset" : "screen.kingdomsheritage.policy.preserve_notice");
+        return Component.translatable(grantsStarterStats()
+                ? "screen.kingdomsheritage.policy.preserve_notice" : "screen.kingdomsheritage.policy.preserve_reset");
     }
 
     Component policyHint() {

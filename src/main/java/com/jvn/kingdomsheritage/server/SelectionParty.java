@@ -2,6 +2,7 @@ package com.jvn.kingdomsheritage.server;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import com.jvn.kingdomsheritage.HeritageConfig;
 import com.jvn.kingdomsheritage.data.HeritageCatalog;
 import com.jvn.kingdomsheritage.data.SpawnDefinition;
 import com.jvn.kingdomsheritage.network.HeritageNetwork;
@@ -236,11 +237,12 @@ public final class SelectionParty {
             if (stageTick - self.lastStage < 5) return;
             self.lastStage = stageTick;
             if (request.spawn().equals("loading") && !SelectionManager.busy(player)) stage(player, 2);
-            else if (request.spawn().equals("kit") && !SelectionManager.busy(player)) stage(player, 1);
+            else if (request.spawn().equals("kit") && HeritageConfig.STARTER_KITS_ENABLED.get() && !SelectionManager.busy(player)) stage(player, 1);
             else if (request.spawn().equals("spawn") && !SelectionManager.busy(player)) stage(player, 0);
             return;
         }
         if (action == HeritageNetwork.PartyAction.KIT) {
+            if (!HeritageConfig.STARTER_KITS_ENABLED.get()) return;
             long kitTick = player.server.overworld().getGameTime();
             var party = PARTIES.get(player.getUUID());
             if (party == null || party.spawn.isEmpty() || request.revision() != HeritageCatalog.revision()

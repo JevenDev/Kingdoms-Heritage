@@ -1,5 +1,6 @@
 package com.jvn.kingdomsheritage.server;
 
+import com.jvn.kingdomsheritage.HeritageConfig;
 import com.jvn.kingdomsheritage.data.HeritageCatalog;
 import com.jvn.kingdomsheritage.network.HeritageNetwork;
 import com.mojang.authlib.GameProfile;
@@ -107,7 +108,8 @@ final class SelectionDebug {
             if (spawn.isEmpty()) {
                 chooseSpawn(tester, tick, elapsed);
             } else if (!SelectionParty.isReady(this)) {
-                chooseKit(elapsed);
+                if (HeritageConfig.STARTER_KITS_ENABLED.get()) chooseKit(elapsed);
+                else if (elapsed >= 24) SelectionManager.readyDebugPlayer(this);
             }
         }
 

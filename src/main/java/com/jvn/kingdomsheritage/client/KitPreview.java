@@ -15,6 +15,7 @@ import net.neoforged.fml.ModList;
 final class KitPreview {
     private static KitPreview rendering;
     private final Player player;
+    private final boolean grantsStarterStats;
     private KitPreviewPlayer renderPlayer;
     private boolean renderingCosmeticArmor;
     private KitLoadout.Snapshot original;
@@ -24,8 +25,9 @@ final class KitPreview {
     private InventoryPolicy policy;
     private IllegalArgumentException failure;
 
-    KitPreview(Player player) {
+    KitPreview(Player player, boolean grantsStarterStats) {
         this.player = player;
+        this.grantsStarterStats = grantsStarterStats;
     }
 
     boolean apply(KitDefinition kit, List<KitDefinition.StackEntry> stacks, InventoryPolicy policy) {
@@ -56,11 +58,11 @@ final class KitPreview {
     }
 
     KitStats.Preview stats() {
-        return (kit == null || policy == InventoryPolicy.PRESERVE ? KitStats.EMPTY : kit.stats()).preview(player, original, expected);
+        return (kit == null || !grantsStarterStats ? KitStats.EMPTY : kit.stats()).preview(player, original, expected);
     }
 
     long purseGrant() {
-        return expected == null || policy == InventoryPolicy.PRESERVE ? 0 : kit.stats().purse();
+        return expected == null || !grantsStarterStats ? 0 : kit.stats().purse();
     }
 
     int overflowStacks() {

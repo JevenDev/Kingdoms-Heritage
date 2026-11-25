@@ -476,23 +476,25 @@ public final class SpawnSelectScreen extends Screen {
             else ClientParty.select(selectedId());
             return;
         }
-        if (automaticKit == null) {
-            ClientSelection.openKits(selected.get("id").getAsString());
+        if (ClientSelection.starterKitsEnabled() && automaticKit == null) {
+            ClientSelection.openKits(selectedId());
             return;
         }
         submitted = true;
         updateNext();
-        ClientSelection.reviewAutomaticKit(selected.get("id").getAsString(), automaticKit.get("id").getAsString());
+        ClientSelection.reviewAfterSpawn(selectedId(), automaticKit == null ? null : automaticKit.get("id").getAsString());
     }
 
     private void updateNext() {
         var kits = ClientSelection.allowedKits(catalog, selectedId());
         automaticKit = kits.size() == 1 && !kits.getFirst().has("shop") ? kits.getFirst() : null;
+        boolean kitsEnabled = ClientSelection.starterKitsEnabled();
         boolean valid = automaticKit == null || automaticKit.get("problem").getAsString().isEmpty();
         float progress = confirmationProgress(net.minecraft.Util.getMillis());
         for (Card card : cards) card.active = !submitted && !confirming && progress == 0 && card.visible && !card.choice.has("requires_slots");
         description.active = !submitted && !confirming && progress == 0 && !preview.has("requires_slots");
-        next.active = confirming && progress == 1 && selected != null && !selected.has("requires_slots") && !kits.isEmpty() && valid && !submitted;
+        next.active = confirming && progress == 1 && selected != null && !selected.has("requires_slots")
+                && (!kitsEnabled || !kits.isEmpty()) && valid && !submitted;
         next.setTooltip(valid ? null : Tooltip.create(DefinitionJson.message(automaticKit, "problem", minecraft.player.registryAccess())));
         next.visible = confirming || progress > 0;
         back.active = confirming && !submitted && progress > 0.65F;
@@ -503,7 +505,8 @@ public final class SpawnSelectScreen extends Screen {
             button.active = index == 0 ? page() > 0 : (page() + 1) * PAGE_SIZE < choices.size();
         }
         next.setMessage(submitted ? ClientSelection.progress() : Component.translatable(
-                ClientParty.follower() ? "screen.kingdomsheritage.party_suggest" : automaticKit == null ? "screen.kingdomsheritage.confirm_kit" : "screen.kingdomsheritage.confirm_begin"));
+                ClientParty.follower() ? "screen.kingdomsheritage.party_suggest"
+                        : kitsEnabled && automaticKit == null ? "screen.kingdomsheritage.confirm_kit" : "screen.kingdomsheritage.confirm_begin"));
     }
 
     @Override
@@ -614,7 +617,7 @@ public final class SpawnSelectScreen extends Screen {
             for (int index = 0; index < Math.min(2, lines.size()); index++) {
                 SelectionText.centered(graphics, font, lines.get(index), width / 2, height - 51 + index * 9, 0xffaaaa);
             }
-        } else if (automaticKit == null && confirmation == 0) SelectionText.centered(graphics, font, Component.translatable("screen.kingdomsheritage.step_location"), width / 2, height - 43, 0xffffff);
+        } else if (ClientSelection.starterKitsEnabled() && automaticKit == null && confirmation == 0) SelectionText.centered(graphics, font, Component.translatable("screen.kingdomsheritage.step_location"), width / 2, height - 43, 0xffffff);
     }
 
     private int confirmationLeft() {

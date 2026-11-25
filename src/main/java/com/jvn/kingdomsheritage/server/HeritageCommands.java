@@ -2,6 +2,7 @@ package com.jvn.kingdomsheritage.server;
 
 import com.jvn.kingdomsheritage.api.HeritageCinematics;
 import com.jvn.kingdomsheritage.compat.EquipmentCompat;
+import com.jvn.kingdomsheritage.HeritageConfig;
 import com.jvn.kingdomsheritage.data.HeritageCatalog;
 import com.jvn.kingdomsheritage.data.HeritageException;
 import com.jvn.kingdomsheritage.data.SpawnDefinition;
@@ -90,7 +91,8 @@ public final class HeritageCommands {
         }
         Component homeland = spawn == null ? Component.literal(state.getString("spawn_choice"))
                 : spawn.titleKey().isEmpty() ? Component.literal(spawn.title()) : Component.translatableWithFallback(spawn.titleKey(), spawn.title());
-        Component equipment = kit == null ? Component.literal(state.getString("kit_choice"))
+        Component equipment = kit == null && state.getString("kit_choice").isEmpty() ? Component.translatable("commands.kingdomsheritage.no_kit")
+                : kit == null ? Component.literal(state.getString("kit_choice"))
                 : kit.titleKey().isEmpty() ? Component.literal(kit.title()) : Component.translatableWithFallback(kit.titleKey(), kit.title());
         source.sendSuccess(() -> Component.translatable("commands.kingdomsheritage.background", homeland, state.getString("homeland_dimension"), equipment), false);
         return 1;
@@ -111,8 +113,9 @@ public final class HeritageCommands {
         } catch (IllegalArgumentException error) {
             throw new SimpleCommandExceptionType(HeritageException.component(error)).create();
         }
-        source.sendSuccess(() -> Component.translatable(recover ? "commands.kingdomsheritage.recovered"
-                : "commands.kingdomsheritage.reset", player.getDisplayName()), true);
+        String message = recover ? "commands.kingdomsheritage.recovered" : HeritageConfig.STARTER_KITS_ENABLED.get()
+                ? "commands.kingdomsheritage.reset" : "commands.kingdomsheritage.reset_location";
+        source.sendSuccess(() -> Component.translatable(message, player.getDisplayName()), true);
         return 1;
     }
 

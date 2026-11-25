@@ -1,5 +1,6 @@
 package com.jvn.kingdomsheritage.server;
 
+import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.jvn.kingdomsheritage.HeritageConfig;
 import com.jvn.kingdomsheritage.KingdomsHeritage;
@@ -7,9 +8,13 @@ import com.jvn.kingdomsheritage.compat.EquipmentCompat;
 import com.jvn.kingdomsheritage.data.CatalogPayload;
 import com.jvn.kingdomsheritage.data.HeritageCatalog;
 import com.jvn.kingdomsheritage.data.HeritageException;
+import com.jvn.kingdomsheritage.data.KitDefinition;
 import com.jvn.kingdomsheritage.data.KitLoadout;
+import com.jvn.kingdomsheritage.data.KitStats;
+import com.jvn.kingdomsheritage.data.SpawnDefinition;
 import com.jvn.kingdomsheritage.network.HeritageNetwork;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.Registries;
@@ -174,6 +179,9 @@ public final class SelectionManager {
             return;
         }
         var cards = HeritageCatalog.spawnChoices();
+        if (!HeritageConfig.STARTER_KITS_ENABLED.get()) {
+            for (var card : cards) card.getAsJsonObject().add("kits", new JsonArray());
+        }
         usage.updateCards(cards, size, true);
         var update = new JsonObject();
         update.add("spawn_cards", cards);
@@ -247,27 +255,28 @@ public final class SelectionManager {
             return;
         }
         var spawnId = ResourceLocation.tryParse(request.spawn());
-        var kitId = ResourceLocation.tryParse(request.kit());
         var spawn = spawnId == null ? null : HeritageCatalog.spawns().get(spawnId);
-        var kit = kitId == null ? null : HeritageCatalog.kits().get(kitId);
         if (spawn != null && !SpawnUsage.of(player).available(spawn, SelectionParty.size(player))) {
             SelectionParty.capacityLost(player);
             return;
         }
-        if (spawn == null || kit == null || !spawn.allows(kit)) {
+        if (spawn == null) {
             sendChoices(player, Component.translatable("error.kingdomsheritage.choice"));
             return;
         }
         try {
+            var kit = selectedKit(spawn, request);
             SelectionSteps.requireComplete(player, request.spawn(), request.kit());
-            var policy = inventoryPolicy(player);
-            var stacks = kit.loadout(player, policy, request.offers());
-            if (policy != HeritageConfig.InventoryPolicy.PRESERVE) KitStatGrants.validate(player, kit.stats());
-            EquipmentCompat.validate(player, stacks);
-            if (!request.offers().isEmpty()) {
-                KitLoadout.plan(KitLoadout.capture(player, false), player.getInventory().items.size(), kit, stacks, policy);
+            if (kit != null) {
+                var policy = inventoryPolicy(player);
+                var stacks = kit.loadout(player, policy, request.offers());
+                KitStatGrants.validate(player, kitStats(player, kit));
+                EquipmentCompat.validate(player, stacks);
+                if (!request.offers().isEmpty()) {
+                    KitLoadout.plan(KitLoadout.capture(player, false), player.getInventory().items.size(), kit, stacks, policy);
+                }
             }
-            SelectionLifecycle.choices(player, spawnId, kitId);
+            SelectionLifecycle.choices(player, spawnId, kit == null ? null : kit.id());
             session.begin(player, request, SelectionParty.search(player, spawn));
             sendProgress(player, "queued");
         } catch (IllegalArgumentException error) {
@@ -317,10 +326,10 @@ public final class SelectionManager {
                 review.add("companions", SelectionParty.companions(player));
                 SelectionParty.stage(player, 3);
                 review.add("locations", SpawnIntro.locations(search.definition(), destination));
-                var kit = HeritageCatalog.kits().get(ResourceLocation.parse(request.kit()));
-                review.add("dialogue_context", DialogueContexts.create(player,
-                        HeritageCatalog.spawns().get(ResourceLocation.parse(request.spawn())), kit, inventoryPolicy(player),
-                        !kit.entries().isEmpty() || !request.offers().isEmpty()).json());
+                var spawn = HeritageCatalog.spawns().get(ResourceLocation.parse(request.spawn()));
+                var kit = selectedKit(spawn, request);
+                review.add("dialogue_context", DialogueContexts.create(player, spawn, kit, inventoryPolicy(player),
+                        kit != null && (!kit.entries().isEmpty() || !request.offers().isEmpty())).json());
                 JsonObject message = new JsonObject();
                 message.add("review", review);
                 PacketDistributor.sendToPlayer(player, new HeritageNetwork.Catalog(message.toString()));
@@ -348,12 +357,12 @@ public final class SelectionManager {
                 }
                 SelectionSteps.requireComplete(member, reviewed.spawn(), reviewed.kit());
                 var spawn = HeritageCatalog.spawns().get(ResourceLocation.parse(reviewed.spawn()));
-                var kit = HeritageCatalog.kits().get(ResourceLocation.parse(reviewed.kit()));
+                var kit = selectedKit(spawn, reviewed);
                 var policy = inventoryPolicy(member);
                 var arrival = search.partyArrival(assigned);
                 assigned.add(arrival.position());
-                deliveries.add(SelectionFinalization.plan(member, spawn, kit, kit.loadout(member, policy, reviewed.offers()),
-                        policy, search.definition(), arrival));
+                List<KitDefinition.StackEntry> entries = kit == null ? List.of() : kit.loadout(member, policy, reviewed.offers());
+                deliveries.add(SelectionFinalization.plan(member, spawn, kit, entries, policy, search.definition(), arrival));
             }
             KingdomsHeritage.LOGGER.debug("Prepared Heritage location {} in {} ms of server work",
                     request.spawn(), search.workMillis());
@@ -421,8 +430,24 @@ public final class SelectionManager {
         }
     }
 
+    private static KitDefinition selectedKit(SpawnDefinition spawn, HeritageNetwork.Review request) {
+        if (HeritageConfig.STARTER_KITS_ENABLED.get()) {
+            var kitId = SelectionLifecycle.parseChoice(request.kit());
+            var kit = kitId == null ? null : HeritageCatalog.kits().get(kitId);
+            if (kit != null && spawn.allows(kit)) return kit;
+        } else if (request.kit().isEmpty() && request.offers().isEmpty()) {
+            return null;
+        }
+        throw new HeritageException("choice", "That starting location or kit is no longer available");
+    }
+
+    static KitStats kitStats(ServerPlayer player, KitDefinition kit) {
+        return state(player).getBoolean("reset") ? KitStats.EMPTY : kit.stats();
+    }
+
     private static HeritageConfig.InventoryPolicy inventoryPolicy(ServerPlayer player) {
-        return state(player).getBoolean("reset") ? HeritageConfig.InventoryPolicy.PRESERVE : HeritageConfig.INVENTORY_POLICY.get();
+        return state(player).getBoolean("reset") || !HeritageConfig.STARTER_KITS_ENABLED.get()
+                ? HeritageConfig.InventoryPolicy.PRESERVE : HeritageConfig.INVENTORY_POLICY.get();
     }
 
     private static void sendProgress(ServerPlayer player, String stage) {
@@ -482,7 +507,9 @@ public final class SelectionManager {
         var usage = SpawnUsage.of(player);
         int size = SelectionParty.size(player);
         var selectedSpawn = lifecycle.spawnId().map(HeritageCatalog.spawns()::get).filter(spawn -> usage.available(spawn, size)).orElse(null);
-        var selectedKit = lifecycle.kitId().map(HeritageCatalog.kits()::get).filter(value -> selectedSpawn != null && selectedSpawn.allows(value)).orElse(null);
+        boolean kitsEnabled = HeritageConfig.STARTER_KITS_ENABLED.get();
+        var selectedKit = kitsEnabled ? lifecycle.kitId().map(HeritageCatalog.kits()::get)
+                .filter(value -> selectedSpawn != null && selectedSpawn.allows(value)).orElse(null) : null;
         SelectionLifecycle.choices(player, selectedSpawn == null ? null : selectedSpawn.id(), selectedKit == null ? null : selectedKit.id());
         json.add("flow", SelectionSteps.manifest(player));
         json.addProperty("session", lifecycle.sessionId().toString());
@@ -491,10 +518,15 @@ public final class SelectionManager {
         json.addProperty("error", error.getString());
         json.addProperty("error_component", Component.Serializer.toJson(error, player.registryAccess()));
         json.addProperty("inventory_policy", inventoryPolicy(player).name());
+        json.addProperty("starter_kits_enabled", kitsEnabled);
         HeritageCatalog.payload().entrySet().forEach(entry -> json.add(entry.getKey(), entry.getValue()));
-        usage.updateCards(json.getAsJsonArray("spawns"), size, false);
+        var spawns = json.getAsJsonArray("spawns");
+        if (!kitsEnabled) {
+            json.add("kits", new JsonArray());
+            for (var spawn : spawns) spawn.getAsJsonObject().add("kits", new JsonArray());
+        }
+        usage.updateCards(spawns, size, false);
         var kits = json.getAsJsonArray("kits");
-        var policy = inventoryPolicy(player);
         for (var element : kits) {
             var choice = element.getAsJsonObject();
             var kit = HeritageCatalog.kits().get(ResourceLocation.parse(choice.get("id").getAsString()));
@@ -502,7 +534,7 @@ public final class SelectionManager {
                 var decoded = kit.decode(player.registryAccess());
                 kit.decodeOffers(player.registryAccess());
                 EquipmentCompat.validate(player, decoded);
-                if (policy != HeritageConfig.InventoryPolicy.PRESERVE) KitStatGrants.validate(player, kit.stats());
+                KitStatGrants.validate(player, kitStats(player, kit));
                 choice.addProperty("problem", "");
             } catch (IllegalArgumentException failure) {
                 var problem = HeritageException.component(failure);

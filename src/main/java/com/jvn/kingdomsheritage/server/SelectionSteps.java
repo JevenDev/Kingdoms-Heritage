@@ -1,6 +1,7 @@
 package com.jvn.kingdomsheritage.server;
 
 import com.google.gson.JsonObject;
+import com.jvn.kingdomsheritage.HeritageConfig;
 import com.jvn.kingdomsheritage.api.HeritageFlow;
 import com.jvn.kingdomsheritage.api.ScreenStep;
 import com.jvn.kingdomsheritage.data.FlowDecision;
@@ -102,7 +103,8 @@ public final class SelectionSteps {
         if (definition != null) SpawnUsage.of(player).requireAvailable(definition, SelectionParty.size(player));
         var kitId = SelectionLifecycle.parseChoice(kit);
         var equipment = kitId == null ? null : HeritageCatalog.kits().get(kitId);
-        if (!kit.isEmpty() && (definition == null || equipment == null || !definition.allows(equipment))) {
+        if (!kit.isEmpty() && (!HeritageConfig.STARTER_KITS_ENABLED.get() || definition == null
+                || equipment == null || !definition.allows(equipment))) {
             throw new IllegalArgumentException("The chosen kit is unavailable for this homeland");
         }
     }

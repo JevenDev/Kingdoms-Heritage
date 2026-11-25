@@ -253,8 +253,8 @@ public final class ClientSelection {
         finalReview = null;
         progress = "";
         selection.restoreSelection(spawn);
-        var allowed = allowedKits(catalog, spawn);
-        if (!allowed.isEmpty()) openKits(spawn);
+        if (!starterKitsEnabled()) reviewAfterSpawn(spawn, null);
+        else if (!allowedKits(catalog, spawn).isEmpty()) openKits(spawn);
     }
 
     static void openKits(String spawn) {
@@ -267,10 +267,11 @@ public final class ClientSelection {
                 }));
     }
 
-    static void reviewAutomaticKit(String spawn, String kit) {
+    static void reviewAfterSpawn(String spawn, String kit) {
         choicesChanged(spawn, kit);
+        var lastStep = kit == null ? HeritageScreens.Placement.AFTER_SPAWN : HeritageScreens.Placement.AFTER_KIT;
         SelectionTransition.fadeOut(() -> HeritageScreens.open(HeritageScreens.Placement.AFTER_SPAWN,
-                HeritageScreens.Placement.AFTER_KIT, spawn, kit, () -> requestReview(spawn, kit)));
+                lastStep, spawn, kit, () -> requestReview(spawn, kit, List.of())));
     }
 
     static void review(String spawn, String kit, List<KitShop.Pick> offers) {
@@ -283,13 +284,9 @@ public final class ClientSelection {
         });
     }
 
-    private static void requestReview(String spawn, String kit) {
-        requestReview(spawn, kit, List.of());
-    }
-
     private static void requestReview(String spawn, String kit, List<KitShop.Pick> offers) {
         net.neoforged.neoforge.network.PacketDistributor.sendToServer(
-                new HeritageNetwork.Review(spawn, kit, catalog.get("revision").getAsLong(), offers));
+                new HeritageNetwork.Review(spawn, kit == null ? "" : kit, catalog.get("revision").getAsLong(), offers));
     }
 
     static void cancelReview(java.util.UUID token) {
@@ -349,6 +346,10 @@ public final class ClientSelection {
         if (waitingForParty()) return ClientParty.waitingSummary();
         return Component.translatable("screen.kingdomsheritage."
                 + (progress.isEmpty() ? "wait" : progress));
+    }
+
+    static boolean starterKitsEnabled() {
+        return catalog == null || !catalog.has("starter_kits_enabled") || catalog.get("starter_kits_enabled").getAsBoolean();
     }
 
     static List<JsonObject> allowedKits(JsonObject catalog, String spawnId) {

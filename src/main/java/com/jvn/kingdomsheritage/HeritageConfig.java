@@ -6,7 +6,7 @@ import net.neoforged.neoforge.common.ModConfigSpec;
 import net.neoforged.neoforge.common.TranslatableEnum;
 
 public final class HeritageConfig {
-    public enum InventoryPolicy { REPLACE, MERGE, PRESERVE }
+    public enum InventoryPolicy { REPLACE, PRESERVE }
     public enum SelectionMusicMode implements TranslatableEnum {
         ALTERNATE, ORIGINAL, SOLACE, EXCUSES;
 
@@ -22,6 +22,7 @@ public final class HeritageConfig {
     public static final ModConfigSpec.BooleanValue SELECTION_MUSIC;
     public static final ModConfigSpec.EnumValue<SelectionMusicMode> SELECTION_MUSIC_MODE;
     public static final ModConfigSpec.EnumValue<InventoryPolicy> INVENTORY_POLICY;
+    public static final ModConfigSpec.BooleanValue STARTER_KITS_ENABLED;
     public static final ModConfigSpec.BooleanValue EXEMPT_EXISTING_PLAYERS;
     public static final ModConfigSpec.BooleanValue HOMELAND_RESPAWN;
     public static final ModConfigSpec.IntValue RANDOM_RADIUS;
@@ -45,8 +46,11 @@ public final class HeritageConfig {
                 .defineInRange("structureSearchTimeoutSeconds", 60, 1, 600);
         BIOME_SEARCH_RADIUS = builder.comment("Maximum radius for biome searches without an explicit search_radius.")
                 .defineInRange("biomeSearchRadius", 100000, 256, 1000000);
-        INVENTORY_POLICY = builder.comment("REPLACE clears existing gear before giving the kit. MERGE keeps existing gear and requires enough space. PRESERVE keeps existing gear and drops any kit items that do not fit at arrival.")
-                .defineEnum("inventoryPolicy", InventoryPolicy.MERGE);
+        INVENTORY_POLICY = builder.comment("PRESERVE keeps existing gear and drops any kit items that do not fit at arrival. REPLACE clears existing gear before giving the kit.")
+                .defineEnum("inventoryPolicy", InventoryPolicy.PRESERVE);
+        STARTER_KITS_ENABLED = builder.comment("Whether to let players choose and receive starter kits. When disabled, only the starting location is chosen, including after /heritage reset.")
+                .worldRestart()
+                .define("starterKitsEnabled", true);
         EXEMPT_EXISTING_PLAYERS = builder.define("exemptExistingPlayers", true);
         HOMELAND_RESPAWN = builder.define("homelandRespawn", true);
         builder.push("screenFlow");

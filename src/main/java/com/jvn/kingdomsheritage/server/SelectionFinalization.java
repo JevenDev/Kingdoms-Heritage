@@ -24,7 +24,7 @@ import net.minecraft.world.level.GameType;
 
 final class SelectionFinalization {
     record Member(ServerPlayer player, SpawnDefinition spawn, KitDefinition kit,
-                  List<KitDefinition.StackEntry> entries, HeritageConfig.InventoryPolicy policy,
+                  List<KitDefinition.StackEntry> entries, HeritageConfig.InventoryPolicy policy, KitStats stats,
                   KitLoadout.Snapshot inventory, KitLoadout.Snapshot planned,
                   Map<ResourceLocation, JsonObject> decisions, SpawnResolver.Destination arrival, IntroDefinition arrivalIntro, JsonObject intro) {}
 
@@ -33,16 +33,17 @@ final class SelectionFinalization {
     static Member plan(ServerPlayer player, SpawnDefinition spawn, KitDefinition kit,
                        List<KitDefinition.StackEntry> entries, HeritageConfig.InventoryPolicy policy,
                        SpawnDefinition arrivalDefinition, SpawnResolver.Destination arrival) {
-        var inventory = KitLoadout.capture(player, true);
-        var planned = KitLoadout.plan(inventory, player.getInventory().items.size(), kit, entries, policy);
-        if (policy != HeritageConfig.InventoryPolicy.PRESERVE) KitStatGrants.validate(player, kit.stats());
+        var inventory = kit == null ? null : KitLoadout.capture(player, true);
+        var planned = kit == null ? null : KitLoadout.plan(inventory, player.getInventory().items.size(), kit, entries, policy);
+        var stats = kit == null ? KitStats.EMPTY : SelectionManager.kitStats(player, kit);
+        KitStatGrants.validate(player, stats);
         var arrivalIntro = HeritageCatalog.arrivalIntro(arrivalDefinition, kit);
         var intro = SpawnIntro.prepare(arrivalDefinition, arrival, arrivalIntro);
         intro.add("dialogue_context", DialogueContexts.create(player, spawn, kit, policy, !entries.isEmpty()).json());
         intro.addProperty("outcome", "completed");
         intro.addProperty("session", SelectionLifecycle.state(player).sessionId().toString());
-        return new Member(player, spawn, kit, entries, policy, inventory, planned,
-                SelectionSteps.decisions(player, spawn.id().toString(), kit.id().toString()), arrival, arrivalIntro, intro);
+        return new Member(player, spawn, kit, entries, policy, stats, inventory, planned,
+                SelectionSteps.decisions(player, spawn.id().toString(), kit == null ? "" : kit.id().toString()), arrival, arrivalIntro, intro);
     }
 
     static void apply(List<Member> members, SpawnResolver.Destination destination) {
@@ -56,6 +57,7 @@ final class SelectionFinalization {
                 SelectionManager.teleport(player, member.arrival(), SelectionManager.state(player).getFloat("yaw"));
             }
             for (var member : members) {
+                if (member.kit() == null) continue;
                 var player = member.player();
                 var backup = member.inventory();
                 var planned = member.planned();
@@ -64,7 +66,7 @@ final class SelectionFinalization {
                     planned = KitLoadout.plan(backup, player.getInventory().items.size(), member.kit(), member.entries(), member.policy());
                 }
                 var original = backup;
-                var stats = member.policy() == HeritageConfig.InventoryPolicy.PRESERVE ? KitStats.EMPTY : member.kit().stats();
+                var stats = member.stats();
                 boolean updateHealth = stats.changesHealth();
                 boolean updateMana = stats.changesMana();
                 if (updateMana) {
@@ -89,7 +91,8 @@ final class SelectionFinalization {
                 var state = SelectionManager.state(player);
                 markComplete(state, rollback);
                 state.putString("spawn_choice", member.spawn().id().toString());
-                state.putString("kit_choice", member.kit().id().toString());
+                if (member.kit() == null) state.remove("kit_choice");
+                else state.putString("kit_choice", member.kit().id().toString());
                 state.putString("homeland_dimension", destination.level().dimension().location().toString());
                 state.putLong("homeland", destination.position().asLong());
                 if (HeritageConfig.HOMELAND_RESPAWN.get()) {

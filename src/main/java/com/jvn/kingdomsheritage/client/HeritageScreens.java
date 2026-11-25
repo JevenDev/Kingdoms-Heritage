@@ -204,6 +204,7 @@ public final class HeritageScreens {
         boolean hasSpawn = catalog.getAsJsonArray("spawns").asList().stream()
                 .anyMatch(value -> value.getAsJsonObject().get("id").getAsString().equals(spawn) && !value.getAsJsonObject().has("requires_slots"));
         if (!hasSpawn) return false;
+        if (!ClientSelection.starterKitsEnabled()) return kit == null;
         var allowed = ClientSelection.allowedKits(catalog, spawn);
         return !allowed.isEmpty() && (kit == null || allowed.stream().anyMatch(value -> value.get("id").getAsString().equals(kit)));
     }

@@ -22,8 +22,8 @@ public final class HeritageCatalog {
             var intro = spawn.intro();
             if (intro != null && (!intro.inheritScene() || intro.scene() != null
                     || intro.control() == IntroDefinition.Control.DURING_TITLE)) return intro;
-            var sceneId = kit.introScene();
-            if (kit.inheritIntroScene() && sceneId == null && intro != null) sceneId = selection.introScene();
+            var sceneId = kit == null ? null : kit.introScene();
+            if ((kit == null || kit.inheritIntroScene()) && sceneId == null && intro != null) sceneId = selection.introScene();
             if (sceneId == null) return intro;
             var cinematic = cinematics.get(sceneId);
             return intro == null ? cinematic : intro.withSceneFrom(cinematic);
