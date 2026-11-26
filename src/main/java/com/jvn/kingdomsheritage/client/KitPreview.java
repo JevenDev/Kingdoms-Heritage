@@ -85,8 +85,12 @@ final class KitPreview {
         return rendering != null && rendering.showsCosmeticArmor() ? rendering.loadout() : null;
     }
 
+    static boolean isRenderingPlayer(Entity entity) {
+        return rendering != null && entity == rendering.player;
+    }
+
     static Entity renderEntity(Entity entity) {
-        if (rendering == null || entity != rendering.player) return entity;
+        if (!isRenderingPlayer(entity)) return entity;
         var loadout = rendering.loadout();
         if (rendering.renderPlayer == null) {
             rendering.renderPlayer = new KitPreviewPlayer((AbstractClientPlayer) entity, loadout);

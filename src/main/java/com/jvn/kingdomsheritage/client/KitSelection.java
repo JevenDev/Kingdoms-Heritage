@@ -18,6 +18,7 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.CraftingContainer;
 import net.minecraft.world.inventory.ResultContainer;
@@ -288,7 +289,11 @@ public final class KitSelection {
         return slot.container instanceof CraftingContainer || slot.container instanceof ResultContainer;
     }
 
-    public static net.minecraft.world.entity.Entity previewEntity(net.minecraft.world.entity.Entity entity) {
+    public static boolean isRenderingPreviewPlayer(Entity entity) {
+        return KitPreview.isRenderingPlayer(entity);
+    }
+
+    public static Entity previewEntity(Entity entity) {
         return KitPreview.renderEntity(entity);
     }
 
