@@ -26,6 +26,8 @@ public final class SpawnSelectScreen extends Screen {
     private static final int PAGE_SIZE = 10;
     private static final int CONFIRMATION_WIDTH = 344;
     private static final int CONFIRMATION_DURATION = 550;
+    private static final int CARD_HIDE_DURATION = 140;
+    private static final int CARD_LAYOUT_DURATION = 240;
     private static final ResourceLocation CARD = texture("campaign_select_screen_card");
     private static final ResourceLocation EXPANDED = texture("campaign_select_screen_card_expanded");
     private static final ResourceLocation FALLBACK = texture("campaign_select_screen_card_fallback");
@@ -43,6 +45,9 @@ public final class SpawnSelectScreen extends Screen {
     private Card highlighted;
     private boolean hoverSoundReady;
     private Button description;
+    private Button disconnect;
+    private float disconnectFadeFrom;
+    private long disconnectFadeStarted;
     private boolean changingPage;
     private boolean browsing;
     private float scale;
@@ -247,7 +252,10 @@ public final class SpawnSelectScreen extends Screen {
         });
         updateDescription();
         int buttonWidth = Math.min(130, (width - 100) / 2);
-        addRenderableWidget(SelectionControls.disconnect(height));
+        disconnect = addRenderableWidget(SelectionControls.disconnect(height));
+        disconnect.active = disconnect.visible = expanded == null;
+        disconnectFadeFrom = disconnect.active ? 1 : 0;
+        if (!disconnect.active) disconnect.setTooltip(null);
         next = addRenderableWidget(new SelectionControls.SoundButton((width - buttonWidth) / 2, height - 28,
                 buttonWidth, 20, Component.empty(), button -> confirm()));
         back = addRenderableWidget(new SelectionControls.SoundButton(0, 0, buttonWidth, 20,
@@ -344,6 +352,17 @@ public final class SpawnSelectScreen extends Screen {
             card.visible = visible;
         }
         for (Button button : pageButtons) button.visible = expanded == null && !confirming;
+        if (animate && disconnect.active != (expanded == null)) {
+            disconnectFadeFrom = disconnectOpacity(now);
+            disconnectFadeStarted = now;
+            disconnect.active = expanded == null;
+            disconnect.setTooltip(disconnect.active ? Tooltip.create(disconnect.getMessage()) : null);
+        }
+    }
+
+    private float disconnectOpacity(long now) {
+        int duration = disconnect.active ? CARD_LAYOUT_DURATION : CARD_HIDE_DURATION;
+        return Mth.lerp(easeOut((now - disconnectFadeStarted) / (float) duration), disconnectFadeFrom, disconnect.active ? 1 : 0);
     }
 
     private void updateDescription() {
@@ -544,6 +563,9 @@ public final class SpawnSelectScreen extends Screen {
             preview = foreground.choice;
             updateDescription();
         }
+        float disconnectOpacity = disconnectOpacity(now);
+        disconnect.setAlpha(disconnectOpacity);
+        disconnect.visible = disconnectOpacity > 0;
         super.render(graphics, mouseX, mouseY, partialTick);
         graphics.flush();
         Card active = foreground;
@@ -754,7 +776,8 @@ public final class SpawnSelectScreen extends Screen {
             this.target = target;
             started = now;
             this.delay = delay;
-            duration = confirming || confirmationFrom > 0 ? CONFIRMATION_DURATION : target.opacity == 0 ? 140 : 240;
+            duration = confirming || confirmationFrom > 0 ? CONFIRMATION_DURATION
+                    : target.opacity == 0 ? CARD_HIDE_DURATION : CARD_LAYOUT_DURATION;
             fromTilt = tilt;
             straightenDelay = target.details == 1 && Math.abs(tilt) > 0.01F ? 60 : 0;
             sample(now);

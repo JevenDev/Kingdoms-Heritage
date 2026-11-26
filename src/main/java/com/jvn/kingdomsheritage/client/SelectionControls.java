@@ -1,5 +1,6 @@
 package com.jvn.kingdomsheritage.client;
 
+import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.math.Axis;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
@@ -40,7 +41,11 @@ final class SelectionControls {
                 boolean highlight = active && isHoveredOrFocused() && (!SelectionTransition.active() || duringTransition);
                 if (highlight && !highlighted) SelectionSounds.HOVER.play();
                 highlighted = highlight;
-                graphics.blitSprite(DISCONNECT.get(active, isHoveredOrFocused()), getX() + 4, getY() + 4, 23, 13);
+                RenderSystem.enableBlend();
+                graphics.setColor(1, 1, 1, alpha);
+                graphics.blitSprite(DISCONNECT.get(active, active && isHoveredOrFocused()), getX() + 4, getY() + 4, 23, 13);
+                graphics.setColor(1, 1, 1, 1);
+                RenderSystem.disableBlend();
             }
 
             @Override
