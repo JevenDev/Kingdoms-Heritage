@@ -2,6 +2,7 @@ package com.jvn.kingdomsheritage.client;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.math.Axis;
+import java.util.function.BooleanSupplier;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Tooltip;
@@ -58,18 +59,25 @@ final class SelectionControls {
     }
 
     static Button arrow(int x, int y, boolean forward, Component message, Button.OnPress onPress) {
-        return arrow(x, y, forward, false, message, onPress);
+        return arrow(x, y, forward, message, onPress, null);
+    }
+
+    static Button arrow(int x, int y, boolean forward, Component message, Button.OnPress onPress, BooleanSupplier available) {
+        return arrow(x, y, forward, false, message, onPress, available);
     }
 
     static Button verticalArrow(int x, int y, boolean down, Component message, Button.OnPress onPress) {
-        return arrow(x, y, down, true, message, onPress);
+        return arrow(x, y, down, true, message, onPress, null);
     }
 
-    private static Button arrow(int x, int y, boolean forward, boolean vertical, Component message, Button.OnPress onPress) {
+    private static Button arrow(int x, int y, boolean forward, boolean vertical, Component message, Button.OnPress onPress,
+                                BooleanSupplier available) {
         var button = new SoundButton(x, y, 32, 32, message, onPress, narration -> narration.get()) {
             @Override
             protected void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-                float brightness = active ? 1 : 0.35F;
+                boolean bright = available == null ? active : available.getAsBoolean();
+                float brightness = bright ? 1 : 0.35F;
+                RenderSystem.enableBlend();
                 graphics.setColor(brightness, brightness, brightness, alpha);
                 graphics.pose().pushPose();
                 graphics.pose().translate(getX(), getY(), 0);
@@ -82,6 +90,7 @@ final class SelectionControls {
                 drawArrow(graphics, forward, active && isHoveredOrFocused(), 8, 4);
                 graphics.pose().popPose();
                 graphics.setColor(1, 1, 1, 1);
+                RenderSystem.disableBlend();
             }
         };
         button.setTooltip(Tooltip.create(message));

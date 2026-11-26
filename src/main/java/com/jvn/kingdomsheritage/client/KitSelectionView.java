@@ -123,9 +123,11 @@ final class KitSelectionView {
     private void updateButtons(float progress) {
         if (confirm == null) return;
         boolean reviewing = confirming || progress > 0;
-        previous.visible = next.visible = !reviewing;
-        previous.active = model.index() > 0 && !model.submitted() && !reviewing;
-        next.active = model.index() + 1 < model.choices().size() && !model.submitted() && !reviewing;
+        previous.visible = next.visible = progress < 1;
+        previous.active = !reviewing && canSelectKit(model.index() - 1);
+        next.active = !reviewing && canSelectKit(model.index() + 1);
+        previous.setAlpha(1 - progress);
+        next.setAlpha(1 - progress);
         back.active = !model.submitted() && (confirming ? progress > 0.65F : progress == 0);
         back.setMessage(Component.translatable(reviewing ? "screen.kingdomsheritage.choose_another" : "gui.back"));
         confirm.active = !model.submitted() && model.problem().getString().isEmpty()
@@ -140,6 +142,10 @@ final class KitSelectionView {
             var screen = Minecraft.getInstance().screen;
             if (!cosmeticSwitch.visible && screen != null && screen.getFocused() == cosmeticSwitch) screen.setFocused(null);
         }
+    }
+
+    private boolean canSelectKit(int index) {
+        return !model.submitted() && index >= 0 && index < model.choices().size();
     }
 
     private void confirm() {
@@ -190,9 +196,9 @@ final class KitSelectionView {
         screen.renderables.removeIf(renderable -> !equipment || !isEquipmentControl(screen, renderable, accessories));
         if (accessories) AccessoriesControls.hideCrafting(screen);
         view.previous = SelectionControls.arrow(8, 8, false, Component.translatable("screen.kingdomsheritage.previous_kit"),
-                button -> view.model.select(view.model.index() - 1));
+                button -> view.model.select(view.model.index() - 1), () -> view.canSelectKit(view.model.index() - 1));
         view.next = SelectionControls.arrow(screen.width - 28, 8, true, Component.translatable("screen.kingdomsheritage.next_kit"),
-                button -> view.model.select(view.model.index() + 1));
+                button -> view.model.select(view.model.index() + 1), () -> view.canSelectKit(view.model.index() + 1));
         view.back = new SelectionControls.SoundButton(8, screen.height - 27, 70, 20,
                 Component.translatable("gui.back"), button -> view.back());
         view.confirm = new SelectionControls.SoundButton(screen.width - 108, screen.height - 27, 100, 20,
@@ -483,13 +489,9 @@ final class KitSelectionView {
         graphics.pose().translate(0, 0, 500);
         if (progress < 1) {
             int opacity = Math.max(4, Math.round((1 - progress) * 255)) << 24;
-            int center = bounds.getX() + bounds.getWidth() / 2;
-            int titleY = Math.max(2, bounds.getY() - STAT_CLEARANCE - font.lineHeight - 2);
-            if (titleY >= 16) SelectionText.centered(graphics, font, Component.translatable("screen.kingdomsheritage.kit"), center, titleY - 12, opacity | 0xffffff);
-            var title = DefinitionJson.component(model.choices().get(model.index()), "title").copy();
-            title.append(" (" + (model.index() + 1) + "/" + model.choices().size() + ")");
-            SelectionText.centered(graphics, font, font.plainSubstrByWidth(title.getString(), Math.min(screen.width - 24, bounds.getWidth() + 60)),
-                    center, titleY, opacity | 0xffffff);
+            renderHeading(screen, graphics, opacity);
+            renderControlWithoutTooltip(previous, graphics, -10000, -10000, partialTick);
+            renderControlWithoutTooltip(next, graphics, -10000, -10000, partialTick);
         }
         float alpha = Mth.clamp((progress - 0.3F) / 0.7F, 0, 1);
         if (alpha > 0) {
@@ -531,7 +533,7 @@ final class KitSelectionView {
         graphics.pose().popPose();
     }
 
-    private void renderDetails(Screen screen, GuiGraphics graphics, int mouseX, int mouseY) {
+    private int renderHeading(Screen screen, GuiGraphics graphics, int opacity) {
         var font = Minecraft.getInstance().font;
         int center = bounds.getX() + bounds.getWidth() / 2;
         var budget = model.shopBudgetLabel(model.index());
@@ -541,20 +543,18 @@ final class KitSelectionView {
         int titleY = showNotice ? Math.max(2, noticeY - font.lineHeight - 2) : noticeY;
         int budgetY = titleY - 11;
         int headingY = (budget == null ? titleY : budgetY) - 12;
-        graphics.pose().pushPose();
-        graphics.pose().translate(0, 0, 500);
-        if (headingY >= 0) SelectionText.centered(graphics, font, Component.translatable("screen.kingdomsheritage.kit"), center, headingY, 0xffffff);
-        JsonObject choice = model.choices().get(model.index());
-        var title = DefinitionJson.component(choice, "title").copy();
+        if (headingY >= 0) SelectionText.centered(graphics, font, Component.translatable("screen.kingdomsheritage.kit"), center, headingY, opacity | 0xffffff);
+        var title = DefinitionJson.component(model.choices().get(model.index()), "title").copy();
         title.append(" (" + (model.index() + 1) + "/" + model.choices().size() + ")");
-        SelectionText.centered(graphics, font, font.plainSubstrByWidth(title.getString(), Math.min(screen.width - 24, bounds.getWidth() + 60)), center, titleY, 0xffffff);
+        SelectionText.centered(graphics, font, font.plainSubstrByWidth(title.getString(), Math.min(screen.width - 24, bounds.getWidth() + 60)),
+                center, titleY, opacity | 0xffffff);
         if (showNotice) {
             int available = Math.max(1, 2 * Math.min(center, screen.width - center) - 16);
             float scale = Math.min(1F, (float) available / Math.max(1, font.width(notice)));
             graphics.pose().pushPose();
             graphics.pose().translate(center, Math.max(titleY + font.lineHeight, noticeY), 0);
             graphics.pose().scale(scale, scale, 1);
-            SelectionText.centered(graphics, font, notice, 0, 0, 0xf2cd83);
+            SelectionText.centered(graphics, font, notice, 0, 0, opacity | 0xf2cd83);
             graphics.pose().popPose();
         }
         if (budget != null && budgetY >= 0) {
@@ -566,9 +566,19 @@ final class KitSelectionView {
             }
             var summaryLines = font.split(summary, Math.max(1, screen.width - 16));
             if (!summaryLines.isEmpty()) {
-                SelectionText.centered(graphics, font, summaryLines.getFirst(), center, budgetY, 0xffffff);
+                SelectionText.centered(graphics, font, summaryLines.getFirst(), center, budgetY, opacity | 0xffffff);
             }
         }
+        return titleY;
+    }
+
+    private void renderDetails(Screen screen, GuiGraphics graphics, int mouseX, int mouseY) {
+        var font = Minecraft.getInstance().font;
+        int center = bounds.getX() + bounds.getWidth() / 2;
+        graphics.pose().pushPose();
+        graphics.pose().translate(0, 0, 500);
+        int titleY = renderHeading(screen, graphics, 0xff000000);
+        JsonObject choice = model.choices().get(model.index());
         boolean hasError = !model.problem().getString().isEmpty() || !model.error().getString().isEmpty();
         Component detail = !model.problem().getString().isEmpty() ? model.problem()
                 : !model.error().getString().isEmpty()

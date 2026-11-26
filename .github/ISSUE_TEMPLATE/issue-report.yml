@@ -1,0 +1,36 @@
+name: Report an issue
+description: Report a problem with the pack creator website or the actual mod.
+body:
+  - type: dropdown
+    id: affected-area
+    attributes:
+      label: What does the issue affect?
+      options:
+        - Pack creator / website
+        - Mod
+        - Both
+    validations:
+      required: true
+
+  - type: input
+    id: mod-version
+    attributes:
+      label: Kingdoms Heritage mod version
+      description: Enter the version number, or enter N/A if the issue only affects the website and you did not use the mod.
+      placeholder: 1.0.2
+    validations:
+      required: true
+
+  - type: textarea
+    id: issue-details
+    attributes:
+      label: What happened?
+      description: Include what you expected to happen and any steps I can follow to reproduce the issue.
+    validations:
+      required: true
+
+  - type: textarea
+    id: attachments
+    attributes:
+      label: Screenshots, logs, or crash reports
+      description: Attach any files that help explain the issue or add any useful context.
