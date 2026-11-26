@@ -19,7 +19,9 @@ import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Player;
-import net.neoforged.neoforge.client.event.ContainerScreenEvent;
+import net.minecraft.world.inventory.CraftingContainer;
+import net.minecraft.world.inventory.ResultContainer;
+import net.minecraft.world.inventory.Slot;
 
 public final class KitSelection {
     private final JsonObject catalog;
@@ -33,7 +35,6 @@ public final class KitSelection {
     private final HeritageConfig.InventoryPolicy inventoryPolicy;
     private KitDefinition kit;
     private KitShopTabs.Preview shopTabs = KitShopTabs.Preview.EMPTY;
-    private final boolean recipeBookOpen;
     private List<KitDefinition.StackEntry> stacks = List.of();
     private int index;
     private boolean submitted;
@@ -56,7 +57,6 @@ public final class KitSelection {
                 : choices.stream().mapToInt(choice -> choice.get("shop") instanceof JsonObject shop
                         && shop.get("sections") instanceof JsonArray sections ? KitShopTabs.previewHeight(sections.size()) : 0)
                         .max().orElse(0);
-        recipeBookOpen = Minecraft.getInstance().player.getRecipeBook().isOpen(net.minecraft.world.inventory.RecipeBookType.CRAFTING);
         select(0);
     }
 
@@ -142,7 +142,6 @@ public final class KitSelection {
             Minecraft.getInstance().setScreen(shop);
             return;
         }
-        Minecraft.getInstance().player.getRecipeBook().setOpen(net.minecraft.world.inventory.RecipeBookType.CRAFTING, false);
         Minecraft.getInstance().setScreen(new InventoryScreen(player));
     }
 
@@ -241,10 +240,6 @@ public final class KitSelection {
     private record NeighborPreview(KitDefinition kit, List<KitDefinition.StackEntry> stacks,
                                    KitPreview inventory, KitShopTabs.Preview shopTabs) {}
 
-    void restore() {
-        if (Minecraft.getInstance().player == player) Minecraft.getInstance().player.getRecipeBook().setOpen(net.minecraft.world.inventory.RecipeBookType.CRAFTING, recipeBookOpen);
-    }
-
     KitStats.Preview previewStats() { return inventoryPreview.stats(); }
     long purseGrant() { return inventoryPreview.purseGrant(); }
     KitSelectionView view() { return view; }
@@ -282,20 +277,15 @@ public final class KitSelection {
 
     void close() {
         view.close();
-        restore();
     }
 
     static void register() { KitSelectionView.register(); }
     static boolean isInventory(Screen screen) { return KitSelectionView.isInventory(screen); }
     static boolean isLayoutPicker(Screen screen) { return KitSelectionView.isLayoutPicker(screen); }
-    static boolean capturingPreview() { return KitSelectionView.capturingPreview(); }
+    public static boolean capturingPreview() { return KitSelectionView.capturingPreview(); }
 
-    public static boolean renderPreviewContainerLayer(ContainerScreenEvent.Render event) {
-        if (!capturingPreview() || !isPreviewInventory(event.getContainerScreen())) return false;
-        if (event instanceof ContainerScreenEvent.Render.Foreground) {
-            KitSelectionView.hideCrafting(event.getContainerScreen(), event.getGuiGraphics());
-        }
-        return true;
+    public static boolean isCraftingSlot(Slot slot) {
+        return slot.container instanceof CraftingContainer || slot.container instanceof ResultContainer;
     }
 
     public static net.minecraft.world.entity.Entity previewEntity(net.minecraft.world.entity.Entity entity) {

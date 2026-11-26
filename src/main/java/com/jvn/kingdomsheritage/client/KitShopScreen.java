@@ -42,7 +42,6 @@ final class KitShopScreen extends Screen {
     private static final int DETAIL_GAIN = 0xff385023, DETAIL_BLOCKED = 0xff812c23;
     private static final ResourceLocation SHOP = ResourceLocation.fromNamespaceAndPath(
             "kingdomsheritage", "textures/gui/selection/kit_shop.png");
-    private static final ResourceLocation INVENTORY = ResourceLocation.withDefaultNamespace("textures/gui/container/inventory.png");
     private static final ResourceLocation BAR = ResourceLocation.withDefaultNamespace("hud/experience_bar_background");
     private static final ResourceLocation FILL = ResourceLocation.withDefaultNamespace("hud/experience_bar_progress");
     private static final List<ResourceLocation> EMPTY_EQUIPMENT = List.of(
@@ -475,8 +474,7 @@ final class KitShopScreen extends Screen {
         renderShopPanel(graphics);
         for (var tab : tabs) if (tab.index == section) tab.render(graphics, mouseX, mouseY, partialTick);
         int inv = left + shopWidth;
-        graphics.blit(INVENTORY, inv, top, 0, 0, INVENTORY_WIDTH, PANEL_HEIGHT);
-        graphics.fill(inv + 95, top + 4, inv + 173, top + 78, 0xffc6c6c6);
+        graphics.blit(KitInventoryTextures.INVENTORY, inv, top, 0, 0, INVENTORY_WIDTH, PANEL_HEIGHT);
         renderDetails(graphics, inv, hoveredOffer, refund, blocked);
 
         float elapsed = trade == null ? 1 : Mth.clamp((Util.getMillis() - trade.started()) / (float) EFFECT_DURATION, 0, 1);

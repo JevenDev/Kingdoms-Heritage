@@ -5,15 +5,18 @@ import com.jvn.kingdomsheritage.compat.EquipmentCompat;
 import com.jvn.kingdomsheritage.data.DefinitionJson;
 import com.jvn.kingdomsheritage.data.KitStats;
 import com.jvn.kingdomsheritage.mixin.InventoryButtonAction;
+import com.jvn.kingdomsheritage.mixin.InventoryButtonSprites;
 import java.util.List;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.ImageButton;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
+import net.minecraft.client.gui.screens.recipebook.RecipeBookComponent;
 import net.minecraft.client.renderer.Rect2i;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.Mth;
@@ -214,6 +217,8 @@ final class KitSelectionView {
     }
 
     private static boolean isEquipmentControl(Screen screen, Object control, boolean accessories) {
+        if (control instanceof RecipeBookComponent || control instanceof ImageButton button
+                && ((InventoryButtonSprites) button).heritage$getSprites().equals(RecipeBookComponent.RECIPE_BUTTON_SPRITES)) return false;
         if (KitSelection.isEquipmentClass(control.getClass())) return true;
         // the original Accessories screen builds vanilla buttons with mod-owned actions
         if (control instanceof Button button) {
@@ -354,8 +359,7 @@ final class KitSelectionView {
             int left = container.getGuiLeft();
             int right = left + container.getXSize();
             for (var slot : container.getMenu().slots) {
-                if (slot.isActive() && !(slot.container instanceof net.minecraft.world.inventory.CraftingContainer)
-                        && !(slot.container instanceof net.minecraft.world.inventory.ResultContainer)) {
+                if (slot.isActive() && !KitSelection.isCraftingSlot(slot)) {
                     left = Math.min(left, container.getGuiLeft() + slot.x - 8);
                     right = Math.max(right, container.getGuiLeft() + slot.x + 24);
                 }
@@ -582,14 +586,6 @@ final class KitSelectionView {
                     mouseX, mouseY);
         }
         graphics.pose().popPose();
-    }
-
-    static void hideCrafting(AbstractContainerScreen<?> screen, GuiGraphics graphics) {
-        if (screen.getClass().getName().startsWith("io.wispforest.accessories.")) return;
-        boolean crafting = screen.getMenu().slots.stream().anyMatch(slot ->
-                slot.container instanceof net.minecraft.world.inventory.CraftingContainer
-                        || slot.container instanceof net.minecraft.world.inventory.ResultContainer);
-        if (crafting) graphics.fill(95, 4, 173, 78, 0xffc6c6c6);
     }
 
     private static void mouse(ScreenEvent.MouseButtonPressed.Pre event) {

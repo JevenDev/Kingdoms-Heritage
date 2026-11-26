@@ -2,6 +2,7 @@ package com.jvn.kingdomsheritage.client;
 
 import com.jvn.kingdomsheritage.compat.EquipmentCompat;
 import com.jvn.kingdomsheritage.data.KitLoadout;
+import java.util.List;
 import lain.mods.cos.impl.ModConfigs;
 import lain.mods.cos.impl.client.gui.GuiCosArmorButton;
 import lain.mods.cos.impl.client.gui.GuiCosArmorInventory;
@@ -47,8 +48,6 @@ final class CosmeticArmorKitPreview {
     }
 
     private static final class PreviewScreen extends GuiCosArmorInventory {
-        private static final int CRAFTING_LEFT = 95;
-        private static final int COSMETIC_ROW_TOP = 61;
         private final InventoryCosArmor cosmetics;
 
         PreviewScreen(Player player, InventoryCosArmor cosmetics) {
@@ -58,24 +57,17 @@ final class CosmeticArmorKitPreview {
 
         @Override
         protected void init() {
-            super.init();
-            // the preview menu never becomes the player's active container
-            renderables.removeIf(widget -> !(widget instanceof GuiCosArmorToggleButton));
+            var activeMenu = minecraft.player.containerMenu;
+            try {
+                super.init();
+            } finally {
+                minecraft.player.containerMenu = activeMenu;
+            }
+            setFocused(null);
+            for (var child : List.copyOf(children())) {
+                if (!(child instanceof GuiCosArmorToggleButton)) removeWidget(child);
+            }
             renderables.forEach(widget -> ((GuiCosArmorToggleButton) widget).active = false);
-        }
-
-        @Override
-        public void renderBackground(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-            renderBg(graphics, partialTick, mouseX, mouseY);
-            graphics.fill(leftPos + CRAFTING_LEFT, topPos + 4, leftPos + 173, topPos + COSMETIC_ROW_TOP, 0xffc6c6c6);
-        }
-
-        @Override
-        protected void renderLabels(GuiGraphics graphics, int mouseX, int mouseY) {}
-
-        @Override
-        protected boolean isHovering(int x, int y, int width, int height, double mouseX, double mouseY) {
-            return (x < CRAFTING_LEFT || y >= COSMETIC_ROW_TOP) && super.isHovering(x, y, width, height, mouseX, mouseY);
         }
 
         @Override
