@@ -4,16 +4,13 @@ const Zip=typeof module!=='undefined'?require('../pack/zip.js'):HeritageZip;
 const modelPath=/^assets\/([a-z0-9_.-]+)\/models\/item\/([a-z0-9/._-]+)\.json$/;
 const languagePath=/^assets\/([a-z0-9_.-]+)\/lang\/en_us\.json$/;
 const resourcePath=/^(?:([a-z0-9_.-]+):)?([a-z0-9/._-]+)$/;
+const itemArchivePath=/^assets\/[^/]+\/(?:models\/|textures\/|blockstates\/|lang\/en_us\.json$)|^data\/[^/]+\/recipe\//;
 const flatModels=new Set(['minecraft:item/generated','minecraft:item/handheld','minecraft:item/handheld_rod']);
 const decoder=new TextDecoder('utf-8',{fatal:true});
-const maxArchiveSize=64*1024*1024;
+const maxArchiveMiB=512,maxArchiveSize=maxArchiveMiB*1024*1024;
 const readJson=async(archive,path,limit=256*1024)=>JSON.parse(decoder.decode(await archive.read(path,limit)));
 const hasName=value=>typeof value==='string'&&value.trim()!=='';
 const fallbackName=path=>path.split(/[/_.-]+/).map(word=>word.charAt(0).toUpperCase()+word.slice(1)).join(' ');
-
-function open(bytes) {
-  return Zip.open(bytes,{maxEntries:65534,select:path=>/^assets\/[^/]+\/(?:models\/|textures\/|blockstates\/|lang\/en_us\.json$)|^data\/[^/]+\/recipe\//.test(path)});
-}
 
 async function index(archive) {
   const names=new Map(),models=[];
@@ -120,8 +117,9 @@ async function read(files) {
   for(const file of files){
     try{
       if(!/\.jar$/i.test(file.name))throw new Error('Choose a mod JAR.');
-      if(file.size>maxArchiveSize)throw new Error('Mod JARs must be no larger than 64 MiB.');
-      const archive=open(new Uint8Array(await file.arrayBuffer())),entries=await index(archive);
+      if(file.size>maxArchiveSize)throw new Error('Mod JARs must be no larger than '+maxArchiveMiB+' MiB.');
+      const archive=await Zip.openBlob(file,{maxEntries:65534,maxUnpackedBytes:maxArchiveSize,select:path=>itemArchivePath.test(path)});
+      const entries=await index(archive);
       if(!entries.length)failures.push(file.name+' (No Minecraft 1.21.1 item models found.)');
       archives.push({archive,entries});
     }catch(error){failures.push(file.name+' ('+error.message+')');}

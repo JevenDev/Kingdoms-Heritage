@@ -3,8 +3,7 @@ const test=require('node:test'),assert=require('node:assert/strict');
 const {zip}=require('../pack/zip.js'),ModItems=require('./mod-items.js');
 const json=value=>JSON.stringify(value);
 function jar(name,entries){
-  const data=zip(Object.entries(entries).map(([path,content])=>({path,content})));
-  return {name,size:data.length,arrayBuffer:async()=>data.buffer};
+  return new File([zip(Object.entries(entries).map(([path,content])=>({path,content})))],name);
 }
 
 test('indexes item model IDs with corroborating names or recipe results',async()=>{
@@ -27,7 +26,7 @@ test('indexes item model IDs with corroborating names or recipe results',async()
     'assets/second/models/item/copper_tool.json':'{}',
     'assets/minecraft/models/item/stone.json':'{}'
   });
-  const invalid={name:'bad.jar',size:1,arrayBuffer:async()=>new ArrayBuffer(1)};
+  const invalid=new File(['?'],'bad.jar');
   const {items,failures}=await ModItems.read([invalid,named,unnamed]);
   assert.deepEqual(items.map(({id,name,block})=>[id,name,block]),[
     ['example:tools/hammer','Hammer',false],
@@ -45,6 +44,27 @@ test('indexes large JAR directories without extracting unrelated entries',async(
   const {items,failures}=await ModItems.read([jar('large.jar',entries)]);
   assert.deepEqual(failures,[]);
   assert.deepEqual(items.map(item=>item.id),['example:wrench']);
+});
+
+test('imports a 90 MiB JAR using bounded reads and rejects JARs above 512 MiB',async()=>{
+  const file=jar('large.jar',{
+    'assets/example/lang/en_us.json':json({'item.example.wrench':'Modded Wrench'}),
+    'assets/example/models/item/wrench.json':'{}',
+    'assets/example/sounds/ambient.ogg':new Uint8Array(90*1024*1024)
+  });
+  let bytesRead=0;
+  const tracked={
+    name:file.name,size:file.size,
+    slice(start,end){
+      bytesRead+=end-start;
+      return file.slice(start,end);
+    }
+  };
+  const oversized={name:'oversized.jar',size:512*1024*1024+1};
+  const {items,failures}=await ModItems.read([tracked,oversized]);
+  assert.deepEqual(items.map(({id,name})=>[id,name]),[['example:wrench','Modded Wrench']]);
+  assert.deepEqual(failures,['oversized.jar (Mod JARs must be no larger than 512 MiB.)']);
+  assert.ok(bytesRead>0&&bytesRead<70*1024,bytesRead+' bytes read from JAR');
 });
 
 test('resolves inherited flat layers and uses child texture overrides',async()=>{

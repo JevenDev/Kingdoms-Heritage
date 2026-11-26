@@ -1,6 +1,7 @@
 (() => {
 'use strict';
 const encoder=new TextEncoder();
+const decoder=new TextDecoder('utf-8',{fatal:true});
 const table=Uint32Array.from({length:256},(_,n)=>{
   for(let bit=0;bit<8;bit++)n=(n>>>1)^((n&1)?0xedb88320:0);
   return n>>>0;
@@ -54,8 +55,9 @@ function safePath(path,directory=false) {
   if(/[\\:\x00-\x1f]|(?:^|\/)\.*(?:\/|$)/.test(name))throw new Error('Unsafe ZIP path.');
 }
 const maxBytes=64*1024*1024;
-async function inflate(bytes,size) {
-  const reader=new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw')).getReader(),chunks=[];
+const maxEndRecord=22+65535;
+async function inflate(blob,size) {
+  const reader=blob.stream().pipeThrough(new DecompressionStream('deflate-raw')).getReader(),chunks=[];
   let length=0;
   try {
     for(;;){const {done,value}=await reader.read();if(done)break;length+=value.length;if(length>size)throw new Error('ZIP entry exceeds its declared size.');chunks.push(value);}
@@ -64,26 +66,34 @@ async function inflate(bytes,size) {
   for(const chunk of chunks){result.set(chunk,offset);offset+=chunk.length;}
   return result;
 }
-function open(bytes,{select,maxEntries=4096}={}) {
-  if(!(bytes instanceof Uint8Array)||bytes.length<22)throw new Error('Choose a valid ZIP archive.');
-  if(bytes.length>maxBytes)throw new Error('ZIP archives must be no larger than 64 MiB.');
+function findDirectory(bytes,archiveSize,maxEntries) {
+  if(bytes.length<22)throw new Error('Choose a valid ZIP archive.');
   const view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength),u16=at=>view.getUint16(at,true),u32=at=>view.getUint32(at,true);
-  let end=-1;
-  for(let at=bytes.length-22;at>=Math.max(0,bytes.length-65557);at--)if(u32(at)===0x06054b50&&at+22+u16(at+20)===bytes.length){end=at;break;}
-  if(end<0)throw new Error('ZIP directory is missing or truncated.');
-  const count=u16(end+10),central=u32(end+16),length=u32(end+12);
-  if(u16(end+4)||u16(end+6)||u16(end+8)!==count)throw new Error('Split ZIP archives are not supported.');
+  let record=-1;
+  for(let at=bytes.length-22;at>=0;at--)if(u32(at)===0x06054b50&&at+22+u16(at+20)===bytes.length){record=at;break;}
+  if(record<0)throw new Error('ZIP directory is missing or truncated.');
+  const count=u16(record+10),central=u32(record+16),length=u32(record+12),end=archiveSize-bytes.length+record;
+  if(u16(record+4)||u16(record+6)||u16(record+8)!==count)throw new Error('Split ZIP archives are not supported.');
   if(count===65535||central===0xffffffff||length===0xffffffff)throw new Error('ZIP64 archives are not supported.');
   if(!count||count>maxEntries||central+length!==end)throw new Error('Invalid ZIP directory or too many files.');
-  const decoder=new TextDecoder('utf-8',{fatal:true}),names=new Set(),entries=new Map();
-  function dataStart(path,{local,flags,method,compressed,crc,size}) {
-    if(local+30>central||u32(local)!==0x04034b50||u16(local+6)!==flags||u16(local+8)!==method)throw new Error('Invalid ZIP file header.');
-    const localName=u16(local+26),start=local+30+localName+u16(local+28);
-    if(start+compressed>central||decoder.decode(bytes.subarray(local+30,local+30+localName))!==path)throw new Error('Truncated or mismatched ZIP entry.');
-    if(!(flags&8)&&(u32(local+14)!==crc||u32(local+18)!==compressed||u32(local+22)!==size))throw new Error('ZIP file sizes or checksum disagree.');
-    return start;
-  }
-  let at=central,total=0;
+  return {count,central,end};
+}
+function localData(header,{local,flags,method,compressed,crc,size},central) {
+  if(header.length!==30)throw new Error('Invalid ZIP file header.');
+  const view=new DataView(header.buffer,header.byteOffset,header.byteLength),u16=at=>view.getUint16(at,true),u32=at=>view.getUint32(at,true);
+  if(u32(0)!==0x04034b50||u16(6)!==flags||u16(8)!==method)throw new Error('Invalid ZIP file header.');
+  const nameEnd=local+30+u16(26),start=nameEnd+u16(28);
+  if(start+compressed>central)throw new Error('Truncated or mismatched ZIP entry.');
+  if(!(flags&8)&&(u32(14)!==crc||u32(18)!==compressed||u32(22)!==size))throw new Error('ZIP file sizes or checksum disagree.');
+  return {nameEnd,start};
+}
+function checkLocalName(path,bytes) {
+  if(decoder.decode(bytes)!==path)throw new Error('Truncated or mismatched ZIP entry.');
+}
+function readDirectory(bytes,count,select,maxUnpackedBytes,checkDirectory) {
+  const end=bytes.length,view=new DataView(bytes.buffer,bytes.byteOffset,end),u16=at=>view.getUint16(at,true),u32=at=>view.getUint32(at,true);
+  const names=new Set(),entries=new Map();
+  let at=0,total=0;
   for(let index=0;index<count;index++){
     if(at+46>end||u32(at)!==0x02014b50)throw new Error('Invalid ZIP entry.');
     const flags=u16(at+8),method=u16(at+10),crc=u32(at+16),compressed=u32(at+20),size=u32(at+24),nameLength=u16(at+28),extra=u16(at+30),comment=u16(at+32),local=u32(at+42);
@@ -93,29 +103,64 @@ function open(bytes,{select,maxEntries=4096}={}) {
     if(names.has(path))throw new Error('Duplicate ZIP path: '+path);names.add(path);
     if(directory){
       if(size||crc||((!select||method===0)&&compressed))throw new Error('ZIP directory contains file data.');
-      if(!select)dataStart(path,{local,flags,method,crc,size,compressed});
+      checkDirectory?.(path,{local,flags,method,crc,size,compressed});
     }else if(!select||select(path)){
-      if(size>32*1024*1024||(total+=size)>maxBytes)throw new Error('Unpacked ZIP contents exceed the import size limit.');
+      if(size>32*1024*1024||(total+=size)>maxUnpackedBytes)throw new Error('Unpacked ZIP contents exceed the import size limit.');
       entries.set(path,{local,flags,method,crc,size,compressed});
     }
     at=next;
   }
   if(at!==end)throw new Error('Invalid ZIP directory size.');
+  return entries;
+}
+function archive(entries,readPacked) {
   return {paths:entries.keys(),has:path=>entries.has(path),async read(path,limit=maxBytes){
     const entry=entries.get(path);
     if(!entry)return;
     if(entry.size>limit)throw new Error('ZIP entry exceeds its import size limit: '+path);
     if(entry.method===0&&entry.compressed!==entry.size)throw new Error('ZIP file sizes disagree: '+path);
-    const start=dataStart(path,entry),packed=bytes.subarray(start,start+entry.compressed),content=entry.method===0?packed.slice():await inflate(packed,entry.size);
+    const packed=await readPacked(path,entry);
+    let content;
+    if(entry.method===0)content=packed instanceof Uint8Array?packed.slice():new Uint8Array(await packed.arrayBuffer());
+    else content=await inflate(packed instanceof Uint8Array?new Blob([packed]):packed,entry.size);
     if(content.length!==entry.size||crc32(content)!==entry.crc)throw new Error('ZIP entry failed its checksum: '+path);
     return content;
   }};
+}
+function open(bytes,{select,maxEntries=4096}={}) {
+  if(!(bytes instanceof Uint8Array)||bytes.length<22)throw new Error('Choose a valid ZIP archive.');
+  if(bytes.length>maxBytes)throw new Error('ZIP archives must be no larger than 64 MiB.');
+  const {count,central,end}=findDirectory(bytes.subarray(-maxEndRecord),bytes.length,maxEntries);
+  function dataStart(path,entry) {
+    const {local}=entry,{nameEnd,start}=localData(bytes.subarray(local,Math.min(local+30,central)),entry,central);
+    checkLocalName(path,bytes.subarray(local+30,nameEnd));
+    return start;
+  }
+  const entries=readDirectory(bytes.subarray(central,end),count,select,maxBytes,select?undefined:dataStart);
+  return archive(entries,(path,entry)=>{
+    const start=dataStart(path,entry);
+    return bytes.subarray(start,start+entry.compressed);
+  });
+}
+async function openBlob(blob,{select,maxEntries,maxUnpackedBytes}) {
+  const read=async(start,end)=>new Uint8Array(await blob.slice(start,end).arrayBuffer());
+  const tailStart=Math.max(0,blob.size-maxEndRecord),tail=await read(tailStart,blob.size);
+  const {count,central,end}=findDirectory(tail,blob.size,maxEntries);
+  if(end-central>maxBytes)throw new Error('ZIP directory exceeds the import size limit.');
+  const directory=central>=tailStart?tail.subarray(central-tailStart,end-tailStart):await read(central,end);
+  const entries=readDirectory(directory,count,select,maxUnpackedBytes);
+  return archive(entries,async(path,entry)=>{
+    const {local}=entry,header=await read(local,Math.min(local+30,central));
+    const {nameEnd,start}=localData(header,entry,central);
+    checkLocalName(path,await read(local+30,nameEnd));
+    return blob.slice(start,start+entry.compressed);
+  });
 }
 async function unzip(bytes) {
   const archive=open(bytes),files=[];
   for(const path of archive.paths)files.push({path,content:await archive.read(path)});
   return files;
 }
-if(typeof module!=='undefined')module.exports={zip,unzip,open,crc32};
-else globalThis.HeritageZip={zip,unzip,open};
+if(typeof module!=='undefined')module.exports={zip,unzip,open,openBlob,crc32};
+else globalThis.HeritageZip={zip,unzip,open,openBlob};
 })();
