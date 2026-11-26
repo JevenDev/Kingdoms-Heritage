@@ -72,7 +72,6 @@ globalThis.HeritageTooltips={setup({font,sprite,screen='intro'}) {
     'preview-flow':['Preview full flow','Play cards, kit selection and arrival in sequence.'],
     'pack-gui-scale':['Player GUI scale','Auto follows the player’s GUI setting. A fixed value is exported and applies to everyone.'],
     'namespace':['Namespace','Used in exported resource IDs and file paths. Changing it changes the IDs other packs may reference.'],
-    'allow-custom-targets':['Custom destination IDs','Allow biome and structure IDs outside the bundled list. They must exist in the server’s mods or datapacks.'],
     'kit-mode':['Available kits','All included kits also includes kits added later. Selected kits restricts this location to checked entries.'],
     'location-intro':['Default arrival intro','Used unless the chosen destination supplies its own intro. A destination override replaces the whole intro.'],
     'picture-keep-resolution':['Keep image resolution','Keep the uploaded pixel dimensions in the resource pack. Larger images increase the download size.'],

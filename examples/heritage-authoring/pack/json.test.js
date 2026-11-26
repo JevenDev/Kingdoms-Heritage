@@ -30,6 +30,14 @@ test('a fresh pack can edit its location while keeping the built-in empty kit',(
   assert.throws(()=>J.apply(next,'data',file.path,file.content),/built-in/i);
 });
 
+test('JSON edits retain custom IDs in the Minecraft namespace',()=>{
+  const value=workspace(),original=read(value,spawnPath);
+  const destination={type:'biome',target:'minecraft:dappled_forest',dimension:'minecraft:moon'};
+  const next=apply(value,spawnPath,{...original,...destination});
+  for(const [key,id] of Object.entries(destination))assert.equal(read(next,spawnPath)[key],id);
+  assert.throws(()=>apply(next,spawnPath,{...read(next,spawnPath),target:'minecraft:Dappled Forest'}),/must be a resource ID/);
+});
+
 test('title edits preserve all-kit assignments when new kits are included',()=>{
   const value=workspace(),next=apply(value,spawnPath,{...read(value,spawnPath),title:'Camp'});
   const extra=P.copy(next.libraries.kits.kits[0]);extra.id='second';

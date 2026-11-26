@@ -79,7 +79,7 @@ function apply(value,group,path,source,createId=()=>crypto.randomUUID()){
         Object.assign(draft.state,{source,document:parsed,validDocument:P.copy(parsed),error:null,loreSources:[]});changed('kits',kit.id);
       }else{(pack.bundledKits??={})[resource]=parsed;}
     }else if(location){
-      P.validateSpawn(document,pack.allowCustomTargets===true);
+      P.validateSpawn(document);
       const selectors=document.kits??[];
       if(!Array.isArray(selectors)||selectors.some(selector=>typeof selector!=='string'))throw new Error('kits must be a list of kit IDs or #tags.');
       if(!equal(selectors,original?.kits??[])){
@@ -102,7 +102,7 @@ function apply(value,group,path,source,createId=()=>crypto.randomUUID()){
       if(!equal(document.image,original?.image))location.imageMode='manual';
       location.document=P.copy(document);location.fields=Object.fromEntries(P.fields.filter(key=>Object.hasOwn(document,key)).map(key=>[key,document[key]]));location.fields.type=document.type.toLowerCase();
     }else if(match&&match[2]==='spawns'&&Object.hasOwn(pack.bundledLocations??{},resource)){
-      P.validateSpawn(document,pack.allowCustomTargets===true);
+      P.validateSpawn(document);
       pack.bundledLocations[resource]=document;
     }else{
       const imported=pack.importedFiles?.[group]?.find(file=>file.path===path);

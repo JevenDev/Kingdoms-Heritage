@@ -154,19 +154,15 @@ function dimensionSuggestion(value) {
   const name=/^(?:minecraft:)?(nether|end)$/.exec(value)?.[1];
   return name?'minecraft:the_'+name:'';
 }
-function knownResource(value,kind,allowUnknown=false) {
-  const field=kind==='dimension'?'dimension':'target';
-  const suggestion=kind==='dimension'&&!allowUnknown?dimensionSuggestion(value):'';
-  if(suggestion)throw fieldError(field,(suggestion.endsWith('nether')?'The Nether':'The End')+' uses '+suggestion+'.');
+function validateDestinationId(value,kind) {
   try{resource(value,kind==='biome'?'Biome':kind==='structure'?'Structure':'Dimension',kind!=='dimension');}
-  catch(error){throw fieldError(field,error.message);}
-  const tag=value.startsWith('#'),id=value.replace(/^#/,'');
-  const normalized=id.includes(':')?id:'minecraft:'+id;
-  const known=registry[kind+(tag?'Tags':'')]??[];
-  if(normalized.startsWith('minecraft:')&&!known.includes(normalized)&&!allowUnknown)throw fieldError(kind==='dimension'?'dimension':'target','Unknown Minecraft '+kind+': '+value+'. Choose a suggestion, or enable custom Minecraft IDs in Pack options if another datapack defines it.');
-  return !known.includes(normalized);
+  catch(error){throw fieldError(kind==='dimension'?'dimension':'target',error.message);}
 }
-function validateSpawn(document,allowUnknown=false,validatedIntros=new Set()) {
+function isCustomResource(value,kind) {
+  const tag=value.startsWith('#'),id=resourceId(tag?value.slice(1):value);
+  return !registry[kind+(tag?'Tags':'')].includes(id);
+}
+function validateSpawn(document,validatedIntros=new Set()) {
   if(!object(document))throw new Error('A location must be an object.');
   const title=document.title??document.title_key;
   if(typeof title!=='string'||!title.trim()||title.length>120)throw fieldError(document.title===undefined&&document.title_key!==undefined?'title_key':'title','Enter a location title or title key from 1 to 120 characters.');
@@ -184,13 +180,13 @@ function validateSpawn(document,allowUnknown=false,validatedIntros=new Set()) {
     try{const source=JSON.stringify({intro:document.intro});if(!validatedIntros.has(source)&&validatedIntroDocuments.get(document.intro)!==source)preview.readJson(source);validatedIntros.add(source);validatedIntros.add(document.intro);validatedIntroDocuments.set(document.intro,source);}
     catch(error){throw Object.assign(fieldError('intro',error.message),{path:error.path});}
   }
-  if(document.dimension!==undefined)knownResource(document.dimension,'dimension',allowUnknown);
+  if(document.dimension!==undefined)validateDestinationId(document.dimension,'dimension');
   if(document.image!==undefined)try{resource(document.image,'Image');}catch(error){throw fieldError('image',error.message);}
   if(document.order!==undefined)try{integer(document.order,-2147483648,2147483647,'Order');}catch(error){throw fieldError('order',error.message);}
   for(const key of ['search_radius','random_radius'])if(document[key]!==undefined) {try{integer(document[key],16,30000,labels[key]);}catch(error){throw fieldError(key,error.message);}}
   for(const key of ['x','y','z'])if(document[key]!==undefined)try{integer(document[key],key==='y'?-2147483648:-29999984,key==='y'?2147483647:29999984,key.toUpperCase());}catch(error){throw fieldError(key,error.message);}
   if(type==='fixed'&&['x','y','z'].some(key=>document[key]===undefined))throw fieldError(['x','y','z'].find(key=>document[key]===undefined),'Fixed locations require X, Y and Z coordinates.');
-  if(type==='biome'||type==='structure')knownResource(document.target,type,allowUnknown);
+  if(type==='biome'||type==='structure')validateDestinationId(document.target,type);
   if(document.piece!==undefined) {
     if(type!=='structure')throw fieldError('piece','Only structures support a preferred piece.');
     try{resource(document.piece,'Preferred piece');}catch(error){throw fieldError('piece',error.message);}
@@ -204,7 +200,7 @@ function validateSpawn(document,allowUnknown=false,validatedIntros=new Set()) {
         if(typeof entry.type!=='string'||entry.type.toLowerCase()==='pool')throw fieldError('type','Choose a destination type other than pool.');
         const inherited={...document,...entry};delete inherited.pool;
         if(entry.intro===null)delete inherited.intro;
-        validateSpawn(inherited,allowUnknown,validatedIntros);
+        validateSpawn(inherited,validatedIntros);
       }catch(error){throw Object.assign(new Error('Place '+(index+1)+': '+error.message),{field:error.field,path:error.path,destination:index});}
     });
   } else if(document.pool!==undefined)throw fieldError('pool','Only pools support destinations.');
@@ -366,11 +362,12 @@ function inspect(state,catalog,{exporting=false,resources=exporting}={}) {
       if(!imported.length&&entry.kitMode!=='selected'||imported.length&&document.kits.length===matching.length&&document.kits.every(id=>matching.includes(id)))document.kits=copy(imported);
     }
     if(document.kits.length>128)throw fieldError('kits','A location can allow at most 128 kits.');
-    validateSpawn(document,state.allowCustomTargets===true,validatedIntros);
+    validateSpawn(document,validatedIntros);
     if(document.max_uses===undefined)unlimited=true;
     for(const place of [document,...(document.pool??[])]) {
-      if(place.dimension&&knownResource(place.dimension,'dimension',true))warnings.push('Custom dimensions must be installed and checked in-game with /heritage validate @s.');
-      if(['biome','structure'].includes(place.type)&&knownResource(place.target,place.type,true))warnings.push('Custom biomes, structures and groups must be installed and checked in-game with /heritage validate @s.');
+      const type=place.type.toLowerCase();
+      if(place.dimension&&isCustomResource(place.dimension,'dimension'))warnings.push('Custom dimensions must be installed and checked in-game with /heritage validate @s.');
+      if(['biome','structure'].includes(type)&&isCustomResource(place.target,type))warnings.push('Custom biomes, structures and groups must be installed and checked in-game with /heritage validate @s.');
     }
     add('data/'+namespace+'/heritage/spawns/'+path+'.json',document);spawnIds.add(namespace+':'+path);
     if(picture)resourceFiles.push({path:'assets/'+namespace+'/textures/gui/locations/'+path+'.png',...(resources?{content:picture}:{})});
@@ -381,7 +378,7 @@ function inspect(state,catalog,{exporting=false,resources=exporting}={}) {
     for(const [id,document] of Object.entries(state.bundledLocations)){
       const path='data/kingdomsheritage/heritage/spawns/'+id.split(':')[1]+'.json';
       if(paths.has(path))continue;
-      if(document.enabled!==false)validateSpawn(document.type==='structure'&&document.target==='minecraft:village'?{...document,target:'#minecraft:village'}:document,state.allowCustomTargets===true);
+      if(document.enabled!==false)validateSpawn(document,validatedIntros);
       add(path,copy(document));
     }
   });
@@ -419,7 +416,7 @@ function inspect(state,catalog,{exporting=false,resources=exporting}={}) {
   return {files:errors.length?[]:files,resourceFiles:errors.length?[]:resourceFiles,pictureCount,previewFiles:errors.length?previewFiles(state,catalog,exporting,dataMetadata):files.filter(file=>file.document||typeof file.content==='string'),errors,issues,warnings:[...new Set(warnings)],kitCount:count,locationCount:spawnIds.size};
 }
 function build(state,catalog){return inspect(state,catalog,{exporting:true});}
-const api={copy,setBundledKits,bundledKits,bundledLocationIds,orderedKitIds,slug,fileId,resource,drafts,location,importSpawn,dimensionSuggestion,knownResource,validateSpawn,build,inspect,emptyKit,types,fields,destinationFields,usesPicture,pictureId,pictureBytes,selectionPath,selectionDocument,kitPreview};
+const api={copy,setBundledKits,bundledKits,bundledLocationIds,orderedKitIds,slug,fileId,resource,drafts,location,importSpawn,dimensionSuggestion,validateSpawn,build,inspect,emptyKit,types,fields,destinationFields,usesPicture,pictureId,pictureBytes,selectionPath,selectionDocument,kitPreview};
 if(typeof module!=='undefined')module.exports=api;
 else globalThis.HeritagePack=api;
 })();

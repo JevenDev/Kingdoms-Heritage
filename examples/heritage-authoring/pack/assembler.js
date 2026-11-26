@@ -644,8 +644,10 @@ function renderOutput({validate=false,rebuild=true}={}) {
     if(property==='dimension')dimensionChoices(field);
     field.setAttribute('aria-label',[...label.childNodes].filter(node=>node.nodeType===3||node.nodeName==='SPAN').map(node=>node.textContent).join('').trim());
     if(!message){message=element('p',{class:'field-error',id:errorId});(property==='dimension'?label.closest('.dimension-field'):label).append(message);}
-    message.textContent=showIssue?issue.message:'';message.hidden=!showIssue;
-    const suggestion=showIssue&&property==='dimension'&&state.allowCustomTargets!==true?P.dimensionSuggestion(field.value):'';
+    const suggestion=!issue&&property==='dimension'?P.dimensionSuggestion(field.value):'';
+    message.className=suggestion?'hint':'field-error';
+    message.textContent=showIssue?issue.message:suggestion?'Vanilla ID: '+suggestion+'.':'';
+    message.hidden=!showIssue&&!suggestion;
     if(suggestion)message.append(element('button',{type:'button',class:'dimension-correction','data-correct-dimension':suggestion,'aria-label':'Use '+suggestion},'Use this ID'));
     if(showIssue)for(let parent=field.parentElement;parent;parent=parent.parentElement){if(parent.tagName==='DETAILS')parent.open=true;if(parent.matches('[data-location-types],[data-pool-types]'))parent.hidden=false;}
     const help=field.dataset.locationField==='target'?'target-help':field.id==='pack-gui-scale'?'gui-scale-help':field.id==='pack-kit-preview'?'kit-preview-help':field.id==='pack-custom-scene'?'intro-scene-help':field.id==='namespace'?'namespace-help':field.id==='location-id'?'location-id-help':'';
@@ -770,7 +772,6 @@ function render({refreshOutput=true}={}) {
   $('pack-card-borders').checked=state.selectionMetadata?.card_borders!==false;
   $('pack-kit-preview').value=P.kitPreview(state)??'inventory';
   updateScenePicker();animationStatus('');
-  $('allow-custom-targets').checked=state.allowCustomTargets===true;
   $('keep-locations').checked=state.keepLocations;$('keep-kits').checked=state.keepKits;
   projectOptions();renderKits();renderIntros();renderLocation({sync:false,refreshContext:false});if(refreshOutput)renderOutput();packTools?.refresh();refreshShared();
 }
@@ -790,7 +791,7 @@ $('confirm-new-pack').addEventListener('click',()=>{
 window.addEventListener('storage',event=>{if(['heritage.kitCreator.v1','heritage.introEditor.v1'].includes(event.key))refresh();});
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh();});
 for(const [id,key] of [['pack-name','name'],['namespace','namespace'],['pack-description','description']])$(id).addEventListener('input',event=>{state[key]=event.target.value;changed({defer:true});});
-for(const [id,key] of [['keep-locations','keepLocations'],['keep-kits','keepKits'],['allow-custom-targets','allowCustomTargets']])$(id).addEventListener('change',event=>{state[key]=event.target.checked;kitChoices();changed();});
+for(const [id,key] of [['keep-locations','keepLocations'],['keep-kits','keepKits']])$(id).addEventListener('change',event=>{state[key]=event.target.checked;kitChoices();changed();});
 $('pack-gui-scale').addEventListener('change',event=>{
   const value=Number(event.target.value);if(value)state.guiScale=value;else delete state.guiScale;changed();
 });
@@ -877,7 +878,7 @@ $('location-form').addEventListener('click',event=>{
   const button=event.target.closest('[data-correct-dimension],[data-dimension-choice]');if(!button)return;
   const field=button.closest('.dimension-field').querySelector('input'),entry=active(),choice=button.dataset.dimensionChoice,suggestion=choice??P.dimensionSuggestion(field.value);
   if(!entry||!suggestion)return;
-  if(choice?!dimensionOptions.some(([id])=>id===choice):state.allowCustomTargets===true||suggestion!==button.dataset.correctDimension)return;
+  if(choice?!dimensionOptions.some(([id])=>id===choice):suggestion!==button.dataset.correctDimension)return;
   const values=field.hasAttribute('data-destination')?entry.destinations[Number(field.dataset.destination)]:entry.fields;if(!values||field.value===suggestion)return;
   values.dimension=suggestion;field.value=suggestion;touched.add(fieldKey(field));historyGroup='';historyLabel=choice?'Change dimension':'Correct dimension';changed();if(!choice)field.focus();
 });

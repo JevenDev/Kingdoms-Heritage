@@ -291,26 +291,50 @@ test('invalid saved default definitions are rejected and ordinary packs do not c
 
 test('default card overrides retain the native game definitions',()=>{
  for(const spawn of require('./assets/defaults.json').spawns){const {id,...document}=spawn;assert.deepEqual(document,JSON.parse(fs.readFileSync(path.join(__dirname,'../../../src/main/resources/data/kingdomsheritage/heritage/spawns',id.split(':')[1]+'.json'),'utf8')));}
- const input=state();input.keepLocations=true;input.bundledLocations={'kingdomsheritage:village':{...Pack.copy(require('./assets/defaults.json').spawns.find(spawn=>spawn.id==='kingdomsheritage:village')),dimension:'minecraft:missing',order:0}};assert.ok(Pack.build(input,catalog).errors.length);
+ const input=state();input.keepLocations=true;input.bundledLocations={'kingdomsheritage:village':{...Pack.copy(require('./assets/defaults.json').spawns.find(spawn=>spawn.id==='kingdomsheritage:village')),dimension:'#minecraft:overworld',order:0}};assert.ok(Pack.build(input,catalog).errors.length);
 });
-test('mistyped vanilla dimension names identify the canonical ID without rewriting drafts',()=>{
+test('vanilla dimension suggestions leave custom IDs eligible for export',()=>{
+  const input=state();
   for(const [name,id] of [['nether','minecraft:the_nether'],['end','minecraft:the_end']])for(const value of [name,'minecraft:'+name]){
-    const input=state();input.locations[0].fields.dimension=value;const result=Pack.build(input,catalog),issue=result.issues.find(issue=>issue.field==='dimension');
-    assert.match(issue.message,new RegExp(id));assert.doesNotMatch(issue.message,/another datapack/);assert.deepEqual(result.files,[]);assert.equal(input.locations[0].fields.dimension,value);
-    input.locations[0].fields.dimension=Pack.dimensionSuggestion(value);const corrected=Pack.build(input,catalog);assert.deepEqual(corrected.errors,[]);assert.equal(spawn(corrected).dimension,id);
+    assert.equal(Pack.dimensionSuggestion(value),id);
+    input.locations[0].fields.dimension=value;
+    const result=Pack.build(input,catalog);
+    assert.deepEqual(result.errors,[]);
+    assert.equal(spawn(result).dimension,value);
+    assert.match(result.warnings.join(' '),/Custom dimensions/);
+  }
+  for(const value of ['minecraft:overworld','minecraft:the_nether','minecraft:the_end','the_nether','the_end','other:nether','other:end','minecraft:moon']){
+    assert.equal(Pack.dimensionSuggestion(value),'');
+    input.locations[0].fields.dimension=value;
+    assert.deepEqual(Pack.build(input,catalog).errors,[]);
   }
 });
-test('dimension suggestions preserve canonical IDs, custom namespaces and custom Minecraft dimensions',()=>{
-  for(const value of ['minecraft:overworld','minecraft:the_nether','minecraft:the_end','the_nether','the_end','other:nether','other:end']){
-    assert.equal(Pack.dimensionSuggestion(value),'');const input=state();input.locations[0].fields.dimension=value;assert.deepEqual(Pack.build(input,catalog).errors,[]);
+test('custom Minecraft targets export from both new and older projects',()=>{
+  const input=state(),entry=input.locations[0];
+  Object.assign(entry.fields,{type:'biome',target:'minecraft:dappled_forest',dimension:'minecraft:moon'});
+  for(const setting of [undefined,false,true]){
+    if(setting===undefined)delete input.allowCustomTargets;
+    else input.allowCustomTargets=setting;
+    const result=Pack.build(input,catalog);
+    assert.deepEqual(result.errors,[]);
+    const document=JSON.parse(result.files.find(file=>file.path.endsWith('/spawns/location_1.json')).content);
+    assert.equal(document.target,'minecraft:dappled_forest');
+    assert.equal(document.dimension,'minecraft:moon');
+    assert.match(result.warnings.join(' '),/Custom biomes, structures and groups/);
   }
-  const input=state();input.locations[0].fields.dimension='minecraft:nether';input.allowCustomTargets=true;const result=Pack.build(input,catalog);assert.deepEqual(result.errors,[]);assert.equal(spawn(result).dimension,'minecraft:nether');
-  input.allowCustomTargets=false;input.locations[0].fields.dimension='minecraft:missing';assert.equal(Pack.dimensionSuggestion('minecraft:missing'),'');assert.match(Pack.build(input,catalog).issues.find(issue=>issue.field==='dimension').message,/Unknown Minecraft dimension/);
 });
-test('pool dimension corrections identify the destination and retain inherited dimensions',()=>{
-  const input=state(),entry=input.locations[0];entry.fields.type='pool';entry.fields.dimension='minecraft:overworld';entry.destinations=[{type:'default',dimension:'minecraft:end'},{type:'default'}];
-  const invalid=Pack.build(input,catalog),issue=invalid.issues.find(issue=>issue.field==='dimension');assert.equal(issue.destination,0);assert.match(issue.message,/minecraft:the_end/);assert.deepEqual(invalid.files,[]);
-  entry.destinations[0].dimension=Pack.dimensionSuggestion(entry.destinations[0].dimension);const result=Pack.build(input,catalog);assert.deepEqual(result.errors,[]);assert.equal(spawn(result).dimension,'minecraft:overworld');assert.equal(spawn(result).pool[0].dimension,'minecraft:the_end');assert.equal(spawn(result).pool[1].dimension,undefined);
+test('pool targets preserve custom Minecraft IDs and still report malformed IDs at their destination',()=>{
+  const input=state(),entry=input.locations[0];
+  entry.fields.type='pool';
+  entry.destinations=[{type:'structure',target:'#minecraft:custom/villages',dimension:'minecraft:end'},{type:'biome',target:'dappled_forest'}];
+  const result=Pack.build(input,catalog);
+  assert.deepEqual(result.errors,[]);
+  assert.deepEqual(spawn(result).pool,entry.destinations);
+  entry.destinations[1].target='minecraft:Dappled Forest';
+  const invalid=Pack.build(input,catalog),issue=invalid.issues.find(issue=>issue.field==='target');
+  assert.equal(issue.destination,1);
+  assert.match(issue.message,/must be a resource ID/);
+  assert.deepEqual(invalid.files,[]);
 });
 
 test('decoded picture reuse keeps returned bytes isolated and revalidates changed image settings',()=>{

@@ -16,7 +16,7 @@ const issue=(message,path=[])=>Object.assign(new Error(message),{path});
 const integer=(value,min,max,name,path=[])=>{if(!Number.isInteger(value)||value<min||value>max)throw issue(name+' must be a whole number from '+min+' to '+max+'.',path);};
 function itemWarnings(entry) {
   const stack=entry.item,id=normalize(stack.id),warnings=[];
-  if(items.get(id)?.max===undefined&&!id.startsWith('minecraft:'))warnings.push('Check this modded item in Minecraft.');
+  if(items.get(id)?.max===undefined)warnings.push('Check this modded item in Minecraft.');
   if(entry.ignore_stack_limit===true)warnings.push('Check this stack size in Minecraft.');
   return warnings;
 }
@@ -73,7 +73,6 @@ function validateStack(entry,label,path,warnings) {
   if(!object(entry.item))throw issue(label+': enter an item object.',[...path,'item']);
   if(typeof entry.item.id!=='string'||!idPattern.test(entry.item.id))throw issue(label+': enter a valid item ID.',[...path,'item','id']);
   const id=normalize(entry.item.id),known=items.get(id);
-  if(id.startsWith('minecraft:')&&!known)throw issue(label+': unknown Minecraft 1.21.1 item '+id,[...path,'item','id']);
   if(entry.item.components!==undefined&&!object(entry.item.components))throw issue(label+': components must be a JSON object.',[...path,'item','components']);
   if(entry.item.count===null)throw issue(label+': count cannot be null.',[...path,'item','count']);
   const componentMax=entry.item.components?.['minecraft:max_stack_size'];
@@ -98,7 +97,7 @@ function validateShop(shop,warnings) {
       if(typeof section.name!=='string'||!section.name.trim()||section.name.length>120)throw issue(label+' needs a tooltip name from 1 to 120 characters.',[...path,'name']);
       if(typeof section.icon!=='string'||!idPattern.test(section.icon))throw issue(label+' needs a valid icon item ID.',[...path,'icon']);
       const icon=normalize(section.icon);
-      if(icon.startsWith('minecraft:')&&!items.has(icon))throw issue(label+': unknown Minecraft 1.21.1 icon '+icon,[...path,'icon']);
+      if(!items.has(icon))warnings.push(icon+': Check this shop icon in Minecraft.');
       sections.add(section.id);
     }
   }

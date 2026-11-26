@@ -384,7 +384,7 @@ a.content-asset:hover { background:var(--panel); }
 #pack-workspace .dimension-choices button[aria-pressed=true] { border-color:var(--text); background:var(--panel-3); }
 .dimension-icon { display:block; width:20px; height:20px; flex:0 0 20px; }
 .dimension-icon .mc-item { display:block; transform:scale(.625); transform-origin:top left; }
-.dimension-field > .field-error { margin:0; }
+.dimension-field > :is(.field-error,.hint) { margin:0; }
 #pack-workspace .dimension-field button.dimension-correction { display:inline; height:auto; min-height:0; padding:0; margin-left:12px; border:0; background:transparent; color:var(--text); vertical-align:baseline; text-decoration:underline; text-underline-offset:3px; }
 #pack-workspace .dimension-field button.dimension-correction:hover { background:transparent; color:var(--muted); }
 .extra-settings .form-grid { grid-template-columns:minmax(0,1fr) 144px; }

@@ -48,7 +48,7 @@ async function read(bytes,name='Imported pack.zip',createId=()=>crypto.randomUUI
     ? !bundled.some(id=>disabled.has(id))
     : !bundled.every(id=>disabled.has(id));
   const description=typeof metadata.pack.description==='string'?metadata.pack.description:JSON.stringify(metadata.pack.description??'Imported Heritage pack');
-  const state={version:1,name:name.replace(/(?:-packs|-data)?\.zip$/i,'')||'Imported pack',namespace,description,keepKits:true,keepLocations,allowCustomTargets:true,kits:[],locations:[],active:'',packMetadata:metadata,importedFiles:{data:[],resources:[]}};
+  const state={version:1,name:name.replace(/(?:-packs|-data)?\.zip$/i,'')||'Imported pack',namespace,description,keepKits:true,keepLocations,kits:[],locations:[],active:'',packMetadata:metadata,importedFiles:{data:[],resources:[]}};
   const libraries={kits:{version:2,active:'',kits:[]},intros:{version:2,active:'',intros:[]}},kits=new Map(),catalog={kits:[],intros:[]},validatedIntros=new Set();
   const stock=new Set(Pack.bundledKits(state).map(entry=>entry.resource));
   const overrides=definitions.filter(entry=>entry.kind==='kits'&&stock.has(entry.namespace+':'+entry.id));
@@ -81,7 +81,7 @@ async function read(bytes,name='Imported pack.zip',createId=()=>crypto.randomUUI
       continue;
     }
     if(entry.document.enabled===false)continue;
-    const document=entry.document;Pack.validateSpawn(document,true,validatedIntros);
+    const document=entry.document;Pack.validateSpawn(document,validatedIntros);
     const location=Pack.location(createId());location.path=entry.id;const {pool,intro,...extra}=document;location.document=extra;
     location.fields=Object.fromEntries(Pack.fields.filter(key=>Object.hasOwn(document,key)).map(key=>[key,document[key]]));location.fields.type=document.type.toLowerCase();
     location.kitMode='all';location.importedKitSelectors=Pack.copy(document.kits??[]);

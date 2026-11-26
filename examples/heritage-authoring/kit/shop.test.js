@@ -21,6 +21,21 @@ test('the Trail Kit example keeps its budget and offers',()=>{
   assert.deepEqual(warnings,[]);
 });
 
+test('modded items and shop icons can use the Minecraft namespace',()=>{
+  const draft={
+    title:'Modded kit',
+    items:[{index:0,item:{id:'minecraft:modded_gear'}}],
+    shop:{budget:1,sections:[{id:'gear',name:'Gear',icon:'minecraft:modded_icon'}],
+      offers:[{cost:1,section:'gear',item:{id:'minecraft:modded_supply'}}]}
+  };
+  const {document,warnings}=Kit.read(JSON.stringify(draft));
+  assert.deepEqual(document,draft);
+  assert.equal(warnings.length,3);
+  for(const id of ['minecraft:modded_gear','minecraft:modded_icon','minecraft:modded_supply'])assert.ok(warnings.some(warning=>warning.startsWith(id+':')));
+  draft.shop.sections[0].icon='minecraft:Invalid Icon';
+  assert.throws(()=>Kit.read(JSON.stringify(draft)),/valid icon item ID/);
+});
+
 test('shop validation reports invalid prices, stacks, and offer lists at their JSON paths',()=>{
   const shop=()=>structuredClone(trail);
   const check=(draft,path)=>assert.throws(()=>Kit.read(JSON.stringify(draft)),error=>assert.deepEqual(error.path,path)===undefined);
